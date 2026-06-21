@@ -1,0 +1,10 @@
+# Secrets and local state — never commit these
+.env
+tokens.json
+
+# Your private Destiny data dump (send it to Claude directly instead)
+snapshot.json
+
+# Node
+node_modules/
+npm-debug.log*
