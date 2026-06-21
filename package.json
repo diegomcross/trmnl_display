@@ -1,13 +1,17 @@
 {
   "name": "trmnl-destiny",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
-  "description": "Bungie OAuth + Destiny 2 profile snapshot for a TRMNL e-ink display",
+  "description": "Bungie OAuth + Destiny 2 profile snapshot and e-ink renderer for a TRMNL display",
   "scripts": {
-    "start": "node auth-and-snapshot.js"
+    "start": "node auth-and-snapshot.js",
+    "render": "node render.js"
   },
   "engines": {
     "node": ">=18"
+  },
+  "dependencies": {
+    "@resvg/resvg-js": "^2.6.2"
   }
 }
