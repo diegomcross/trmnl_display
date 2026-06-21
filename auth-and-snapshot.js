@@ -1,6 +1,7 @@
 // auth-and-snapshot.js
 //
 // Zero setup. Just run:  node auth-and-snapshot.js
+// To force a fresh login (after changing scopes/privacy):  node auth-and-snapshot.js reauth
 //
 // On the first run it asks you for your three Bungie values and saves them to a
 // local .env file for you. Then it walks you through a one-time "Authorize" and
@@ -151,10 +152,16 @@ async function getPrimaryMembership(env, accessToken) {
 
 (async () => {
   try {
+    if (process.argv.slice(2).includes('reauth') && fs.existsSync(TOKENS_FILE)) {
+      fs.unlinkSync(TOKENS_FILE);
+      console.log('Cleared saved login — you will re-authorize with current scopes.\n');
+    }
+
     const env = await ensureCreds();
     const accessToken = await getValidAccessToken(env);
     const m = await getPrimaryMembership(env, accessToken);
     console.log(`Destiny account: ${m.displayName} (platform ${m.membershipType}, id ${m.membershipId})`);
+
     const profile = await getJson(
       `${BASE}/Destiny2/${m.membershipType}/Profile/${m.membershipId}/?components=${COMPONENTS}`,
       env,
@@ -162,6 +169,18 @@ async function getPrimaryMembership(env, accessToken) {
     );
     fs.writeFileSync(SNAPSHOT_FILE, JSON.stringify(profile, null, 2));
     console.log(`Characters found: ${Object.keys(profile.characters?.data || {}).length}`);
+
+    const inv = profile.characterInventories;
+    if (inv && inv.privacy) {
+      console.log('\n*** WARNING: your character inventory came back PRIVATE ***');
+      console.log('Orders, bounties, and quests are blocked until this is fixed:');
+      console.log('  1) Turn ON inventory visibility here (check the boxes, especially Inventory):');
+      console.log('     https://www.bungie.net/en/Profile/Settings/?category=Privacy');
+      console.log('  2) Confirm your app has the "Read your Destiny vault and character inventory" scope.');
+      console.log('  3) Then run:  node auth-and-snapshot.js reauth');
+    } else {
+      console.log('Inventory: OK (Orders / bounties / quests are readable).');
+    }
     console.log(`\nSaved ${SNAPSHOT_FILE}. Upload that file to Claude.`);
   } catch (e) {
     console.error('\nError:', e.message);
