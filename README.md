@@ -1,40 +1,41 @@
 # TRMNL Destiny — Step 1: auth + snapshot
 
-This pulls your Destiny 2 profile so we can design the display from your real data.
+This pulls your Destiny 2 profile so the display can be designed from your real data.
+It is one command — no file editing, no `npm install`, no certificates.
 
-## One-time setup
+## What you need
 
-1. Install **Node.js 18 or newer** if you don't have it: https://nodejs.org (the "LTS" download).
-2. Clone this repo to your machine.
-3. In the project folder, make a copy of `.env.example` and rename the copy to `.env`.
-4. Open `.env` in Notepad and paste your three values from the Bungie app page:
-   - `BUNGIE_API_KEY`
-   - `BUNGIE_CLIENT_ID`
-   - `BUNGIE_CLIENT_SECRET`
+- **Node.js 18 or newer.** Check by opening Command Prompt and typing `node -v`.
+  If it prints something like `v20.x`, you're set. If it says it's not recognized,
+  install the **LTS** build from https://nodejs.org and reopen Command Prompt.
+- This project folder on your machine. Easiest way: on the repo page click the green
+  **Code** button -> **Download ZIP**, then extract it (e.g. into Documents).
 
 ## Run it
 
-Open a terminal **in the project folder** (in File Explorer, type `cmd` in the address bar and press Enter), then:
+Open a terminal **inside the project folder** (in File Explorer, click the address bar,
+type `cmd`, press Enter), then run:
 
 ```
-npm install
 node auth-and-snapshot.js
 ```
 
-- The first run prints an **Authorize** link. Open it, click Authorize.
-- Your browser will warn about the `127.0.0.1` certificate — that's our own local one.
-  Click **Advanced -> Proceed to 127.0.0.1**. The page will say "Authorized."
-- Back in the terminal it pulls your profile and writes **snapshot.json**.
+The script will:
+
+1. Ask for your **API Key**, **Client ID**, and **Client Secret** (from your Bungie app
+   page). Paste each and press Enter — it saves them to a local `.env` for you.
+2. Open the Bungie **Authorize** page in your browser. Click Authorize.
+3. Your browser will then try to reach a `127.0.0.1` address and show an error like
+   "This site can't be reached." **That's expected.** Copy the entire address from the
+   address bar and paste it back into the terminal.
+4. Write **snapshot.json** into the folder.
 
 ## Then
 
-Send Claude `snapshot.json`. That's the real data used to map Orders / Conquests /
-Triumphs / Titles / quests / bounties to the layout.
+Upload `snapshot.json` to Claude. That's the real data used to map Orders / Conquests /
+Triumphs / Titles / quests / bounties into the layout.
 
-Re-running later just refreshes the snapshot (it reuses your saved tokens; you won't
-need to authorize again for about 90 days).
+The Bungie app's **Redirect URL** must read exactly `https://127.0.0.1:8443/callback`.
 
-## Note
-
-`.env`, `tokens.json`, and `snapshot.json` are gitignored on purpose — they hold your
-credentials and private data and should never be committed.
+`.env`, `tokens.json`, and `snapshot.json` are gitignored — they hold your credentials
+and private data and are never committed.

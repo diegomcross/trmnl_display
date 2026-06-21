@@ -1,6 +1,6 @@
 {
   "name": "trmnl-destiny",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "description": "Bungie OAuth + Destiny 2 profile snapshot for a TRMNL e-ink display",
@@ -9,9 +9,5 @@
   },
   "engines": {
     "node": ">=18"
-  },
-  "dependencies": {
-    "dotenv": "^16.4.5",
-    "selfsigned": "^2.4.1"
   }
 }
