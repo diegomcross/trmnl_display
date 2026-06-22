@@ -1,11 +1,10 @@
 // auth-and-snapshot.js
 //
-// Zero setup. Just run:  node auth-and-snapshot.js
-// To force a fresh login (after changing keys/scopes/privacy):  node auth-and-snapshot.js reauth
+// Just run:  node auth-and-snapshot.js
+// Force a fresh login (after key/scope/privacy changes):  node auth-and-snapshot.js reauth
 //
-// First run asks for your three Bungie values and saves them to a local .env.
-// Then it authorizes once and writes snapshot.json — now including the Portal /
-// vendor data, which is where Vanguard Orders actually live.
+// Pulls your full profile (matching the component set Braytech uses, so Orders
+// are included) and writes snapshot.json.
 //
 // Needs: Node 18 or newer.
 
@@ -19,14 +18,8 @@ const TOKENS_FILE = './tokens.json';
 const SNAPSHOT_FILE = './snapshot.json';
 const BASE = 'https://www.bungie.net/Platform';
 
-// Profile components:
-//   100 Profiles  200 Characters  201 CharacterInventories  202 CharacterProgressions
-//   300 ItemInstances  302 ItemObjectives  700 PresentationNodes  900 Records
-//   1000 Transitory  1400 StringVariables
-const COMPONENTS = '100,200,201,202,300,302,700,900,1000,1400';
-// Vendor components (Orders / Portal):
-//   400 Vendors  401 VendorCategories  402 VendorSales  300 ItemInstances  302 ItemObjectives
-const VENDOR_COMPONENTS = '400,401,402,300,302';
+// Full component set (same as Braytech). Note: 301 = ItemObjectives, 302 = ItemPerks.
+const COMPONENTS = '100,102,103,104,200,201,202,204,205,206,300,301,302,303,304,305,307,308,309,310,700,800,900,1000,1100,1200,1400';
 
 function ask(question) {
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
@@ -47,41 +40,28 @@ async function ensureCreds() {
   const env = parseEnvFile();
   if (env.BUNGIE_API_KEY && env.BUNGIE_CLIENT_ID && env.BUNGIE_CLIENT_SECRET) return env;
   console.log('\nFirst-time setup. Paste the three values from your Bungie app page');
-  console.log('(bungie.net/en/Application). They are saved to a local .env file and never committed.\n');
+  console.log('(bungie.net/en/Application). Saved to a local .env, never committed.\n');
   const BUNGIE_API_KEY = await ask('API Key: ');
   const BUNGIE_CLIENT_ID = await ask('Client ID: ');
   const BUNGIE_CLIENT_SECRET = await ask('Client Secret: ');
-  fs.writeFileSync(
-    ENV_FILE,
-    `BUNGIE_API_KEY=${BUNGIE_API_KEY}\nBUNGIE_CLIENT_ID=${BUNGIE_CLIENT_ID}\nBUNGIE_CLIENT_SECRET=${BUNGIE_CLIENT_SECRET}\n`
-  );
+  fs.writeFileSync(ENV_FILE, `BUNGIE_API_KEY=${BUNGIE_API_KEY}\nBUNGIE_CLIENT_ID=${BUNGIE_CLIENT_ID}\nBUNGIE_CLIENT_SECRET=${BUNGIE_CLIENT_SECRET}\n`);
   console.log('\nSaved .env locally.\n');
   return { BUNGIE_API_KEY, BUNGIE_CLIENT_ID, BUNGIE_CLIENT_SECRET };
 }
 
 function openBrowser(url) {
-  const cmd =
-    process.platform === 'win32' ? `start "" "${url}"`
-    : process.platform === 'darwin' ? `open "${url}"`
-    : `xdg-open "${url}"`;
-  try { const child = exec(cmd, () => {}); child.unref?.(); } catch { /* the URL is also printed */ }
+  const cmd = process.platform === 'win32' ? `start "" "${url}"`
+    : process.platform === 'darwin' ? `open "${url}"` : `xdg-open "${url}"`;
+  try { const c = exec(cmd, () => {}); c.unref?.(); } catch { /* url is printed too */ }
 }
 
 function tokenAuthHeader(env) {
   const basic = Buffer.from(`${env.BUNGIE_CLIENT_ID}:${env.BUNGIE_CLIENT_SECRET}`).toString('base64');
-  return {
-    'Content-Type': 'application/x-www-form-urlencoded',
-    'X-API-Key': env.BUNGIE_API_KEY,
-    'Authorization': `Basic ${basic}`,
-  };
+  return { 'Content-Type': 'application/x-www-form-urlencoded', 'X-API-Key': env.BUNGIE_API_KEY, Authorization: `Basic ${basic}` };
 }
 
 async function postToken(env, params) {
-  const res = await fetch(`${BASE}/App/OAuth/Token/`, {
-    method: 'POST',
-    headers: tokenAuthHeader(env),
-    body: new URLSearchParams(params),
-  });
+  const res = await fetch(`${BASE}/App/OAuth/Token/`, { method: 'POST', headers: tokenAuthHeader(env), body: new URLSearchParams(params) });
   const text = await res.text();
   if (!res.ok) throw new Error(`Token request failed (${res.status}): ${text}`);
   return JSON.parse(text);
@@ -101,19 +81,16 @@ function saveTokens(t) {
 
 async function authorize(env) {
   const state = Math.random().toString(36).slice(2);
-  const authUrl =
-    `https://www.bungie.net/en/OAuth/Authorize?client_id=${env.BUNGIE_CLIENT_ID}` +
-    `&response_type=code&state=${state}`;
+  const authUrl = `https://www.bungie.net/en/OAuth/Authorize?client_id=${env.BUNGIE_CLIENT_ID}&response_type=code&state=${state}`;
   console.log('Opening the Bungie authorization page in your browser...');
   console.log('(If it does not open, copy this URL into your browser:)');
   console.log('  ' + authUrl + '\n');
   openBrowser(authUrl);
-  console.log('After you click Authorize, your browser will try to reach a 127.0.0.1 address and show');
-  console.log('an error like "This site can\'t be reached". That is expected and fine.');
-  console.log('Copy the ENTIRE address from the browser address bar and paste it below.\n');
+  console.log('After you click Authorize, your browser shows a 127.0.0.1 "can\'t be reached" error — that is fine.');
+  console.log('Copy the ENTIRE address from the address bar and paste it below.\n');
   const pasted = await ask('Paste that address here: ');
   let code = null;
-  try { code = new URL(pasted).searchParams.get('code'); } catch { /* handled below */ }
+  try { code = new URL(pasted).searchParams.get('code'); } catch {}
   if (!code) throw new Error('No code found in that address. Re-run and paste the full URL after authorizing.');
   const tok = await postToken(env, { grant_type: 'authorization_code', code });
   console.log('\nAuthorized.\n');
@@ -133,14 +110,10 @@ async function getValidAccessToken(env) {
 }
 
 async function getJson(url, env, accessToken) {
-  const res = await fetch(url, {
-    headers: { 'X-API-Key': env.BUNGIE_API_KEY, 'Authorization': `Bearer ${accessToken}` },
-  });
+  const res = await fetch(url, { headers: { 'X-API-Key': env.BUNGIE_API_KEY, Authorization: `Bearer ${accessToken}` } });
   const json = await res.json();
   if (json.ErrorCode && json.ErrorCode !== 1) {
-    if (json.ErrorCode === 99) {
-      throw new Error('Bungie error 99 (sign-in / API key rejected). Make sure .env has your CURRENT API key and secret (old values fully replaced), then run:  node auth-and-snapshot.js reauth');
-    }
+    if (json.ErrorCode === 99) throw new Error('Bungie error 99 (sign-in / API key rejected). Ensure .env has your CURRENT API key + secret, then run:  node auth-and-snapshot.js reauth');
     throw new Error(`Bungie error ${json.ErrorCode}: ${json.Message}`);
   }
   return json.Response;
@@ -151,64 +124,25 @@ async function getPrimaryMembership(env, accessToken) {
   const memberships = r.destinyMemberships || [];
   if (!memberships.length) throw new Error('No Destiny memberships found on this account.');
   const primaryId = r.primaryMembershipId;
-  return (
-    memberships.find((m) => m.membershipId === primaryId) ||
-    memberships.find((m) => m.crossSaveOverride === 0 || m.crossSaveOverride === m.membershipType) ||
-    memberships[0]
-  );
-}
-
-function pickWarlock(profile) {
-  const chars = profile.characters?.data || {};
-  const ids = Object.keys(chars);
-  const byRecent = (a, b) => new Date(chars[b].dateLastPlayed) - new Date(chars[a].dateLastPlayed);
-  const warlocks = ids.filter((c) => chars[c].classType === 2).sort(byRecent);
-  return warlocks[0] || ids.sort(byRecent)[0];
+  return memberships.find((m) => m.membershipId === primaryId)
+    || memberships.find((m) => m.crossSaveOverride === 0 || m.crossSaveOverride === m.membershipType)
+    || memberships[0];
 }
 
 (async () => {
   try {
     if (process.argv.slice(2).includes('reauth') && fs.existsSync(TOKENS_FILE)) {
       fs.unlinkSync(TOKENS_FILE);
-      console.log('Cleared saved login — you will re-authorize with current scopes.\n');
+      console.log('Cleared saved login — you will re-authorize.\n');
     }
-
     const env = await ensureCreds();
     const accessToken = await getValidAccessToken(env);
     const m = await getPrimaryMembership(env, accessToken);
     console.log(`Destiny account: ${m.displayName} (platform ${m.membershipType}, id ${m.membershipId})`);
-
-    const profile = await getJson(
-      `${BASE}/Destiny2/${m.membershipType}/Profile/${m.membershipId}/?components=${COMPONENTS}`,
-      env, accessToken
-    );
-    console.log(`Characters found: ${Object.keys(profile.characters?.data || {}).length}`);
-
-    // Vendor / Portal data — where Orders live. Fetch for the Warlock character.
-    try {
-      const warlock = pickWarlock(profile);
-      console.log('Fetching Portal / vendor data (Orders live here)...');
-      const vendors = await getJson(
-        `${BASE}/Destiny2/${m.membershipType}/Profile/${m.membershipId}/Character/${warlock}/Vendors/?components=${VENDOR_COMPONENTS}`,
-        env, accessToken
-      );
-      profile.vendors = vendors;
-      profile.vendorCharacterId = warlock;
-      console.log(`Vendors fetched: ${Object.keys(vendors.vendors?.data || {}).length}`);
-    } catch (e) {
-      console.log('Could not fetch vendors:', e.message);
-    }
-
+    const profile = await getJson(`${BASE}/Destiny2/${m.membershipType}/Profile/${m.membershipId}/?components=${COMPONENTS}`, env, accessToken);
     fs.writeFileSync(SNAPSHOT_FILE, JSON.stringify(profile, null, 2));
-
-    const inv = profile.characterInventories;
-    if (inv && inv.privacy) {
-      console.log('\n*** WARNING: character inventory came back PRIVATE ***');
-      console.log('Turn ON inventory visibility at:');
-      console.log('  https://www.bungie.net/en/Profile/Settings/?category=Privacy');
-      console.log('then run:  node auth-and-snapshot.js reauth');
-    }
-    console.log(`\nSaved ${SNAPSHOT_FILE}. Upload that file to Claude.`);
+    console.log(`Characters: ${Object.keys(profile.characters?.data || {}).length}`);
+    console.log(`Saved ${SNAPSHOT_FILE}.`);
   } catch (e) {
     console.error('\nError:', e.message);
     process.exitCode = 1;
