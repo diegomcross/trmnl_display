@@ -1,11 +1,11 @@
 // auth-and-snapshot.js
 //
 // Zero setup. Just run:  node auth-and-snapshot.js
-// To force a fresh login (after changing scopes/privacy):  node auth-and-snapshot.js reauth
+// To force a fresh login (after changing keys/scopes/privacy):  node auth-and-snapshot.js reauth
 //
-// On the first run it asks you for your three Bungie values and saves them to a
-// local .env file for you. Then it walks you through a one-time "Authorize" and
-// writes your profile to snapshot.json. No npm install, no certificates.
+// First run asks for your three Bungie values and saves them to a local .env.
+// Then it authorizes once and writes snapshot.json — now including the Portal /
+// vendor data, which is where Vanguard Orders actually live.
 //
 // Needs: Node 18 or newer.
 
@@ -19,11 +19,14 @@ const TOKENS_FILE = './tokens.json';
 const SNAPSHOT_FILE = './snapshot.json';
 const BASE = 'https://www.bungie.net/Platform';
 
-// Broad component set for the diagnostic snapshot:
-//   100 Profiles  200 Characters  201 CharacterInventories (pursuits)
-//   202 CharacterProgressions  300 ItemInstances  302 ItemObjectives
-//   700 PresentationNodes  900 Records (Triumphs/Seals)  1000 Transitory  1400 StringVariables
+// Profile components:
+//   100 Profiles  200 Characters  201 CharacterInventories  202 CharacterProgressions
+//   300 ItemInstances  302 ItemObjectives  700 PresentationNodes  900 Records
+//   1000 Transitory  1400 StringVariables
 const COMPONENTS = '100,200,201,202,300,302,700,900,1000,1400';
+// Vendor components (Orders / Portal):
+//   400 Vendors  401 VendorCategories  402 VendorSales  300 ItemInstances  302 ItemObjectives
+const VENDOR_COMPONENTS = '400,401,402,300,302';
 
 function ask(question) {
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
@@ -61,7 +64,7 @@ function openBrowser(url) {
     process.platform === 'win32' ? `start "" "${url}"`
     : process.platform === 'darwin' ? `open "${url}"`
     : `xdg-open "${url}"`;
-  exec(cmd, () => {}); // best effort; the URL is also printed
+  try { const child = exec(cmd, () => {}); child.unref?.(); } catch { /* the URL is also printed */ }
 }
 
 function tokenAuthHeader(env) {
@@ -134,7 +137,12 @@ async function getJson(url, env, accessToken) {
     headers: { 'X-API-Key': env.BUNGIE_API_KEY, 'Authorization': `Bearer ${accessToken}` },
   });
   const json = await res.json();
-  if (json.ErrorCode && json.ErrorCode !== 1) throw new Error(`Bungie error ${json.ErrorCode}: ${json.Message}`);
+  if (json.ErrorCode && json.ErrorCode !== 1) {
+    if (json.ErrorCode === 99) {
+      throw new Error('Bungie error 99 (sign-in / API key rejected). Make sure .env has your CURRENT API key and secret (old values fully replaced), then run:  node auth-and-snapshot.js reauth');
+    }
+    throw new Error(`Bungie error ${json.ErrorCode}: ${json.Message}`);
+  }
   return json.Response;
 }
 
@@ -148,6 +156,14 @@ async function getPrimaryMembership(env, accessToken) {
     memberships.find((m) => m.crossSaveOverride === 0 || m.crossSaveOverride === m.membershipType) ||
     memberships[0]
   );
+}
+
+function pickWarlock(profile) {
+  const chars = profile.characters?.data || {};
+  const ids = Object.keys(chars);
+  const byRecent = (a, b) => new Date(chars[b].dateLastPlayed) - new Date(chars[a].dateLastPlayed);
+  const warlocks = ids.filter((c) => chars[c].classType === 2).sort(byRecent);
+  return warlocks[0] || ids.sort(byRecent)[0];
 }
 
 (async () => {
@@ -164,26 +180,37 @@ async function getPrimaryMembership(env, accessToken) {
 
     const profile = await getJson(
       `${BASE}/Destiny2/${m.membershipType}/Profile/${m.membershipId}/?components=${COMPONENTS}`,
-      env,
-      accessToken
+      env, accessToken
     );
-    fs.writeFileSync(SNAPSHOT_FILE, JSON.stringify(profile, null, 2));
     console.log(`Characters found: ${Object.keys(profile.characters?.data || {}).length}`);
+
+    // Vendor / Portal data — where Orders live. Fetch for the Warlock character.
+    try {
+      const warlock = pickWarlock(profile);
+      console.log('Fetching Portal / vendor data (Orders live here)...');
+      const vendors = await getJson(
+        `${BASE}/Destiny2/${m.membershipType}/Profile/${m.membershipId}/Character/${warlock}/Vendors/?components=${VENDOR_COMPONENTS}`,
+        env, accessToken
+      );
+      profile.vendors = vendors;
+      profile.vendorCharacterId = warlock;
+      console.log(`Vendors fetched: ${Object.keys(vendors.vendors?.data || {}).length}`);
+    } catch (e) {
+      console.log('Could not fetch vendors:', e.message);
+    }
+
+    fs.writeFileSync(SNAPSHOT_FILE, JSON.stringify(profile, null, 2));
 
     const inv = profile.characterInventories;
     if (inv && inv.privacy) {
-      console.log('\n*** WARNING: your character inventory came back PRIVATE ***');
-      console.log('Orders, bounties, and quests are blocked until this is fixed:');
-      console.log('  1) Turn ON inventory visibility here (check the boxes, especially Inventory):');
-      console.log('     https://www.bungie.net/en/Profile/Settings/?category=Privacy');
-      console.log('  2) Confirm your app has the "Read your Destiny vault and character inventory" scope.');
-      console.log('  3) Then run:  node auth-and-snapshot.js reauth');
-    } else {
-      console.log('Inventory: OK (Orders / bounties / quests are readable).');
+      console.log('\n*** WARNING: character inventory came back PRIVATE ***');
+      console.log('Turn ON inventory visibility at:');
+      console.log('  https://www.bungie.net/en/Profile/Settings/?category=Privacy');
+      console.log('then run:  node auth-and-snapshot.js reauth');
     }
     console.log(`\nSaved ${SNAPSHOT_FILE}. Upload that file to Claude.`);
   } catch (e) {
     console.error('\nError:', e.message);
-    process.exit(1);
+    process.exitCode = 1;
   }
 })();
