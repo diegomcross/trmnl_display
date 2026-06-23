@@ -91,9 +91,30 @@ async function fetchProfile() {
 }
 
 // ---------------- 1-bit BMP encoder (standard BMP3, bottom-up, palette black/white) ----------------
+// Renders the SVG at SS x resolution, box-averages down to 800x480, then thresholds.
+// Supersampling + a slightly high threshold keeps thin text strokes solid instead of
+// breaking apart, which is the usual failure mode of hard 1-bit conversion.
+const SS = 3;            // supersample factor (3x = render 2400x1440)
+const THRESHOLD = 150;   // 0..255; grayscale below this becomes black. Higher = heavier/bolder text.
 export function svgToBmp1bit(svg, invert = false) {
-  const img = new Resvg(svg, { fitTo: { mode: 'original' }, background: '#ffffff' }).render();
-  const { width, height, pixels } = img;
+  const img = new Resvg(svg, { fitTo: { mode: 'zoom', value: SS }, background: '#ffffff' }).render();
+  const sw = img.width, sh = img.height, src = img.pixels;
+  const width = Math.round(sw / SS), height = Math.round(sh / SS);
+  // downscale to grayscale via box average
+  const gray = new Uint8Array(width * height);
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      let sum = 0;
+      for (let dy = 0; dy < SS; dy++) {
+        const sy = y * SS + dy;
+        for (let dx = 0; dx < SS; dx++) {
+          const i = (sy * sw + (x * SS + dx)) * 4;
+          sum += 0.299 * src[i] + 0.587 * src[i + 1] + 0.114 * src[i + 2];
+        }
+      }
+      gray[y * width + x] = sum / (SS * SS);
+    }
+  }
   const rowBytes = Math.ceil(width / 8);
   const stride = rowBytes + ((4 - (rowBytes % 4)) % 4); // rows padded to 4 bytes
   const pixelArraySize = stride * height;
@@ -125,9 +146,7 @@ export function svgToBmp1bit(svg, invert = false) {
   for (let y = 0; y < height; y++) {
     const dstRow = offset + (height - 1 - y) * stride;
     for (let x = 0; x < width; x++) {
-      const i = (y * width + x) * 4;
-      const lum = 0.299 * pixels[i] + 0.587 * pixels[i + 1] + 0.114 * pixels[i + 2];
-      let white = lum >= 128;
+      let white = gray[y * width + x] >= THRESHOLD;
       if (invert) white = !white;
       if (white) buf[dstRow + (x >> 3)] |= (0x80 >> (x & 7));
     }

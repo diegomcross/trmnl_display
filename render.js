@@ -107,10 +107,10 @@ function starPath(cx, cy, rOut, rIn, pts = 5) {
 }
 // rarity glyph centered at (cx, cy)
 function glyph(cx, cy, kind) {
-  if (kind === 'exotic') return `<path d="${starPath(cx, cy, 8, 3.3)}" fill="#000"/>`;
-  if (kind === 'legendary') return `<path d="M${cx},${cy - 7} L${cx + 7},${cy} L${cx},${cy + 7} L${cx - 7},${cy} Z" fill="#000"/>`;
-  if (kind === 'rare') return `<path d="M${cx},${cy - 7} L${cx + 7},${cy} L${cx},${cy + 7} L${cx - 7},${cy} Z" fill="none" stroke="#000" stroke-width="1.6"/>`;
-  return `<circle cx="${cx}" cy="${cy}" r="4.5" fill="none" stroke="#000" stroke-width="1.6"/>`; // common = open circle
+  if (kind === 'exotic') return `<path d="${starPath(cx, cy, 11, 4.6)}" fill="#000"/>`;
+  if (kind === 'legendary') return `<path d="M${cx},${cy - 9} L${cx + 9},${cy} L${cx},${cy + 9} L${cx - 9},${cy} Z" fill="#000"/>`;
+  if (kind === 'rare') return `<path d="M${cx},${cy - 9} L${cx + 9},${cy} L${cx},${cy + 9} L${cx - 9},${cy} Z" fill="none" stroke="#000" stroke-width="2.2"/>`;
+  return `<circle cx="${cx}" cy="${cy}" r="6" fill="none" stroke="#000" stroke-width="2.2"/>`; // common = open circle
 }
 
 // greedy word-wrap with char-width estimate; caps lines + adds ellipsis if clipped
@@ -215,61 +215,43 @@ export async function buildModel(D) {
 }
 
 export function renderSVG(model) {
-  const { character, orders, summary, now } = model;
+  const { character, orders, now } = model;
   const ordersTop = orders.slice(0, 5);
   const pct = (p) => (p ? Math.round(p.frac * 100) + '%' : '\u2014');
 
   let s = `<rect x="0" y="0" width="${W}" height="${H}" fill="#fff"/>`;
 
-  // Header
-  s += txt(20, 34, 22, character.name, { weight: 600 });
-  s += txt(132, 34, 15, `Power ${character.light}`, { fill: '#444' });
-  s += txt(780, 32, 13, `Updated ${now}`, { anchor: 'end', fill: '#444' });
-  s += `<line x1="20" y1="46" x2="780" y2="46" stroke="#000"/>`;
+  // Header — big and bold; pure black only (grays dither badly on 1-bit e-ink)
+  s += txt(20, 44, 30, character.name, { weight: 700 });
+  s += txt(192, 44, 18, `Power ${character.light}`, { weight: 600 });
+  s += txt(780, 42, 16, `Updated ${now}`, { anchor: 'end', weight: 600 });
+  s += `<rect x="20" y="54" width="760" height="3" fill="#000"/>`;
 
-  // Section label
-  s += txt(20, 70, 16, 'ACTIVE ORDERS', { weight: 600 });
-  s += txt(160, 70, 13, `${orders.length} active`, { fill: '#666' });
-
-  // Orders — full width, one block each
+  // Orders — full width, large. Spacing scales to the number of orders.
   const X = 20, RIGHT = 780, BARW = RIGHT - X;
-  let yTop = 86;
-  const STEP = 67;
+  const TOP = 74, BOTTOM = 446;
+  const n = Math.max(ordersTop.length, 1);
+  const STEP = Math.min(88, Math.floor((BOTTOM - TOP) / n));
+  let yTop = TOP;
   if (!ordersTop.length) {
-    s += txt(X, yTop + 14, 16, 'No active orders right now.', { fill: '#888' });
+    s += txt(X, yTop + 30, 24, 'No active orders right now.', { weight: 600 });
   }
   for (const o of ordersTop) {
-    const yName = yTop + 14;
-    // rarity glyph
-    s += glyph(X + 8, yName - 5, o.tier.kind);
-    // name (tracked orders sort to the top; no star prefix so ★ unambiguously means Exotic)
-    s += txt(X + 24, yName, 16, trunc(o.name, 52), { weight: 600 });
-    // right side: numeric progress + percent
+    const yName = yTop + 28;
+    s += glyph(X + 12, yName - 9, o.tier.kind);
+    s += txt(X + 36, yName, 24, trunc(o.name, 40), { weight: 700 });
     const right = o.p ? `${fmtNum(o.p.prog)}/${fmtNum(o.p.total)}  \u00b7  ${pct(o.p)}` : '\u2014';
-    s += txt(RIGHT, yName, 13, right, { anchor: 'end', fill: '#444' });
-    // description ("what to do"), wrapped to 2 lines
-    const descLines = wrapLines(o.desc || o.label || '', 12.5, BARW - 24, 2);
-    let dy = yName + 17;
-    for (const ln of descLines) { s += txt(X + 24, dy, 12.5, ln, { fill: '#333' }); dy += 15; }
-    // progress bar (full width)
-    s += bar(X, yTop + 52, BARW, o.p?.frac || 0, 8);
+    s += txt(RIGHT, yName, 17, right, { anchor: 'end', weight: 700 });
+    const descLines = wrapLines(o.desc || o.label || '', 16, BARW - 36, 1);
+    if (descLines[0]) s += txt(X + 36, yName + 23, 16, descLines[0], { weight: 400 });
+    s += bar(X, yTop + STEP - 20, BARW, o.p?.frac || 0, 12);
     yTop += STEP;
   }
 
-  // Compact secondary summary line
-  const sy = 432;
-  s += `<line x1="20" y1="${sy - 16}" x2="780" y2="${sy - 16}" stroke="#bbb"/>`;
-  const bits = [];
-  bits.push(`${summary.questCount} quests & bounties`);
-  if (summary.conqFrac != null) bits.push(`Conqueror ${Math.round(summary.conqFrac * 100)}%`);
-  if (summary.sealsInProgress) bits.push(`${summary.sealsInProgress} seals in progress`);
-  bits.push(summary.triumph ? `Tracking: ${trunc(summary.triumph, 22)}` : 'no tracked triumph');
-  s += txt(20, sy, 12.5, bits.join('   \u00b7   '), { fill: '#555' });
-
   // Footer
-  s += `<line x1="20" y1="452" x2="780" y2="452" stroke="#000"/>`;
-  s += txt(20, 472, 12.5, 'Sch\u014dla B\u0113llica', { fill: '#555' });
-  s += txt(780, 472, 12.5, 'trmnl \u00b7 refreshes every 60s', { anchor: 'end', fill: '#555' });
+  s += `<rect x="20" y="454" width="760" height="2" fill="#000"/>`;
+  s += txt(20, 474, 14, 'Sch\u014dla B\u0113llica', { weight: 600 });
+  s += txt(780, 474, 14, 'Orders \u00b7 refreshes every 60s', { anchor: 'end', weight: 600 });
 
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">${s}</svg>`;
 }
