@@ -5,6 +5,11 @@ tokens.json
 # Your private Destiny data dump (send it to Claude directly instead)
 snapshot.json
 
+# Generated artifacts
+manifest-cache.json
+screen.png
+screen.bmp
+
 # Node
 node_modules/
 npm-debug.log*

@@ -9,7 +9,7 @@
 //
 // Layout note: Orders are full-width and dominate the screen (Diego's priority).
 // Rarity is shown with SVG shapes, NOT emoji — resvg has no emoji font.
-//   Exotic = filled star, Legendary = filled diamond, Rare = open diamond, Common = dot.
+//   Exotic = filled star, Legendary = filled diamond, Rare = open diamond, Common = open circle.
 //
 // Run:  node render.js
 
@@ -28,7 +28,11 @@ const env = (() => { const o = {}; if (fs.existsSync('./.env')) for (const l of 
 const API_KEY = env.BUNGIE_API_KEY;
 
 // ---------- manifest cache ----------
+// Bump CACHE_SCHEMA whenever the shape stored by getDef changes, so old caches
+// (e.g. ones written before tierType was captured) are discarded and re-fetched.
+const CACHE_SCHEMA = 2;
 let cache = fs.existsSync(CACHE) ? JSON.parse(fs.readFileSync(CACHE, 'utf8')) : {};
+if (cache.__schema !== CACHE_SCHEMA) cache = { __schema: CACHE_SCHEMA };
 let dirty = false;
 async function getDef(type, hash) {
   if (hash == null) return null;
@@ -106,7 +110,7 @@ function glyph(cx, cy, kind) {
   if (kind === 'exotic') return `<path d="${starPath(cx, cy, 8, 3.3)}" fill="#000"/>`;
   if (kind === 'legendary') return `<path d="M${cx},${cy - 7} L${cx + 7},${cy} L${cx},${cy + 7} L${cx - 7},${cy} Z" fill="#000"/>`;
   if (kind === 'rare') return `<path d="M${cx},${cy - 7} L${cx + 7},${cy} L${cx},${cy + 7} L${cx - 7},${cy} Z" fill="none" stroke="#000" stroke-width="1.6"/>`;
-  return `<circle cx="${cx}" cy="${cy}" r="3.2" fill="#000"/>`; // common
+  return `<circle cx="${cx}" cy="${cy}" r="4.5" fill="none" stroke="#000" stroke-width="1.6"/>`; // common = open circle
 }
 
 // greedy word-wrap with char-width estimate; caps lines + adds ellipsis if clipped
