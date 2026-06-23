@@ -194,7 +194,7 @@ function statusPage() {
     + `<body style="font-family:Arial,Helvetica,sans-serif;margin:24px">`
     + `<h2>Destiny 2 TRMNL dashboard</h2>`
     + `<p>Last render: <b>${upd}</b> &middot; file: <code>${state.filename}</code>`
-    + `${state.error ? ` &middot; <span style=\"color:#b00\">error: ${state.error}</span>` : ''}</p>`
+    + `${state.error ? ` &middot; <span style="color:#b00">error: ${state.error}</span>` : ''}</p>`
     + `<p>Refresh rate: ${REFRESH_SECONDS}s${DEMO ? ' &middot; <b>DEMO mode</b>' : ''}</p>`
     + `<img src="/screen.bmp?t=${Date.now()}" width="800" height="480" style="border:1px solid #ccc">`
     + `</body>`;
