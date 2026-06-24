@@ -1,16 +1,17 @@
 // server.js — always-on TRMNL BYOS server for the Destiny 2 dashboard.
 //
-// Runs on Diego's Windows PC. Every REFRESH_SECONDS it pulls a fresh Bungie
-// profile, builds the screen (reusing render.js), converts it to a 1-bit 800x480
-// BMP, and serves it to the TRMNL device over the BYOS protocol.
+// Runs on Diego's Windows PC. Every refresh it pulls a fresh Bungie profile,
+// builds the screen (reusing render.js), converts it to a 1-bit 800x480 BMP,
+// and serves it to the TRMNL device over the BYOS protocol.
 //
 //   Start:        node server.js
 //   Sample data:  set DEMO=1 && node server.js     (Windows: $env:DEMO=1; node server.js)
-//   Invert B/W:   set INVERT=1 && node server.js   (only if the panel shows inverted)
+//   Invert B/W:   via /settings, or set INVERT=1 as the initial default
 //   Custom port:  set PORT=3000 && node server.js
 //
 // Point your TRMNL firmware (Advanced -> Custom Server) at the http://<PC-IP>:<port>
 // URL printed on startup. Needs tokens.json (run auth-and-snapshot.js once first).
+// Display options live at  http://<PC-IP>:<port>/settings  (saved to config.json).
 
 import http from 'node:http';
 import os from 'node:os';
@@ -28,6 +29,25 @@ const ENV_FILE = './.env';
 const TOKENS_FILE = './tokens.json';
 const COMPONENTS = '100,102,103,104,200,201,202,204,205,206,300,301,302,303,304,305,307,308,309,310,700,800,900,1000,1100,1200,1400';
 const W = 800, H = 480;
+const CONFIG_FILE = './config.json';
+
+// ---------------- settings (config.json), edited via the /settings page ----------------
+const DEFAULT_CONFIG = { count: 5, descSize: 25, showNumbers: true, invert: INVERT, refreshSeconds: REFRESH_SECONDS };
+function loadConfig() {
+  try { return { ...DEFAULT_CONFIG, ...JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8')) }; }
+  catch { return { ...DEFAULT_CONFIG }; }
+}
+function saveConfig(c) { fs.writeFileSync(CONFIG_FILE, JSON.stringify(c, null, 2)); }
+function sanitizeConfig(input) {
+  const c = loadConfig();
+  if (input.count != null) c.count = Math.max(1, Math.min(5, parseInt(input.count, 10) || c.count));
+  if (input.descSize != null) c.descSize = Math.max(16, Math.min(36, parseInt(input.descSize, 10) || c.descSize));
+  if (input.refreshSeconds != null) c.refreshSeconds = Math.max(15, Math.min(900, parseInt(input.refreshSeconds, 10) || c.refreshSeconds));
+  if (input.showNumbers != null) c.showNumbers = input.showNumbers === true || input.showNumbers === 'true' || input.showNumbers === 'on';
+  if (input.invert != null) c.invert = input.invert === true || input.invert === 'true' || input.invert === 'on';
+  return c;
+}
+function readBody(req) { return new Promise((res) => { let b = ''; req.on('data', (c) => { b += c; if (b.length > 1e5) req.destroy(); }); req.on('end', () => res(b)); }); }
 
 // ---------------- Bungie auth + fetch (non-interactive; mirrors auth-and-snapshot.js) ----------------
 function parseEnvFile() {
@@ -183,16 +203,17 @@ function placeholderSvg(msg) {
 
 async function refresh() {
   try {
+    const cfg = loadConfig();
     const model = DEMO ? demoModel() : await buildModel(await fetchProfile());
     // The SVG is a deterministic function of what's shown (no clock), so if it's
     // unchanged the screen is unchanged — skip the work and let the panel sleep.
-    const svg = renderSVG(model);
+    const svg = renderSVG(model, { count: cfg.count, descSize: cfg.descSize, showNumbers: cfg.showNumbers });
     const ts = new Date().toLocaleTimeString();
     if (svg !== state.svg || !state.bmp) {
-      state.bmp = svgToBmp1bit(svg, INVERT);
+      state.bmp = svgToBmp1bit(svg, cfg.invert);
       state.svg = svg;
       state.filename = `d2-${Date.now()}.bmp`;
-      console.log(`[${ts}] orders changed -> ${state.filename} (${model.orders.length} orders); panel will redraw`);
+      console.log(`[${ts}] orders changed -> ${state.filename} (${Math.min(cfg.count, model.orders.length)} of ${model.orders.length} orders); panel will redraw`);
     } else {
       console.log(`[${ts}] no change; panel stays asleep`);
     }
@@ -200,7 +221,7 @@ async function refresh() {
   } catch (e) {
     state.error = e.message;
     console.error('refresh error:', e.message);
-    if (!state.bmp) { state.bmp = svgToBmp1bit(placeholderSvg(e.message), INVERT); state.filename = `setup-${Date.now()}.bmp`; }
+    if (!state.bmp) { state.bmp = svgToBmp1bit(placeholderSvg(e.message), loadConfig().invert); state.filename = `setup-${Date.now()}.bmp`; }
   }
 }
 
@@ -216,17 +237,60 @@ function imageUrl(req, name = 'screen.bmp') {
 }
 function statusPage() {
   const upd = state.updated ? state.updated.toLocaleString() : 'never';
+  const cfg = loadConfig();
   return `<!doctype html><meta charset="utf-8"><title>Destiny 2 TRMNL</title>`
     + `<body style="font-family:Arial,Helvetica,sans-serif;margin:24px">`
     + `<h2>Destiny 2 TRMNL dashboard</h2>`
     + `<p>Last render: <b>${upd}</b> &middot; file: <code>${state.filename}</code>`
     + `${state.error ? ` &middot; <span style="color:#b00">error: ${state.error}</span>` : ''}</p>`
-    + `<p>Refresh rate: ${REFRESH_SECONDS}s${DEMO ? ' &middot; <b>DEMO mode</b>' : ''}</p>`
+    + `<p>Showing ${cfg.count} orders &middot; refresh ${cfg.refreshSeconds}s${DEMO ? ' &middot; <b>DEMO mode</b>' : ''} &middot; <a href="/settings">Settings</a></p>`
     + `<img src="/screen.bmp?t=${Date.now()}" width="800" height="480" style="border:1px solid #ccc">`
     + `</body>`;
 }
 
-const server = http.createServer((req, res) => {
+function settingsPage() {
+  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">`
+    + `<title>Destiny 2 TRMNL — Settings</title><style>`
+    + `body{font-family:Arial,Helvetica,sans-serif;margin:0;background:#f4f4f5;color:#111}`
+    + `.wrap{max-width:560px;margin:0 auto;padding:24px}`
+    + `h1{font-size:20px;margin:0 0 4px}.sub{color:#666;font-size:13px;margin:0 0 20px}`
+    + `.card{background:#fff;border:1px solid #e2e2e5;border-radius:10px;padding:18px 20px;margin-bottom:16px}`
+    + `label{display:block;font-weight:600;font-size:14px;margin:14px 0 6px}label:first-child{margin-top:0}`
+    + `select,input[type=number]{width:100%;padding:9px;font-size:15px;border:1px solid #ccc;border-radius:7px;box-sizing:border-box}`
+    + `.row{display:flex;align-items:center;gap:10px;margin:14px 0}.row input{width:auto}.row label{margin:0;font-weight:600}`
+    + `button{width:100%;padding:12px;font-size:16px;font-weight:700;color:#fff;background:#111;border:0;border-radius:8px;cursor:pointer;margin-top:8px}`
+    + `button:disabled{opacity:.5}.msg{text-align:center;font-size:14px;color:#137333;height:18px;margin-top:10px}`
+    + `a{color:#111}.preview img{width:100%;border:1px solid #ddd;border-radius:8px;margin-top:8px}`
+    + `</style></head><body><div class="wrap">`
+    + `<h1>Destiny 2 TRMNL — Settings</h1><p class="sub">Changes apply on the next refresh. <a href="/">Back to status</a></p>`
+    + `<div class="card">`
+    + `<label for="count">Number of orders on screen</label>`
+    + `<select id="count"><option value="3">3</option><option value="4">4</option><option value="5">5</option></select>`
+    + `<label for="descSize">Description text size</label>`
+    + `<select id="descSize"><option value="22">Small</option><option value="25">Medium</option><option value="28">Large</option><option value="32">Extra large</option></select>`
+    + `<label for="refreshSeconds">Refresh interval (seconds)</label>`
+    + `<select id="refreshSeconds"><option value="30">30</option><option value="60">60</option><option value="120">120</option><option value="300">300</option><option value="600">600</option></select>`
+    + `<div class="row"><input type="checkbox" id="showNumbers"><label for="showNumbers">Show raw progress numbers (e.g. 493k/500k)</label></div>`
+    + `<div class="row"><input type="checkbox" id="invert"><label for="invert">Invert colors (only if the panel shows white-on-black)</label></div>`
+    + `<button id="save">Save settings</button><div class="msg" id="msg"></div>`
+    + `</div>`
+    + `<div class="card preview"><label>Live preview</label><img id="pv" src="/screen.bmp?t=0"></div>`
+    + `</div><script>`
+    + `var $=function(id){return document.getElementById(id)};`
+    + `function load(){fetch('/api/config').then(function(r){return r.json()}).then(function(c){`
+    + `$('count').value=c.count;$('descSize').value=c.descSize;$('refreshSeconds').value=c.refreshSeconds;`
+    + `$('showNumbers').checked=!!c.showNumbers;$('invert').checked=!!c.invert;})}`
+    + `function bump(){$('pv').src='/screen.bmp?t='+Date.now()}`
+    + `$('save').onclick=function(){var btn=$('save');btn.disabled=true;$('msg').textContent='Saving…';`
+    + `var body={count:$('count').value,descSize:$('descSize').value,refreshSeconds:$('refreshSeconds').value,showNumbers:$('showNumbers').checked,invert:$('invert').checked};`
+    + `fetch('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})`
+    + `.then(function(r){return r.json()}).then(function(){$('msg').textContent='Saved \u2713';btn.disabled=false;setTimeout(bump,400)})`
+    + `.catch(function(){$('msg').textContent='Save failed';btn.disabled=false})};`
+    + `load();setInterval(bump,15000);`
+    + `</script></body></html>`;
+}
+
+const server = http.createServer(async (req, res) => {
   const path = (new URL(req.url, 'http://x').pathname).replace(/\/+$/, '') || '/';
   if (path === '/screen.bmp' || path === '/setup.bmp') {
     if (!state.bmp) { res.writeHead(503); return res.end('not ready'); }
@@ -235,26 +299,42 @@ const server = http.createServer((req, res) => {
   }
   if (path === '/api/display') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    return res.end(JSON.stringify({ status: 0, image_url: imageUrl(req), filename: state.filename, refresh_rate: String(REFRESH_SECONDS), update_firmware: false, firmware_url: null, reset_firmware: false }));
+    return res.end(JSON.stringify({ status: 0, image_url: imageUrl(req), filename: state.filename, refresh_rate: String(loadConfig().refreshSeconds), update_firmware: false, firmware_url: null, reset_firmware: false }));
   }
   if (path === '/api/setup') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     return res.end(JSON.stringify({ status: 200, api_key: 'destiny-trmnl', friendly_id: 'DSTNY', image_url: imageUrl(req, 'setup.bmp'), message: 'Welcome to the Destiny 2 dashboard' }));
   }
   if (path === '/api/log') { res.writeHead(204); return res.end(); }
+  if (path === '/api/config') {
+    if (req.method === 'POST') {
+      let input = {};
+      try { input = JSON.parse(await readBody(req) || '{}'); } catch { input = {}; }
+      const cfg = sanitizeConfig(input);
+      saveConfig(cfg);
+      await refresh(); // apply immediately so the panel/preview update now
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      return res.end(JSON.stringify({ ok: true, config: cfg }));
+    }
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    return res.end(JSON.stringify(loadConfig()));
+  }
+  if (path === '/settings') { res.writeHead(200, { 'Content-Type': 'text/html' }); return res.end(settingsPage()); }
   if (path === '/') { res.writeHead(200, { 'Content-Type': 'text/html' }); return res.end(statusPage()); }
   res.writeHead(404); res.end('not found');
 });
 
 async function start() {
   await refresh();
-  setInterval(refresh, REFRESH_SECONDS * 1000);
+  // self-scheduling loop so a changed refresh interval (from settings) takes effect
+  const tick = async () => { await refresh(); setTimeout(tick, (loadConfig().refreshSeconds || 60) * 1000); };
+  setTimeout(tick, (loadConfig().refreshSeconds || 60) * 1000);
   server.listen(PORT, () => {
     console.log('\nDestiny 2 TRMNL BYOS server running.');
     const ips = lanIps();
     if (ips.length) for (const ip of ips) console.log(`  TRMNL "Custom Server" URL:  http://${ip}:${PORT}`);
     else console.log(`  (no LAN IP detected) local URL:  http://localhost:${PORT}`);
-    console.log(`  Browser preview:            http://localhost:${PORT}/`);
+    console.log(`  Browser preview + settings: http://localhost:${PORT}/  and  /settings`);
     if (DEMO) console.log('  DEMO mode: serving sample data (no Bungie call).');
     console.log('');
   });
