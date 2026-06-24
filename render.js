@@ -7,7 +7,7 @@
 // prints a report so running it doubles as the test.
 //
 // Layout: the progress fill sweeps across the big description text; tiny caption
-// (rarity glyph + name + progress) sits above it. 5 orders, no header/footer.
+// (rarity glyph + name + progress) sits above it. No header/footer.
 // Rarity is shown with SVG shapes, NOT emoji — resvg has no emoji font.
 //   Exotic = filled star, Legendary = filled diamond, Rare = open diamond, Common = open circle.
 //
@@ -140,7 +140,7 @@ function wrapLines(s, fontSize, maxWidth, maxLines) {
 // =====================================================================
 // buildModel: reads snapshot + manifest, returns a plain data model.
 // renderSVG: turns that model into an 800x480 SVG string.
-// Split so server.js can import + reuse both. (See docs/HANDOFF.md §7.)
+// Split so server.js can import + reuse both. (See docs/HANDOFF.md.)
 // =====================================================================
 export async function buildModel(D) {
   const chars = D.characters.data;
@@ -216,10 +216,15 @@ export async function buildModel(D) {
 
 // Sample-2 layout: each order is a tiny caption (rarity + name + progress) over a
 // big description, with the progress fill sweeping across the description text
-// (text flips white over the filled part). 5 orders, no header/footer.
-export function renderSVG(model) {
-  const orders = (model.orders || []).slice(0, 5);
-  const X = 12, BW = 776, STEP = 96;
+// (text flips white over the filled part). No header/footer.
+// opts: { count 1-5, descSize px, showNumbers bool } — driven by config.json via the settings page.
+export function renderSVG(model, opts = {}) {
+  const count = Math.max(1, Math.min(5, opts.count || 5));
+  const descSize = Math.max(14, Math.min(40, opts.descSize || 25));
+  const showNumbers = opts.showNumbers !== false;
+  const orders = (model.orders || []).slice(0, count);
+  const X = 12, BW = 776, STEP = Math.floor(H / count);
+  const capH = 22, lineH = Math.round(descSize * 1.12);
   const pctOf = (p) => (p ? Math.round(p.frac * 100) + '%' : '\u2014');
 
   let defs = '';
@@ -235,16 +240,16 @@ export function renderSVG(model) {
     // caption (above the fill, always black on white)
     s += glyph(X + 8, y0 + 11, o.tier.kind, '#000', 0.6);
     s += txt(X + 20, y0 + 15, 13, trunc(o.name, 48), { weight: 700 });
-    const capR = o.p ? `${fmtNum(o.p.prog)}/${fmtNum(o.p.total)} \u00b7 ${pctOf(o.p)}` : '\u2014';
+    const capR = o.p ? (showNumbers ? `${fmtNum(o.p.prog)}/${fmtNum(o.p.total)} \u00b7 ${pctOf(o.p)}` : pctOf(o.p)) : '\u2014';
     s += txt(X + BW - 4, y0 + 15, 13, capR, { anchor: 'end', weight: 600 });
     // description block (the hero) with the progress fill behind it
-    const dTop = y0 + 22, dH = 60;
+    const dTop = y0 + capH, dH = STEP - capH - 8;
+    const maxLines = dH >= lineH * 3 ? 3 : 2;
     defs += `<clipPath id="df${i}"><rect x="${X}" y="${dTop}" width="${fillW}" height="${dH}"/></clipPath>`;
     defs += `<clipPath id="de${i}"><rect x="${X + fillW}" y="${dTop}" width="${BW - fillW}" height="${dH}"/></clipPath>`;
     s += `<rect x="${X}" y="${dTop}" width="${fillW}" height="${dH}" fill="#000"/>`;
-    const dl = wrapLines(o.desc || o.label || '', 25, BW - 10, 2);
-    const dtext = (fill) => txt(X + 6, dTop + 26, 25, dl[0] || '', { weight: 700, fill })
-      + (dl[1] ? txt(X + 6, dTop + 52, 25, dl[1], { weight: 700, fill }) : '');
+    const dl = wrapLines(o.desc || o.label || '', descSize, BW - 10, maxLines);
+    const dtext = (fill) => dl.map((ln, k) => txt(X + 6, dTop + descSize + 2 + k * lineH, descSize, ln, { weight: 700, fill })).join('');
     s += `<g clip-path="url(#df${i})">${dtext('#fff')}</g><g clip-path="url(#de${i})">${dtext('#000')}</g>`;
     y += STEP;
   });
