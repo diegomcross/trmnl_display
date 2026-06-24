@@ -15,7 +15,6 @@
 import http from 'node:http';
 import os from 'node:os';
 import fs from 'node:fs';
-import crypto from 'node:crypto';
 import { URL } from 'node:url';
 import { Resvg } from '@resvg/resvg-js';
 import { buildModel, renderSVG } from './render.js';
@@ -155,7 +154,7 @@ export function svgToBmp1bit(svg, invert = false) {
 }
 
 // ---------------- screen state + render loop ----------------
-let state = { bmp: null, filename: 'starting.bmp', hash: '', updated: null, error: null };
+let state = { bmp: null, filename: 'starting.bmp', svg: '', updated: null, error: null };
 
 function demoModel() {
   return {
@@ -185,11 +184,19 @@ function placeholderSvg(msg) {
 async function refresh() {
   try {
     const model = DEMO ? demoModel() : await buildModel(await fetchProfile());
-    const bmp = svgToBmp1bit(renderSVG(model), INVERT);
-    const hash = crypto.createHash('md5').update(bmp).digest('hex').slice(0, 10);
-    if (hash !== state.hash) { state.bmp = bmp; state.hash = hash; state.filename = `d2-${Date.now()}.bmp`; }
+    // The SVG is a deterministic function of what's shown (no clock), so if it's
+    // unchanged the screen is unchanged — skip the work and let the panel sleep.
+    const svg = renderSVG(model);
+    const ts = new Date().toLocaleTimeString();
+    if (svg !== state.svg || !state.bmp) {
+      state.bmp = svgToBmp1bit(svg, INVERT);
+      state.svg = svg;
+      state.filename = `d2-${Date.now()}.bmp`;
+      console.log(`[${ts}] orders changed -> ${state.filename} (${model.orders.length} orders); panel will redraw`);
+    } else {
+      console.log(`[${ts}] no change; panel stays asleep`);
+    }
     state.updated = new Date(); state.error = null;
-    console.log(`[${state.updated.toLocaleTimeString()}] rendered ${state.filename} (${bmp.length} bytes, ${model.orders.length} orders)`);
   } catch (e) {
     state.error = e.message;
     console.error('refresh error:', e.message);
