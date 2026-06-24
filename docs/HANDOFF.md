@@ -1,278 +1,152 @@
-# TRMNL Destiny 2 Dashboard — Handoff Spec & Continuation Guide
+# Destiny 2 → TRMNL e-ink dashboard — Handoff
 
-**For the next agent.** This document is self-contained: you can pick up the project
-from here without the prior conversation. Read sections 0–6 before writing any code.
+A self-hosted dashboard that shows Diego's current Destiny 2 **Orders** (and, soon,
+other content) on a 7.5" 800×480 monochrome e-ink panel.
 
-Last updated: 2026-06-23. Author: previous Claude session (handoff requested by Diego).
-
----
-
-## 0. TL;DR — where we are
-
-A self-hosted e-ink dashboard that shows Diego's **Destiny 2 "Orders"** (the Portal's
-daily directives) plus secondary progress, on a TRMNL 7.5" 1-bit display.
-
-- **Auth + data fetch: DONE and working.** `auth-and-snapshot.js` produces `snapshot.json`.
-- **The big blocker is SOLVED:** we found where Orders live in the Bungie API
-  (inventory bucket **635141261**, see §3). Do **not** re-investigate this.
-- **`render.js`: working**, just rewritten to read Orders from the correct bucket. It
-  produces `screen.png` and prints a report.
-- **Not built yet:** (a) render refinements Diego asked for this session (§5),
-  (b) the always-on BYOS server `server.js`, (c) pointing the device at the PC,
-  (d) a PC-browser config UI (§5.4, later).
-
-**Your immediate job:** implement §5.1–§5.3 (rarity indicator, order description,
-trim the screen), confirm with Diego, then build `server.js` (§7).
+> **Read this first.** Diego is a non-programmer: **Claude writes and pushes all code;
+> Diego runs commands locally and handles the browser/device.** Keep responses tight and
+> ship working code. Verify GitHub pushes by fetching the raw file and diffing/MD5 vs the
+> tested local copy.
 
 ---
 
-## 1. Goal & architecture
+## Hardware & accounts
 
-A 7.5" TRMNL OG DIY e-ink panel (Seeed XIAO ESP32-S3, **800×480, 1-bit monochrome**)
-shows Diego's current Destiny 2 Orders and refreshes roughly every 60s. It is fully
-self-hosted (BYOS = "bring your own server"):
-
-```
-Bungie API ──(HTTPS)──> Node server on Diego's Windows PC ──> 800x480 1-bit image
-                                                                      │
-                          TRMNL device (BYOS, custom server) <────────┘  (polls every ~60s)
-```
-
-- The Node server fetches the profile, resolves hashes→names via the **public Manifest**
-  (API-key only), and renders the image.
-- The e-ink panel holds the last image when the PC is off (e-ink is persistent).
-- Diego is a **Warlock main**; the display defaults to the Warlock character.
-
-**Hard constraint:** the agent's sandbox/container **cannot reach `bungie.net`** (only
-github/npm/pypi domains are allowlisted). **All Bungie/Manifest calls run on Diego's PC.**
-You write code; Diego runs it and reports output. Plan around this — never assume you can
-hit the Bungie API yourself from the container.
+- **Panel:** TRMNL 7.5" OG **DIY kit — Seeed Studio driver board** + XIAO ESP32-S3, 800×480, 1-bit monochrome. 2.4 GHz Wi-Fi only. Device MAC `1C:DB:D4:74:E7:E0`.
+  - **Re-enter Wi-Fi pairing / captive portal: hold *Key 3* ~5s.** (The "hold the back button" and "Reset→Boot" instructions are for *other* TRMNL units and do **not** apply.)
+- **Character:** Warlock main "Aquarius", Steam. `membershipType 3`, `membershipId 4611686018530139303`, Warlock `characterId 2305843010375154553`.
+- **Bungie OAuth app:** `client_id 49944`, confidential client, redirect `https://127.0.0.1:8443/callback`. Tokens stored in `tokens.json` (gitignored), refreshed non-interactively.
+- **Repo:** `github.com/diegomcross/trmnl_display`, branch `main`. Local clone: `C:\Users\diego\Desktop\cola_ai_v3\trmnl_display`.
+- **Dev PC:** Windows, Node 18+. Ethernet `192.168.1.130`; Wi-Fi `192.168.1.68`; VPN virtual adapter `10.14.0.2`.
 
 ---
 
-## 2. Facts: repo, paths, auth
+## Files
 
-- **Repo (all code lives here):** `diegomcross/trmnl_display`, branch `main`, **private**.
-- **Local clone (Windows):** `C:\Users\diego\Desktop\cola_ai_v3\trmnl_display`
-- **Bungie app:** confidential client, `client_id=49944`,
-  redirect `https://127.0.0.1:8443/callback`, scope `ReadDestinyInventoryAndVault`.
-  API key + secret live in Diego's local `.env` (gitignored). OAuth works; `tokens.json`
-  refreshes. **Never commit `.env`, `tokens.json`, or `snapshot.json`.**
-- **Account:** "Aquarius", membershipType **3** (Steam), membershipId
-  `4611686018530139303`, 3 characters. **Warlock** characterId `2305843010375154553`
-  (classType 2).
-
-**GitHub MCP workflow (important):**
-- Always fetch the current file SHA via `get_file_contents` **before** updating a file.
-- Verify every file after multi-file pushes; files >40 KB may truncate.
-- Diego's collaboration style: **you write and push all code; Diego runs commands locally
-  and pastes back results.** He is a non-programmer who gives specs/decisions. He strongly
-  prefers tight responses with working code over diagnostic back-and-forth.
+| File | Role |
+|---|---|
+| `auth-and-snapshot.js` | Interactive Bungie OAuth + writes `snapshot.json` (full profile dump). Run once / to re-auth. |
+| `render.js` | `buildModel(profile)` → data model; `renderSVG(model, opts)` → 800×480 SVG. CLI run writes `screen.png` + prints a report. Both exported for reuse. |
+| `server.js` | Always-on TRMNL BYOS HTTP server. Pulls a fresh profile each cycle, renders, converts to 1-bit BMP, serves it. Hosts the settings page. |
+| `watch-destiny.ps1` | Watches for `destiny2.exe`; auto-starts/stops the server with the game. Task Scheduler logon-task one-liner in its header. |
+| `config.json` | Settings written by the settings page (gitignored; per-machine). |
+| `manifest-cache.json` | Cached Bungie manifest defs (gitignored). `CACHE_SCHEMA` const invalidates it when the stored shape changes. |
 
 ---
 
-## 3. THE ORDERS BREAKTHROUGH (hard-won — do not re-derive)
+## What works now
 
-Orders are **NOT** in the pursuits bucket (1345459588), which is where a naive search
-looks (and where the previous session wasted enormous effort). The truth:
-
-- **Orders are instanced items in inventory bucket `635141261`** on the character.
-  (`D.characterInventories.data[characterId].items` filtered to `bucketHash === 635141261`.)
-- Each Order is `itemType === 26`, with `traitIds` including `"item.bounty"` and
-  `"inventory_filtering.bounty"`. They display in-game as "Gunsmith Order", "Foundry
-  Order", etc. (or blank type for Exotic orders).
-- **Objective progress** comes from the **ItemObjectives component (301)**:
-  `D.itemComponents.objectives.data[itemInstanceId].objectives` → array of
-  `{ objectiveHash, progress, completionValue, complete, visible }`.
-- **Name:** `DestinyInventoryItemDefinition[itemHash].displayProperties.name`
-- **Description (what to do):** `DestinyInventoryItemDefinition[itemHash].displayProperties.description`
-- **Short objective label:** `DestinyObjectiveDefinition[objectiveHash].progressDescription`
-  (contains icon tokens like `[Headshot]`, `[Auto Rifle]` — see §5.1 caveat).
-- **Rarity:** `DestinyInventoryItemDefinition[itemHash].inventory.tierType` (number) and
-  `.tierTypeName` (string). Confirmed values: **2 → "Common"**, **6 → "Exotic"**.
-  Legendary is **5 → "Legendary"** (standard Bungie enum). Use `tierTypeName` for display
-  logic, `tierType` as backup.
-
-**How it was found (for your confidence, not for repeating):** braytech.org makes only
-`GetProfile` calls (no vendor calls). We hooked its `fetch`, read one Order's `itemHash`
-out of its React state, resolved that item's definition, and its
-`inventory.bucketTypeHash` was `635141261`. Verified the same 5 Orders + objectives exist
-in Diego's `snapshot.json`.
-
-**Component set already fetched** by `auth-and-snapshot.js` (includes 301):
-`100,102,103,104,200,201,202,204,205,206,300,301,302,303,304,305,307,308,309,310,700,800,900,1000,1100,1200,1400`.
-Note: 301 = ItemObjectives, 302 = ItemPerks (an earlier bug requested 302 thinking it was
-objectives — it is not; 301 is correct and is now in the set).
-
-### Verified sample (Diego's orders at handoff time)
-
-| Name | tierType / name | itemTypeDisplayName | description (what to do) | objective label | progress |
-|---|---|---|---|---|---|
-| Full Auto | 2 / Common | Gunsmith Order | Defeat combatants/Guardians with Auto Rifles, SMGs, Trace Rifles, or Machine Guns. | `[Auto Rifle] [Machine Gun] final blows` | 493000/500000 |
-| Weak Spot | 2 / Common | Foundry Order | Defeat combatants or Guardians with precision damage. | `[Headshot] Precision` | 49.5k/250k (varies) |
-| Special Cases | 2 / Common | Gunsmith Order | (special-ammo weapon kills) | `Special ammo weapon` | 71k/350k |
-| Close Comfort | 2 / Common | Gunsmith Order | (close-range kills) | — | — |
-| Micah-10's Training | **6 / Exotic** | (blank) | Create orbs and apply buffs to your fireteam (Cure, Restoration, Woven Mail, Invisibility, Overshield). | `Progress` | 2.76M/5M |
-
-Orders rotate/expire daily — names and progress change. The structure above is stable.
+- **Auth + profile fetch** end-to-end (non-interactive refresh in `server.js`).
+- **Orders discovery (the hard-won part):** Orders are instanced bounty-type items
+  (`itemType 26`, trait `item.bounty`) in **inventory bucket `635141261`** (not the
+  pursuits bucket). Objective progress from **component 301** (`itemComponents.objectives`).
+  Rarity from `inventory.tierType` / `tierTypeName` (**2 Common, 5 Legendary, 6 Exotic**).
+- **Orders page layout (settled — "Sample 2"):** tiny caption (rarity glyph + name +
+  `prog/total · %`) above a **big description**, with the **progress fill sweeping across
+  the description text** (text flips white over the filled region via SVG `clipPath`).
+  5 orders, no header/footer. Rarity glyphs are SVG shapes (resvg has no emoji font):
+  **★ Exotic, ◆ Legendary, ◇ Rare, ○ Common.**
+- **1-bit BMP pipeline:** render SVG at **3× (SS=3)**, box-average down to 800×480, then
+  **threshold at 150** → solid strokes, no broken letters. Standard 1-bit BMP3, bottom-up,
+  palette index0=black/index1=white, bit=1→white. `INVERT` flag if a panel shows inverted.
+- **Refresh only on change:** the rendered **SVG string** is the change key (no clock in
+  it), so the panel only redraws when the visible screen actually differs. Server logs
+  "panel will redraw" vs "panel stays asleep". `filename` only bumps on change.
+- **BYOS endpoints:** `GET /api/display` (status/image_url/filename/refresh_rate),
+  `GET /api/setup`, `GET /screen.bmp` (+`/setup.bmp`), `POST /api/log` (204),
+  `GET /` (status + preview), `GET /settings` + `GET|POST /api/config`.
+- **Interim settings page (to be REPLACED — see below):** order count, description size,
+  refresh interval, show/hide raw numbers, invert. Persists to `config.json`, applies live.
+- **Auto-launch watcher** (`watch-destiny.ps1`).
 
 ---
 
-## 4. Current file inventory
+## Connectivity learnings (these cost real time — don't relitigate)
 
-In repo root unless noted. Node `>=18`, `"type": "module"`.
-
-- **`auth-and-snapshot.js`** — zero-dependency OAuth + writes `snapshot.json` with the full
-  component set above. Supports a `reauth` arg, friendly error-99 message, graceful exit.
-  Run: `node auth-and-snapshot.js [reauth]`. **Working.**
-- **`render.js`** — reads local `snapshot.json` + `.env` API key, resolves names via the
-  Manifest (caching defs to `manifest-cache.json`), builds an 800×480 SVG, renders to
-  `screen.png` via `@resvg/resvg-js` (prebuilt; no native build), and prints a report.
-  **Just rewritten** to read Orders from bucket 635141261 (§3). This is the file you'll
-  iterate on for §5.1–§5.3. Current layout: header (Warlock + Power + Updated) · left
-  column = Orders then Quests & bounties · right column = Conquests / Seals & titles /
-  Tracked triumph · footer.
-- **`find-orders.js`, `probe-vendor.js`, `resolve.js`** — old diagnostics. Harmless; can be
-  deleted in a cleanup commit.
-- **`package.json`** (`@resvg/resvg-js` dependency), **`README.md`**, **`.gitignore`**
-  (excludes `.env`, `tokens.json`, `snapshot.json`, `node_modules`, and you should add
-  `manifest-cache.json`, `screen.png`).
-
-`render.js` helpers you'll reuse: `getDef(type, hash)` (cached manifest lookup),
-`progressOf(objs)`, `bar(x,y,w,frac,h)`, `txt(x,y,size,s,opts)`, `trunc`, `cleanLabel`
-(strips `[...]` icon tokens).
+- **The device talks plain `http`, not `https`.** Custom Server URL must be e.g.
+  `http://192.168.1.130:3000` — **no trailing slash, no https.** Firmware appends `/api/...`.
+- **The PC's IP moves** between Ethernet (`.130`), Wi-Fi (`.68`), and the VPN adapter
+  (`10.14.0.2`). The device must point at whichever interface it can actually reach
+  (the LAN one, `192.168.1.x`). The single best diagnostic: **load `http://<ip>:3000/`
+  from a phone on home Wi-Fi** — if the phone can't reach it, the device can't either.
+- **Windows Firewall:** allow inbound TCP 3000 —
+  `netsh advfirewall firewall add rule name="TRMNL D2" dir=in action=allow protocol=TCP localport=3000 profile=any`.
+- **No-button pairing fallback:** if the device can't find its saved SSID it re-enters the
+  captive portal on its own (rename the 2.4 GHz SSID briefly to force it).
 
 ---
 
-## 5. Diego's requirements from this session (DO THESE)
+## NEW DIRECTION — Settings = content picker + pages (NOT yet built)
 
-Priority order is Diego's. **Active Orders are the most important element on the screen.**
+The current settings page is layout-only and is the **wrong model**. Diego's actual vision:
 
-### 5.1 Rarity indicator (exotic / legendary / regular)
+1. **Content picker.** Settings lists the Bungie content categories and lets him choose
+   which to show:
+   - **Orders**, filterable by **rarity** (Common / Legendary / Exotic) — pick which tiers.
+   - **Quests / bounties**
+   - **Triumphs**
+   - **Titles (Seals)**
+   - (extensible)
+2. **Pages.** The panel shows **one page at a time and rotates** through them. He assigns
+   selected content to pages (e.g. Page 1 = Orders; Page 2 = chosen Quests; Page 3 = a
+   title's progress). **Orders fill an entire page on their own.**
+3. **Page-rotation interval (seconds)** — how long each page shows before flipping.
 
-In-game and on braytech, orders are color-coded by rarity. The panel is **1-bit monochrome**,
-so color is unavailable — use a **distinct glyph/shape per tier** instead.
+**Design notes for implementation:**
+- Each content type needs its **own page layout**. The settled "Sample 2" design is the
+  **Orders page**; Quests / Triumphs / Titles need their own layouts.
+- **Power tradeoff:** every page flip is a deliberate e-ink refresh. Make rotation
+  off-able and allow long intervals; single page = least refreshing. Within a page, only
+  redraw when that page's data changes (as today).
+- **`buildModel` must gather more than orders** now — quests/bounties, tracked triumphs,
+  seals/titles with progress — so pages can be composed from real data.
+- **Server page selection:** pick the "current" page from elapsed time
+  (`floor(now/interval) % numPages`), render that page, bump `filename` when the page or
+  its data changes. `refresh_rate` returned to the device should be ≤ the page interval so
+  flips are timely.
+- **Config schema (proposed):**
+  ```json
+  {
+    "rotationSeconds": 30,
+    "pages": [
+      { "type": "orders", "rarities": ["common","legendary","exotic"] },
+      { "type": "quests", "items": ["<hash>", "..."] },
+      { "type": "title", "sealHash": "<hash>" }
+    ],
+    "descSize": 25, "invert": false, "refreshSeconds": 60
+  }
+  ```
+- **Settings UI** becomes: a list of available content (with checkboxes / rarity filters),
+  a page assignment per selected item, and the rotation-interval field, all persisted to
+  `config.json` and applied live. Keep server-side persistence (no browser storage).
 
-- Source the tier from `inventory.tierTypeName` (`"Exotic"`, `"Legendary"`, `"Common"`),
-  falling back to `tierType` (6, 5, 2/3).
-- **Caveat (important):** real emoji will likely **not render** in `@resvg/resvg-js`
-  (no emoji font in the environment). Prefer either (a) small **SVG shapes** drawn inline
-  (most reliable), or (b) plain geometric Unicode glyphs that the base font supports
-  (e.g. `◆ ◇ ● ○ ■ ★`). Test whichever you choose on the actual `screen.png`.
-- Suggested mapping (confirm with Diego): **Exotic = filled diamond ◆ / solid star**,
-  **Legendary = open diamond ◇ or solid triangle**, **Common = small dot •**. Place the
-  glyph to the left of the order name. Consider also showing the tier word as a tiny label
-  if space allows.
-
-### 5.2 Order description (what to do)
-
-Right now only the name shows. Add `displayProperties.description` so Diego knows the task
-(e.g. Weak Spot → "Defeat combatants or Guardians with precision damage."). It's a full
-sentence — wrap to ~2 lines or truncate sensibly. The existing `progressDescription`
-(short label like "Precision") is complementary; decide with Diego whether to show the
-long description, the short label, or both. Likely: **name + long description + progress
-bar + %**.
-
-### 5.3 Trim less-important content for screen real estate
-
-Orders should dominate. Each order now needs ~2–3 lines (glyph+name, description, bar/%),
-so 5 orders ≈ 300–360 px. Free up space by cutting or shrinking the secondary sections.
-Candidates to remove or minimize (confirm with Diego): Quests & bounties, Seals & titles,
-Tracked triumph, Conquests. A reasonable v1: **Orders full-width with descriptions**, plus
-at most one slim secondary line (e.g. tracked triumph) or nothing. The config UI (§5.4)
-will eventually make this user-selectable, so don't over-engineer now.
-
-### 5.4 PC-browser config interface (LATER — after server.js)
-
-Diego wants a browser page on his PC to **select what to display** on the e-paper screen
-(which sections, maybe which/how many orders, character, etc.). Implementation sketch:
-the BYOS `server.js` (§7) also serves a `/config` HTML page that reads/writes a local
-`config.json`; `render.js` reads `config.json` to decide what to draw. Keep `config.json`
-gitignored or with safe defaults. Build this **after** the always-on server works.
-
----
-
-## 6. Data reference (so you don't need the browser)
-
-```js
-const ORDERS_BUCKET   = 635141261;     // Orders (instanced bounty-type items)
-const PURSUITS_BUCKET = 1345459588;    // quests + bounties
-const wid = Object.keys(D.characters.data).find(c => D.characters.data[c].classType === 2); // Warlock
-
-const inv     = D.characterInventories.data[wid].items;            // character items
-const objInst = D.itemComponents.objectives.data;                  // component 301, keyed by itemInstanceId
-const uio     = D.characterProgressions.data[wid].uninstancedItemObjectives; // for uninstanced items
-
-const orders = inv.filter(it => it.bucketHash === ORDERS_BUCKET);
-for (const it of orders) {
-  const def  = /* getDef('DestinyInventoryItemDefinition', it.itemHash) */;
-  const objs = (it.itemInstanceId && objInst[it.itemInstanceId]?.objectives) || [];
-  // def.displayProperties.name / .description
-  // def.itemTypeDisplayName, def.inventory.tierType, def.inventory.tierTypeName
-  // objs[0].objectiveHash -> DestinyObjectiveDefinition.progressDescription
-  // objs[].progress / .completionValue / .complete
-}
-```
-
-Manifest lookups (run on Diego's PC, API key only, no token):
-`GET https://www.bungie.net/Platform/Destiny2/Manifest/{DefType}/{hash}/` with header
-`X-API-Key: <key>`. `render.js` already caches these to `manifest-cache.json`.
-
-Other things known-good in `snapshot.json` (kept as optional secondary content):
-- Quests & bounties: pursuits bucket 1345459588.
-- Seals/Titles: `profileRecords.data.recordSealsRootNodeHash` + `profilePresentationNodes`
-  node progress (`progressValue`/`completionValue`).
-- Conquests: the "Conqueror" seal's % .
-- Tracked triumph: `profileRecords.data.trackedRecordHash` (currently none tracked).
+> **Confirm the vision with Diego before building** (ordering within a page, default page,
+> per-page layout options were open questions at handoff time).
 
 ---
 
-## 7. Build the BYOS server (`server.js`) — next big step after §5.1–§5.3
+## Open items / next steps
 
-A long-running Node server on Diego's PC that the TRMNL device polls.
-
-- **Endpoints (TRMNL BYOS protocol):**
-  - `GET /api/setup` → JSON for first-time device handshake.
-  - `GET /api/display` → JSON `{ image_url, filename, refresh_rate: 60 }` pointing at the
-    current image.
-  - Serve the image at the `image_url` path.
-- **Image format:** the device wants a **1-bit, 800×480 BMP**. `screen.png` is 1-bit PNG;
-  write a tiny BMP encoder (or convert) so the served file is a 1-bit BMP. Confirm the
-  device's expected format against current TRMNL BYOS docs.
-- **Loop:** regenerate the image every ~60s (reuse `render.js`'s drawing logic; refactor it
-  into an importable function so both CLI render and the server share it).
-- **Token refresh:** must be **non-interactive** in the server (use the stored refresh
-  token). Keep the interactive `authorize` flow in `auth-and-snapshot.js`.
-- **Startup:** print the PC's LAN IP + port so Diego can point the device at it.
-- Then guide Diego: TRMNL firmware **Advanced → Custom Server** = `http://<PC-LAN-IP>:<port>`
-  (firmware ≥1.4.6, no reflash needed), in WiFi pairing mode; add a Windows Firewall
-  allowance for the port.
+1. **Confirm the pages/content-picker spec**, then build it (config schema, multi-content
+   `buildModel`, per-type page layouts, server rotation, new settings UI).
+2. **VPN coexistence:** Diego needs the VPN running. Fix is almost always the VPN app's
+   **"allow local network / LAN access"** toggle (whitelists `192.168.1.0/24`). **Which VPN
+   he runs is still unknown** (the `10.14.0.2` adapter is the tell) — get the name for exact steps.
+3. The interim layout-only settings page (`/settings`) is committed but will be superseded
+   by the content-picker/pages model above.
 
 ---
 
-## 8. Workflow notes & gotchas
+## Technical reference
 
-- **Container can't reach bungie.net.** You analyze `snapshot.json` with local Python/JS in
-  the sandbox (cheap); Diego runs anything that hits the Bungie API on his PC.
-- **Async in the Chrome `javascript_tool` REPL** returns `{}` for the awaited value — stash
-  results on a `window.__x` global inside a fire-and-forget IIFE and read them back in a
-  separate synchronous call. (Only relevant if you use the browser tool again; you
-  shouldn't need to for §5.)
-- **resvg has no emoji font** — see §5.1. Verify glyphs render by inspecting `screen.png`.
-- **Don't re-hunt Orders.** Bucket 635141261 + component 301 is confirmed (§3).
-- Keep `snapshot.json` out of git; it's ~26 MB. When you need fresh data, ask Diego to
-  re-run `node auth-and-snapshot.js`.
-- Test command for `render.js`: Diego runs `git pull` then `node render.js` and opens
-  `screen.png`; the console report lists the Orders found.
-
----
-
-## 9. Suggested first actions for you (the next agent)
-
-1. `get_file_contents` on `render.js` to get its current content + SHA.
-2. Implement §5.1 (rarity glyph), §5.2 (description), §5.3 (trim) in `render.js`. Refactor
-   the draw logic into a reusable function while you're in there (helps §7).
-3. Push; have Diego `git pull && node render.js` and share `screen.png` + console report.
-4. Iterate on glyph choice / layout with Diego.
-5. Then build `server.js` (§7).
-6. Then the `/config` UI (§5.4).
+- **resvg-js:** `new Resvg(svg,{fitTo:{mode:'zoom',value:3}}).render()` → `.pixels` (RGBA),
+  `.width/.height`, `.asPng()`. No emoji font → use SVG shapes for icons.
+- **1-bit "label on a fill" trick:** draw a black fill rect for the filled region, then draw
+  the text twice — white clipped to the filled region, black clipped to the empty region —
+  so text stays legible whether over black or white.
+- **GitHub MCP gotchas:** prefer fetching the raw URL and diffing after every push; over-
+  escaping (`\"` → `\\\"`) has corrupted pushes before. Files can truncate silently — verify.
+  The connector can also drop mid-session; if its tools vanish, a new chat reloads them.
+- **Manifest:** `getDef(type, hash)` caches to `manifest-cache.json`; bump `CACHE_SCHEMA`
+  whenever the stored field shape changes (this fixed an "all Common" rarity bug caused by
+  a stale cache written before `tierType` was captured).
