@@ -1,17 +1,18 @@
 // render.js — builds the Destiny 2 e-ink screen from your local snapshot.json.
 //
-// Orders   = instanced items in inventory bucket 635141261, objectives from component 301 (ItemObjectives).
-//            Each order shows: rarity glyph + name + "what to do" description + progress.
+// CONTENT MODEL (see docs/HANDOFF.md):
+//   Orders   = instanced bounty-type items in inventory bucket 635141261, objectives from component 301.
+//   Quests   = incomplete pursuits in bucket 1345459588 (multi-step via setData; bounties = single step).
+//   Seals    = title presentation nodes under recordSealsRootNodeHash, with their child records (triumphs).
+//   Triumphs = the tracked record + the in-progress records pulled from every seal (a bounded, real pool).
 //
-// Resolves names via the public manifest (API key only). Writes screen.png and
-// prints a report so running it doubles as the test.
+// PAGES: the panel rotates through pages; each content type has its own layout.
+//   renderPage(model, page, opts) dispatches to the right layout. renderSVG = the Orders page ("Sample 2").
 //
-// Layout: the progress fill sweeps across the big description text; tiny caption
-// (rarity glyph + name + progress) sits above it. No header/footer.
-// Rarity is shown with SVG shapes, NOT emoji — resvg has no emoji font.
+// Rarity / markers are SVG shapes, NOT emoji (resvg has no emoji font).
 //   Exotic = filled star, Legendary = filled diamond, Rare = open diamond, Common = open circle.
 //
-// Run:  node render.js
+// Run:  node render.js   (writes screen.png from snapshot.json and prints a report)
 
 import fs from 'node:fs';
 import { Resvg } from '@resvg/resvg-js';
@@ -28,9 +29,9 @@ const env = (() => { const o = {}; if (fs.existsSync('./.env')) for (const l of 
 const API_KEY = env.BUNGIE_API_KEY;
 
 // ---------- manifest cache ----------
-// Bump CACHE_SCHEMA whenever the shape stored by getDef changes, so old caches
-// (e.g. ones written before tierType was captured) are discarded and re-fetched.
-const CACHE_SCHEMA = 2;
+// Bump CACHE_SCHEMA whenever the shape stored by getDef changes (now captures record
+// children, objectiveHashes and questline setData for the quests/triumphs/seals pages).
+const CACHE_SCHEMA = 3;
 let cache = fs.existsSync(CACHE) ? JSON.parse(fs.readFileSync(CACHE, 'utf8')) : {};
 if (cache.__schema !== CACHE_SCHEMA) cache = { __schema: CACHE_SCHEMA };
 let dirty = false;
@@ -45,11 +46,14 @@ async function getDef(type, hash) {
     const d = j.ErrorCode === 1 ? j.Response : null;
     if (d) out = {
       name: d.displayProperties?.name || '',
-      type: d.itemTypeDisplayName || '',
+      type: d.itemTypeDisplayName || d.displayProperties?.subtitle || '',
       desc: d.progressDescription ?? d.displayProperties?.description ?? '',
-      tier: d.inventory?.tierTypeName ?? '',         // "Exotic" | "Legendary" | "Common" ...
-      tierType: d.inventory?.tierType,               // 6 Exotic, 5 Legendary, 4 Rare, 3 Uncommon, 2 Common, 1 Basic
+      tier: d.inventory?.tierTypeName ?? '',
+      tierType: d.inventory?.tierType,
       children: d.children ? (d.children.presentationNodes || []).map((c) => c.presentationNodeHash) : undefined,
+      recordChildren: d.children ? (d.children.records || []).map((c) => c.recordHash) : undefined,
+      objectiveHashes: d.objectives?.objectiveHashes,
+      setList: d.setData?.itemList ? d.setData.itemList.map((x) => x.itemHash) : undefined,
     };
   } catch {}
   cache[key] = out; dirty = true;
@@ -61,14 +65,7 @@ const esc = (s) => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').
 const trunc = (s, n) => { s = String(s || ''); return s.length > n ? s.slice(0, n - 1) + '\u2026' : s; };
 const clamp01 = (x) => Math.max(0, Math.min(1, x || 0));
 const cleanLabel = (s) => String(s || '').replace(/\[[^\]]*\]/g, '').replace(/\s+/g, ' ').trim();
-
-// 493000 -> "493k", 5000000 -> "5M", 2760000 -> "2.76M", small numbers stay exact
-const fmtNum = (n) => {
-  n = Number(n) || 0;
-  if (n >= 1e6) return (n / 1e6).toFixed(2).replace(/\.?0+$/, '') + 'M';
-  if (n >= 1e4) return Math.round(n / 1e3) + 'k';
-  return String(Math.round(n));
-};
+const fmtNum = (n) => { n = Number(n) || 0; if (n >= 1e6) return (n / 1e6).toFixed(2).replace(/\.?0+$/, '') + 'M'; if (n >= 1e4) return Math.round(n / 1e3) + 'k'; return String(Math.round(n)); };
 
 function progressOf(objs) {
   objs = (objs || []).filter((o) => o && o.visible !== false);
@@ -77,8 +74,6 @@ function progressOf(objs) {
   const total = objs.reduce((s, o) => s + (o.completionValue || 0), 0);
   return { prog, total, frac: total ? prog / total : 0, complete: objs.every((o) => o.complete) };
 }
-
-// rarity -> {name, kind} where kind drives the glyph
 function tierInfo(tierType, tierName) {
   const byNum = { 6: 'Exotic', 5: 'Legendary', 4: 'Rare', 3: 'Uncommon', 2: 'Common', 1: 'Basic' };
   const name = tierName || byNum[tierType] || '';
@@ -98,49 +93,35 @@ function bar(x, y, w, frac, h = 8) {
 }
 function starPath(cx, cy, rOut, rIn, pts = 5) {
   let d = '';
-  for (let i = 0; i < pts * 2; i++) {
-    const r = i % 2 === 0 ? rOut : rIn;
-    const a = -Math.PI / 2 + (i * Math.PI) / pts;
-    d += (i === 0 ? 'M' : 'L') + (cx + r * Math.cos(a)).toFixed(1) + ',' + (cy + r * Math.sin(a)).toFixed(1);
-  }
+  for (let i = 0; i < pts * 2; i++) { const r = i % 2 === 0 ? rOut : rIn; const a = -Math.PI / 2 + (i * Math.PI) / pts; d += (i === 0 ? 'M' : 'L') + (cx + r * Math.cos(a)).toFixed(1) + ',' + (cy + r * Math.sin(a)).toFixed(1); }
   return d + 'Z';
 }
-// rarity glyph centered at (cx, cy); color + scale let it sit on light or dark areas
 function glyph(cx, cy, kind, color = '#000', sc = 1) {
   if (kind === 'exotic') return `<path d="${starPath(cx, cy, 8 * sc, 3.3 * sc)}" fill="${color}"/>`;
   if (kind === 'legendary') return `<path d="M${cx},${cy - 7 * sc} L${cx + 7 * sc},${cy} L${cx},${cy + 7 * sc} L${cx - 7 * sc},${cy} Z" fill="${color}"/>`;
   if (kind === 'rare') return `<path d="M${cx},${cy - 7 * sc} L${cx + 7 * sc},${cy} L${cx},${cy + 7 * sc} L${cx - 7 * sc},${cy} Z" fill="none" stroke="${color}" stroke-width="${1.8 * sc}"/>`;
-  return `<circle cx="${cx}" cy="${cy}" r="${4.5 * sc}" fill="none" stroke="${color}" stroke-width="${1.8 * sc}"/>`; // common = open circle
+  return `<circle cx="${cx}" cy="${cy}" r="${4.5 * sc}" fill="none" stroke="${color}" stroke-width="${1.8 * sc}"/>`;
 }
+function questGlyph(cx, cy, sc = 1, color = '#000') { return `<path d="M${cx - 6 * sc},${cy - 7 * sc} L${cx + 6 * sc},${cy} L${cx - 6 * sc},${cy + 7 * sc} Z" fill="${color}"/>`; }
 
-// greedy word-wrap with char-width estimate; caps lines + adds ellipsis if clipped
 function wrapLines(s, fontSize, maxWidth, maxLines) {
-  s = String(s || '').replace(/\s+/g, ' ').trim();
-  if (!s) return [];
+  s = String(s || '').replace(/\s+/g, ' ').trim(); if (!s) return [];
   const maxChars = Math.max(8, Math.floor(maxWidth / (fontSize * 0.52)));
-  const words = s.split(' ');
-  const lines = [];
-  let cur = '';
-  for (const w of words) {
-    const tryl = cur ? cur + ' ' + w : w;
-    if (tryl.length <= maxChars) { cur = tryl; }
-    else { if (cur) lines.push(cur); cur = w; if (lines.length >= maxLines) break; }
-  }
+  const words = s.split(' '); const lines = []; let cur = '';
+  for (const w of words) { const tryl = cur ? cur + ' ' + w : w; if (tryl.length <= maxChars) { cur = tryl; } else { if (cur) lines.push(cur); cur = w; if (lines.length >= maxLines) break; } }
   if (lines.length < maxLines && cur) lines.push(cur);
   if (lines.length > maxLines) lines.length = maxLines;
   const kept = lines.join(' ');
-  if (kept.length < s.length && lines.length) {
-    let last = lines[lines.length - 1].replace(/[\s.,;:]+$/, '');
-    if (last.length > maxChars - 1) last = last.slice(0, maxChars - 1);
-    lines[lines.length - 1] = last + '\u2026';
-  }
+  if (kept.length < s.length && lines.length) { let last = lines[lines.length - 1].replace(/[\s.,;:]+$/, ''); if (last.length > maxChars - 1) last = last.slice(0, maxChars - 1); lines[lines.length - 1] = last + '\u2026'; }
   return lines;
 }
+const frame = (inner, defs = '') => `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}"><defs>${defs}</defs><rect x="0" y="0" width="${W}" height="${H}" fill="#fff"/>${inner}</svg>`;
+const emptyPage = (msg) => frame(txt(16, 60, 24, msg, { weight: 600 }));
 
 // =====================================================================
-// buildModel: reads snapshot + manifest, returns a plain data model.
-// renderSVG: turns that model into an 800x480 SVG string.
-// Split so server.js can import + reuse both. (See docs/HANDOFF.md.)
+// buildModel: reads snapshot + manifest, returns a plain data model with
+//   orders[], quests[], seals[], triumphs[], summary. Defensive throughout:
+//   a missing field skips one item rather than throwing.
 // =====================================================================
 export async function buildModel(D) {
   const chars = D.characters.data;
@@ -156,95 +137,112 @@ export async function buildModel(D) {
   // ---- ORDERS (bucket 635141261) ----
   const orders = [];
   for (const it of inv.filter((i) => i.bucketHash === ORDERS_BUCKET)) {
-    const idef = await getDef('DestinyInventoryItemDefinition', it.itemHash);
-    const objs = objectivesFor(it);
-    const p = progressOf(objs);
-    let label = '';
-    if (objs[0]) label = cleanLabel((await getDef('DestinyObjectiveDefinition', objs[0].objectiveHash))?.desc);
-    orders.push({
-      name: idef?.name || `Order ${it.itemHash}`,
-      type: idef?.type || '',
-      desc: idef?.desc || '',                       // "what to do" sentence
-      label,                                         // short objective label e.g. "Precision"
-      tier: tierInfo(idef?.tierType, idef?.tier),    // {name, kind}
-      p,
-      tracked: !!((it.state || 0) & 2),
-    });
+    try {
+      const idef = await getDef('DestinyInventoryItemDefinition', it.itemHash);
+      const objs = objectivesFor(it);
+      const p = progressOf(objs);
+      let label = '';
+      if (objs[0]) label = cleanLabel((await getDef('DestinyObjectiveDefinition', objs[0].objectiveHash))?.desc);
+      orders.push({ name: idef?.name || `Order ${it.itemHash}`, type: idef?.type || '', desc: idef?.desc || '', label, tier: tierInfo(idef?.tierType, idef?.tier), p, tracked: !!((it.state || 0) & 2) });
+    } catch {}
   }
-  const sortRows = (a, b) => (b.tracked - a.tracked) || ((b.p?.frac || 0) - (a.p?.frac || 0));
-  orders.sort(sortRows);
+  orders.sort((a, b) => (b.tracked - a.tracked) || ((b.p?.frac || 0) - (a.p?.frac || 0)));
 
-  // ---- QUESTS & BOUNTIES (count only, for the summary line) ----
-  let questCount = 0;
+  // ---- QUESTS & BOUNTIES (bucket 1345459588) ----
+  const quests = [];
   for (const it of inv.filter((i) => i.bucketHash === PURSUITS_BUCKET)) {
-    const objs = objectivesFor(it);
-    const p = progressOf(objs);
-    if (p && p.complete) continue;
-    questCount++;
+    try {
+      const idef = await getDef('DestinyInventoryItemDefinition', it.itemHash);
+      const objs = objectivesFor(it);
+      const p = progressOf(objs);
+      if (p && p.complete) continue; // hide finished pursuits
+      let steps = 0, step = 0;
+      if (idef?.setList?.length) { steps = idef.setList.length; const ix = idef.setList.indexOf(it.itemHash); step = ix >= 0 ? ix + 1 : 0; }
+      let label = '';
+      if (objs[0]) label = cleanLabel((await getDef('DestinyObjectiveDefinition', objs[0].objectiveHash))?.desc);
+      const objective = steps > 1 ? (idef?.desc || label) : (label || idef?.desc);
+      quests.push({ name: idef?.name || `Pursuit ${it.itemHash}`, objective, label, p, step, steps, tracked: !!((it.state || 0) & 2) });
+    } catch {}
   }
+  quests.sort((a, b) => (b.tracked - a.tracked) || ((b.p?.frac || 0) - (a.p?.frac || 0)));
 
-  // ---- Conqueror % + seals-in-progress count (kept for the future config UI) ----
+  // ---- SEALS (titles) + the triumph pool drawn from their records ----
   const pnodes = D.profilePresentationNodes?.data?.nodes || {};
+  const profRec = D.profileRecords?.data?.records || {};
+  const charRec = D.characterRecords?.data?.[wid]?.records || {};
+  const recState = (h) => profRec[h] || charRec[h];
   const sealsRoot = D.profileRecords?.data?.recordSealsRootNodeHash;
-  let conqFrac = null, sealsInProgress = 0;
+  const seals = [], triumphPool = [];
   if (sealsRoot) {
     const rootDef = await getDef('DestinyPresentationNodeDefinition', sealsRoot);
-    for (const ch of rootDef?.children || []) {
-      const nd = pnodes[ch];
-      if (!nd || !nd.completionValue) continue;
-      const frac = clamp01((nd.progressValue || 0) / nd.completionValue);
-      if (frac < 1) sealsInProgress++;
-      const def = await getDef('DestinyPresentationNodeDefinition', ch);
-      if (/conqueror/i.test(def?.name || '')) conqFrac = frac;
+    for (const sealNodeHash of rootDef?.children || []) {
+      try {
+        const sdef = await getDef('DestinyPresentationNodeDefinition', sealNodeHash);
+        if (!sdef) continue;
+        const nd = pnodes[sealNodeHash];
+        const completion = nd && nd.completionValue ? clamp01((nd.progressValue || 0) / nd.completionValue) : null;
+        const recHashes = sdef.recordChildren || [];
+        let done = 0; const remaining = [];
+        for (const rh of recHashes) {
+          const rdef = await getDef('DestinyRecordDefinition', rh);
+          const st = recState(rh);
+          const complete = st ? ((st.state || 0) & 4) === 0 : false;
+          if (complete) { done++; continue; }
+          const rp = progressOf(st?.objectives || st?.intervalObjectives || []);
+          const item = { name: rdef?.name || 'Triumph', desc: rdef?.desc || '', frac: rp ? rp.frac : 0, p: rp, seal: sdef.name };
+          remaining.push(item); triumphPool.push(item);
+        }
+        const totalReq = recHashes.length;
+        const frac = completion != null ? completion : (totalReq ? done / totalReq : 0);
+        remaining.sort((a, b) => (b.frac || 0) - (a.frac || 0));
+        seals.push({ hash: String(sealNodeHash), title: sdef.name || 'Seal', subtitle: sdef.type || '', frac, done, totalReq, gilded: 0, remaining });
+      } catch {}
     }
   }
+  seals.sort((a, b) => (b.frac || 0) - (a.frac || 0));
 
-  // ---- tracked triumph (usually none) ----
+  // ---- TRIUMPHS page pool: tracked record first, then in-progress seal records by frac ----
+  const triumphs = [];
   const trk = D.profileRecords?.data?.trackedRecordHash;
-  let triumph = null;
-  if (trk) { const def = await getDef('DestinyRecordDefinition', trk); triumph = def?.name || 'Tracked'; }
+  if (trk) {
+    try { const def = await getDef('DestinyRecordDefinition', trk); const st = recState(trk); const rp = progressOf(st?.objectives || []); triumphs.push({ name: def?.name || 'Tracked', desc: def?.desc || '', frac: rp ? rp.frac : 0, p: rp, tracked: true }); } catch {}
+  }
+  for (const t of triumphPool.sort((a, b) => (b.frac || 0) - (a.frac || 0))) { if (triumphs.length >= 24) break; triumphs.push(t); }
 
   if (dirty) { fs.writeFileSync(CACHE, JSON.stringify(cache)); dirty = false; }
 
+  const conq = seals.find((s) => /conqueror/i.test(s.title));
   return {
     character: { name: 'Warlock', light },
-    orders,
-    summary: { questCount, conqFrac, sealsInProgress, triumph },
+    orders, quests, seals, triumphs,
+    summary: { questCount: quests.length, conqFrac: conq ? conq.frac : null, sealsInProgress: seals.filter((s) => s.frac < 1).length, triumph: triumphs[0]?.name || null },
     now: new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }),
   };
 }
 
-// Sample-2 layout: each order is a tiny caption (rarity + name + progress) over a
-// big description, with the progress fill sweeping across the description text
-// (text flips white over the filled part). No header/footer.
-// opts: { count 1-5, descSize px, showNumbers bool } — driven by config.json via the settings page.
+// =====================================================================
+// PAGE LAYOUTS
+// =====================================================================
+
+// Orders page — settled "Sample 2". opts: { count, descSize, showNumbers, rarities[] }.
 export function renderSVG(model, opts = {}) {
   const count = Math.max(1, Math.min(5, opts.count || 5));
   const descSize = Math.max(14, Math.min(40, opts.descSize || 25));
   const showNumbers = opts.showNumbers !== false;
-  const orders = (model.orders || []).slice(0, count);
-  const X = 12, BW = 776, STEP = Math.floor(H / count);
-  const capH = 22, lineH = Math.round(descSize * 1.12);
+  let list = model.orders || [];
+  if (opts.rarities && opts.rarities.length) { const set = new Set(opts.rarities); list = list.filter((o) => set.has(o.tier.kind)); }
+  const orders = list.slice(0, count);
+  if (!orders.length) return emptyPage('No active orders right now.');
+  const X = 12, BW = 776, STEP = Math.floor(H / orders.length), capH = 22, lineH = Math.round(descSize * 1.12);
   const pctOf = (p) => (p ? Math.round(p.frac * 100) + '%' : '\u2014');
-
-  let defs = '';
-  let s = `<rect x="0" y="0" width="${W}" height="${H}" fill="#fff"/>`;
-  if (!orders.length) {
-    s += txt(X + 4, 60, 24, 'No active orders right now.', { weight: 600 });
-  }
-  let y = 4;
+  let defs = '', s = '', y = 4;
   orders.forEach((o, i) => {
-    const y0 = y + 2;
-    const frac = clamp01(o.p?.frac || 0);
-    const fillW = Math.round(BW * frac);
-    // caption (above the fill, always black on white)
+    const y0 = y + 2, frac = clamp01(o.p?.frac || 0), fillW = Math.round(BW * frac);
     s += glyph(X + 8, y0 + 11, o.tier.kind, '#000', 0.6);
     s += txt(X + 20, y0 + 15, 13, trunc(o.name, 48), { weight: 700 });
     const capR = o.p ? (showNumbers ? `${fmtNum(o.p.prog)}/${fmtNum(o.p.total)} \u00b7 ${pctOf(o.p)}` : pctOf(o.p)) : '\u2014';
     s += txt(X + BW - 4, y0 + 15, 13, capR, { anchor: 'end', weight: 600 });
-    // description block (the hero) with the progress fill behind it
-    const dTop = y0 + capH, dH = STEP - capH - 8;
-    const maxLines = dH >= lineH * 3 ? 3 : 2;
+    const dTop = y0 + capH, dH = STEP - capH - 8, maxLines = dH >= lineH * 3 ? 3 : 2;
     defs += `<clipPath id="df${i}"><rect x="${X}" y="${dTop}" width="${fillW}" height="${dH}"/></clipPath>`;
     defs += `<clipPath id="de${i}"><rect x="${X + fillW}" y="${dTop}" width="${BW - fillW}" height="${dH}"/></clipPath>`;
     s += `<rect x="${X}" y="${dTop}" width="${fillW}" height="${dH}" fill="#000"/>`;
@@ -253,8 +251,113 @@ export function renderSVG(model, opts = {}) {
     s += `<g clip-path="url(#df${i})">${dtext('#fff')}</g><g clip-path="url(#de${i})">${dtext('#000')}</g>`;
     y += STEP;
   });
+  return frame(s, defs);
+}
 
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}"><defs>${defs}</defs>${s}</svg>`;
+// Quests page — sweep description + step pips (multi-step) or % (bounties).
+export function renderQuestsSVG(model, page = {}, opts = {}) {
+  const count = Math.max(3, Math.min(5, page.count || 4));
+  const showNumbers = opts.showNumbers !== false;
+  const quests = (model.quests || []).slice(0, count);
+  if (!quests.length) return emptyPage('No active quests or bounties.');
+  const X = 12, BW = 776, STEP = Math.floor(H / quests.length), capH = 24;
+  const descSize = quests.length <= 4 ? 27 : 23, lineH = Math.round(descSize * 1.12);
+  let defs = '', s = '', y = 4;
+  quests.forEach((q, i) => {
+    const y0 = y + 2, multi = q.steps > 1;
+    const frac = clamp01(multi ? q.step / q.steps : (q.p?.frac || 0)), fillW = Math.round(BW * frac);
+    s += questGlyph(X + 8, y0 + 11, 0.7);
+    s += txt(X + 22, y0 + 15, 13, trunc(q.name, 46), { weight: 700 });
+    if (multi) {
+      const gap = 13, pr = 4, pipsW = q.steps * gap, px = X + BW - pipsW;
+      for (let k = 0; k < q.steps; k++) { const cx = px + k * gap + pr, cy = y0 + 11; s += k < q.step ? `<circle cx="${cx}" cy="${cy}" r="${pr}" fill="#000"/>` : `<circle cx="${cx}" cy="${cy}" r="${pr}" fill="none" stroke="#000" stroke-width="1.4"/>`; }
+      s += txt(px - 6, y0 + 15, 13, `Step ${q.step}/${q.steps}`, { anchor: 'end', weight: 600 });
+    } else {
+      const cap = q.p ? (showNumbers ? `${fmtNum(q.p.prog)}/${fmtNum(q.p.total)} \u00b7 ${Math.round(frac * 100)}%` : Math.round(frac * 100) + '%') : '\u2014';
+      s += txt(X + BW - 4, y0 + 15, 13, cap, { anchor: 'end', weight: 600 });
+    }
+    const dTop = y0 + capH, dH = STEP - capH - 8, maxLines = dH >= lineH * 3 ? 3 : 2;
+    defs += `<clipPath id="qf${i}"><rect x="${X}" y="${dTop}" width="${fillW}" height="${dH}"/></clipPath>`;
+    defs += `<clipPath id="qe${i}"><rect x="${X + fillW}" y="${dTop}" width="${BW - fillW}" height="${dH}"/></clipPath>`;
+    s += `<rect x="${X}" y="${dTop}" width="${fillW}" height="${dH}" fill="#000"/>`;
+    const dl = wrapLines(q.objective || q.label || '', descSize, BW - 10, maxLines);
+    const dtext = (fill) => dl.map((ln, k) => txt(X + 6, dTop + descSize + 2 + k * lineH, descSize, ln, { weight: 700, fill })).join('');
+    s += `<g clip-path="url(#qf${i})">${dtext('#fff')}</g><g clip-path="url(#qe${i})">${dtext('#000')}</g>`;
+    y += STEP;
+  });
+  return frame(s, defs);
+}
+
+// Triumphs page — compact list with bordered progress bars.
+export function renderTriumphsSVG(model, page = {}, opts = {}) {
+  const count = Math.max(3, Math.min(8, page.count || 6));
+  const showNumbers = opts.showNumbers !== false;
+  const tr = (model.triumphs || []).slice(0, count);
+  if (!tr.length) return emptyPage('No tracked triumphs in progress.');
+  const X = 12, BW = 776, STEP = Math.floor(H / tr.length);
+  let s = '', y = 6;
+  tr.forEach((t) => {
+    const frac = clamp01(t.frac), midY = y + STEP / 2;
+    s += `<rect x="${X}" y="${midY - 4}" width="9" height="9" fill="#000"/>`;
+    s += txt(X + 18, y + Math.round(STEP * 0.42), 24, trunc(t.name, 40), { weight: 700 });
+    if (t.desc) s += txt(X + 18, y + Math.round(STEP * 0.42) + 22, 15, trunc(t.desc, 70), { weight: 400 });
+    const barW = 220, barX = X + BW - barW;
+    s += bar(barX, midY - 6, barW, frac, 12);
+    const cap = t.p && showNumbers ? `${fmtNum(t.p.prog)}/${fmtNum(t.p.total)} \u00b7 ${Math.round(frac * 100)}%` : Math.round(frac * 100) + '%';
+    s += txt(barX + barW, y + Math.round(STEP * 0.42), 15, cap, { anchor: 'end', weight: 600 });
+    y += STEP;
+  });
+  return frame(s);
+}
+
+// Title / Seal page — single hero seal: big % sweep + remaining requirements.
+export function renderTitleSVG(model, page = {}) {
+  const seals = model.seals || [];
+  let seal = page.sealHash ? seals.find((x) => x.hash === String(page.sealHash)) : null;
+  if (!seal) seal = seals.find((x) => x.frac < 1) || seals[0];
+  if (!seal) return emptyPage('No seals in progress.');
+  const X = 16, BW = 768;
+  let s = '', defs = '';
+  s += glyph(X + 16, 46, 'exotic', '#000', 1.6);
+  s += txt(X + 40, 60, 52, trunc(seal.title, 22), { weight: 800 });
+  if (seal.gilded) s += txt(X + BW, 56, 22, `Gilded \u00d7${seal.gilded}`, { anchor: 'end', weight: 700 });
+  if (seal.subtitle) s += txt(X + BW, 88, 18, trunc(seal.subtitle, 48), { anchor: 'end', weight: 400 });
+  const oy = 96, oh = 56, frac = clamp01(seal.frac), fillW = Math.round(BW * frac);
+  s += `<rect x="${X}" y="${oy}" width="${BW}" height="${oh}" fill="none" stroke="#000" stroke-width="2"/>`;
+  s += `<rect x="${X}" y="${oy}" width="${fillW}" height="${oh}" fill="#000"/>`;
+  const pctStr = `${Math.round(frac * 100)}%`;
+  defs += `<clipPath id="ovf"><rect x="${X}" y="${oy}" width="${fillW}" height="${oh}"/></clipPath>`;
+  defs += `<clipPath id="ove"><rect x="${X + fillW}" y="${oy}" width="${BW - fillW}" height="${oh}"/></clipPath>`;
+  s += `<g clip-path="url(#ovf)">${txt(X + 14, oy + 42, 40, pctStr, { weight: 800, fill: '#fff' })}</g>`;
+  s += `<g clip-path="url(#ove)">${txt(X + 14, oy + 42, 40, pctStr, { weight: 800, fill: '#000' })}</g>`;
+  s += txt(X + BW - 8, oy + 40, 20, `${seal.done}/${seal.totalReq} triumphs`, { anchor: 'end', weight: 700, fill: frac > 0.97 ? '#fff' : '#000' });
+  if (seal.remaining && seal.remaining.length) {
+    s += txt(X, 192, 18, 'REMAINING', { weight: 700 });
+    let ry = 206; const rowH = 46;
+    seal.remaining.slice(0, 6).forEach((r) => {
+      const rf = clamp01(r.frac);
+      s += `<circle cx="${X + 6}" cy="${ry + 16}" r="4.5" fill="none" stroke="#000" stroke-width="1.8"/>`;
+      s += txt(X + 20, ry + 22, 26, trunc(r.name, 44), { weight: 600 });
+      const bw = 200, bx = X + BW - bw;
+      s += bar(bx, ry + 10, bw, rf, 12);
+      s += txt(bx + bw, ry + 8, 14, `${Math.round(rf * 100)}%`, { anchor: 'end', weight: 600 });
+      ry += rowH;
+    });
+  } else {
+    s += txt(X, 200, 22, 'Seal complete \u2014 nothing remaining.', { weight: 600 });
+  }
+  return frame(s, defs);
+}
+
+// Dispatch a page config to its layout.
+export function renderPage(model, page = {}, opts = {}) {
+  switch (page.type) {
+    case 'quests': return renderQuestsSVG(model, page, opts);
+    case 'triumphs': return renderTriumphsSVG(model, page, opts);
+    case 'title': return renderTitleSVG(model, page, opts);
+    case 'orders':
+    default: return renderSVG(model, { count: opts.count, descSize: opts.descSize, showNumbers: opts.showNumbers, rarities: page.rarities });
+  }
 }
 
 // ---------- CLI entry ----------
@@ -263,25 +366,17 @@ async function main() {
   if (!fs.existsSync('./snapshot.json')) { console.error('snapshot.json not found — run auth-and-snapshot.js first.'); process.exit(1); }
   const D = JSON.parse(fs.readFileSync('./snapshot.json', 'utf8'));
   const model = await buildModel(D);
-
-  // report = the test
   const pct = (p) => (p ? Math.round(p.frac * 100) + '%' : '\u2014');
   const mark = { exotic: 'EXOTIC', legendary: 'LEGEND', rare: 'RARE', common: 'common' };
   console.log(`\nACTIVE ORDERS (${model.orders.length}):`);
-  for (const o of model.orders) {
-    console.log(`   [${mark[o.tier.kind]}] ${o.name} (${o.type || o.tier.name})`);
-    console.log(`        do: ${o.desc || o.label || '\u2014'}`);
-    console.log(`        progress: ${o.p ? o.p.prog + '/' + o.p.total + ' (' + pct(o.p) + ')' : '\u2014'}`);
-  }
-  const sm = model.summary;
-  console.log(`SUMMARY: ${sm.questCount} quests & bounties; Conqueror ${sm.conqFrac != null ? Math.round(sm.conqFrac * 100) + '%' : 'n/a'}; seals in progress ${sm.sealsInProgress}; tracked triumph: ${sm.triumph || 'none'}`);
-
+  for (const o of model.orders) console.log(`   [${mark[o.tier.kind]}] ${o.name} — ${o.desc || o.label || '\u2014'} (${pct(o.p)})`);
+  console.log(`\nQUESTS/BOUNTIES (${model.quests.length}):`);
+  for (const q of model.quests.slice(0, 8)) console.log(`   ${q.steps > 1 ? `[${q.step}/${q.steps}]` : '[' + pct(q.p) + ']'} ${q.name}`);
+  console.log(`\nSEALS (${model.seals.length}):`);
+  for (const sl of model.seals.slice(0, 8)) console.log(`   ${Math.round(sl.frac * 100)}% ${sl.title} (${sl.done}/${sl.totalReq})`);
+  console.log(`\nTRIUMPH POOL (${model.triumphs.length}); tracked: ${model.summary.triumph || 'none'}`);
   const svg = renderSVG(model);
   fs.writeFileSync('./screen.png', new Resvg(svg, { fitTo: { mode: 'original' }, background: '#ffffff' }).render().asPng());
-  console.log('\nWrote screen.png — open it to see the display.');
+  console.log('\nWrote screen.png — open it to see the Orders page.');
 }
-
-// Run main() only when executed directly (so server.js can import buildModel/renderSVG safely).
-if (process.argv[1] && /render\.js$/.test(process.argv[1].replace(/\\/g, '/'))) {
-  main();
-}
+if (process.argv[1] && /render\.js$/.test(process.argv[1].replace(/\\/g, '/'))) { main(); }
