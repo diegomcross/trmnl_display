@@ -10,6 +10,19 @@ snapshot.json
 manifest-cache.json
 screen.png
 screen.bmp
+screen.svg
+preview-orders-*.png
+live-screen.png
+
+# Logs
+server.log
+watcher.log
+
+# Ad-hoc debug dumps (probe scripts) — not part of the app
+debug-cache.json
+orders-debug.json
+probe-result.json
+resolve.json
 
 # Node
 node_modules/
