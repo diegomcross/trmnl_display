@@ -62,7 +62,7 @@ async function getDef(type, hash) {
 
 // ---------- small helpers ----------
 const esc = (s) => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-const trunc = (s, n) => { s = String(s || ''); return s.length > n ? s.slice(0, n - 1) + '\u2026' : s; };
+const trunc = (s, n) => { s = String(s || ''); return s.length > n ? s.slice(0, n - 1) + '…' : s; };
 const clamp01 = (x) => Math.max(0, Math.min(1, x || 0));
 const cleanLabel = (s) => String(s || '').replace(/\[[^\]]*\]/g, '').replace(/\s+/g, ' ').trim();
 const fmtNum = (n) => { n = Number(n) || 0; if (n >= 1e6) return (n / 1e6).toFixed(2).replace(/\.?0+$/, '') + 'M'; if (n >= 1e4) return Math.round(n / 1e3) + 'k'; return String(Math.round(n)); };
@@ -106,16 +106,109 @@ function questGlyph(cx, cy, sc = 1, color = '#000') { return `<path d="M${cx - 6
 
 function wrapLines(s, fontSize, maxWidth, maxLines) {
   s = String(s || '').replace(/\s+/g, ' ').trim(); if (!s) return [];
-  const maxChars = Math.max(8, Math.floor(maxWidth / (fontSize * 0.52)));
+  // Uppercase glyphs are wider, so widen the per-char estimate by the caps ratio
+  // (prevents ALL-CAPS order text from overflowing the right edge).
+  const letters = s.replace(/[^A-Za-z]/g, '').length;
+  const capRatio = letters ? (s.match(/[A-Z]/g) || []).length / letters : 0;
+  const maxChars = Math.max(6, Math.floor(maxWidth / (fontSize * (0.52 + 0.16 * capRatio))));
   const words = s.split(' '); const lines = []; let cur = '';
   for (const w of words) { const tryl = cur ? cur + ' ' + w : w; if (tryl.length <= maxChars) { cur = tryl; } else { if (cur) lines.push(cur); cur = w; if (lines.length >= maxLines) break; } }
   if (lines.length < maxLines && cur) lines.push(cur);
   if (lines.length > maxLines) lines.length = maxLines;
   const kept = lines.join(' ');
-  if (kept.length < s.length && lines.length) { let last = lines[lines.length - 1].replace(/[\s.,;:]+$/, ''); if (last.length > maxChars - 1) last = last.slice(0, maxChars - 1); lines[lines.length - 1] = last + '\u2026'; }
+  if (kept.length < s.length && lines.length) { let last = lines[lines.length - 1].replace(/[\s.,;:]+$/, ''); if (last.length > maxChars - 1) last = last.slice(0, maxChars - 1); lines[lines.length - 1] = last + '…'; }
   return lines;
 }
 const frame = (inner, defs = '') => `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}"><defs>${defs}</defs><rect x="0" y="0" width="${W}" height="${H}" fill="#fff"/>${inner}</svg>`;
+
+// Largest font (hi..lo) at which every text fits `boxH` at `maxWidth` without truncating.
+function fitFont(texts, boxH, maxWidth, lo, hi) {
+  for (let f = hi; f >= lo; f--) {
+    const maxLines = Math.max(1, Math.floor(boxH / (f * 1.12)));
+    if (texts.every((t) => !wrapLines(t, f, maxWidth, maxLines).join(' ').includes('…'))) return f;
+  }
+  return lo;
+}
+
+// ---------- Order description shortener (keyword CAPS, boilerplate stripped) ----------
+// "Defeat combatants or Guardians with Auto Rifle final blows." -> "AUTO RIFLE kills".
+// Grade/difficulty/modifier Orders collapse to a compact tag: "GRADE A · GM+ · HUNGER".
+const ORDER_OVERRIDES = {
+  "Praxic Professional": 'PRAXIC BLADE kills, no deaths · EXPERT+',
+  "Banshee's Arsenal": 'any WEAPON kills',
+  'Seasonal Arsenal': 'SEASONAL EXOTIC weapon kills',
+};
+const ORDER_KEYWORDS = [
+  'Linear Fusion Rifles', 'Linear Fusion Rifle', 'Auto Rifles', 'Auto Rifle', 'Hand Cannons', 'Hand Cannon',
+  'Pulse Rifles', 'Pulse Rifle', 'Scout Rifles', 'Scout Rifle', 'Sniper Rifles', 'Sniper Rifle',
+  'Fusion Rifles', 'Fusion Rifle', 'Rocket Launchers', 'Rocket Launcher', 'Grenade Launchers', 'Grenade Launcher',
+  'Machine Guns', 'Machine Gun', 'Trace Rifles', 'Trace Rifle', 'Submachine Guns', 'Submachine Gun',
+  'Sidearms', 'Sidearm', 'Shotguns', 'Shotgun', 'Swords', 'Sword', 'Glaives', 'Glaive', 'Bows', 'Bow',
+  'Heavy', 'Special', 'Primary', 'Kinetic', 'Energy', 'Power',
+  'Arc', 'Solar', 'Void', 'Stasis', 'Strand', 'Darkness', 'Light', 'Prismatic',
+  'abilities', 'ability', 'Super', 'grenades', 'grenade', 'melee', 'finisher', 'precision', 'Transcendence', 'Orbs of Power', 'Orbs',
+  'Grandmaster', 'Master', 'Expert', 'Advanced', 'Normal', 'Legend',
+  'Match Game', 'Trade-Off', 'Player Stake', 'Major Negative', 'No HUD', 'Buildcraft Stake', 'Equipment Locked',
+  'Event Modifier', 'Hunger', 'Famine', 'Threat', 'Boon', 'Baned', 'Bane',
+  'Champions', 'Champion', 'Hunters', 'Titans', 'Warlocks', 'miniboss', 'boss', 'powerful',
+  'Crucible Ops', 'Gambit Ops', 'Fireteam Ops', 'Solo Ops', 'Pinnacle Ops', 'Arena Ops',
+  'Crucible', 'Gambit', 'Guardian Games', 'zones', 'Bonus Focus', 'New Gear', 'Gameplay Stake', 'Free for All', 'Cutting Edge',
+].sort((a, b) => b.length - a.length);
+const ORDER_REDUX = [
+  [/^Rapidly defeat combatants or Guardians with /i, 'rapid '],
+  [/^Defeat multiple combatants or Guardians with /i, 'multi '],
+  [/^Defeat combatants or Guardians without dying while using /i, 'no-death '],
+  [/^Defeat combatants or Guardians without dying/i, 'kills, no deaths'],
+  [/^Defeat combatants or Guardians while using /i, 'using '],
+  [/^Defeat combatants or Guardians using /i, ''],
+  [/^Defeat combatants or Guardians with /i, ''],
+  [/^Defeat combatants or Guardians$/i, 'get kills'],
+  [/^Defeat combatants or Guardians/i, ''],
+  [/^Rapidly defeat combatants or Guardians$/i, 'rapid kills'],
+  [/^Deal multiple final blows against combatants or Guardians/i, 'multi kills'],
+  [/^Defeat opposing /i, 'defeat '],
+  [/ precision final blows/i, ' precision kills'],
+  [/ final blows/i, ' kills'], [/ final blow/i, ' kill'], [/ blows/i, ' kills'],
+  // Drop the Light/Darkness wrapper, keep just the subclasses: "Light (Arc, Solar, or Void)" -> "Arc, Solar, or Void".
+  [/\b(?:Light|Darkness)\s*\(([^)]*)\)/gi, '$1'],
+  [/^Complete any activity/i, 'any activity'], [/^Complete an activity/i, 'activity'],
+  [/^Achieve performance grade /i, 'achieve grade '], [/^Achieve grade /i, 'achieve grade '],
+  [/ or better/i, ''],
+  [/ difficulty or higher activities?/i, ' DIFF+'], [/ difficulty or higher/i, ' DIFF+'],
+  [/ difficulty activities?/i, ' DIFF'], [/ difficulty/i, ' DIFF'], [/ activities/i, ''],
+  [/ modifier active/i, ' modifier'], [/ active$/i, ''],
+  [/\bwith a /i, 'with '], [/\bwith the /i, 'with '], [/\bwith an /i, 'with '],
+];
+function orderTag(d) {
+  const parts = [], DIFF = { grandmaster: 'GM', master: 'M', expert: 'E', advanced: 'ADV', normal: 'N', legend: 'LEG' };
+  let m = d.match(/grade (A\+|A|S|B|C|D)/i); if (m) parts.push('GRADE ' + m[1].toUpperCase());
+  m = d.match(/(grandmaster|master|expert|advanced|normal|legend) difficulty( or higher)?/i);
+  if (m) parts.push(DIFF[m[1].toLowerCase()] + (m[2] ? '+' : ''));
+  m = d.match(/(\d+)\s+(Solo|Fireteam|Pinnacle|Crucible|Gambit|Arena) Ops/i);
+  if (m) parts.push(m[1] + ' ' + m[2].toUpperCase() + ' OPS');
+  else { const o = d.match(/\b(Solo|Fireteam|Pinnacle|Crucible|Gambit|Arena) Ops\b/i); if (o) parts.push(o[1].toUpperCase() + ' OPS'); }
+  const seen = new Set(); let mm; const modRe = /with (?:a |an |the )?([A-Za-z][A-Za-z \-]*?) modifier/gi;
+  while ((mm = modRe.exec(d))) { const v = mm[1].trim().toUpperCase(); if (!seen.has(v)) { seen.add(v); parts.push(v); } }
+  const cnt = d.match(/with (\d+|two|three) modifiers/i); if (cnt) parts.push(cnt[1].toUpperCase() + ' MODS');
+  if (/Player Stake/i.test(d) && !seen.has('PLAYER STAKE')) parts.push('PLAYER STAKE');
+  if (/No HUD/i.test(d)) parts.push('NO HUD');
+  if (/Equipment Locked|Buildcraft Stake/i.test(d)) parts.push('EQUIP LOCKED');
+  if (/\bBane\b/i.test(d) && !seen.has('BANE')) parts.push('BANE');
+  if (/\bBoon\b/i.test(d) && !seen.has('BOON')) parts.push('BOON');
+  return parts;
+}
+export function shortenOrder(name, desc) {
+  if (name && ORDER_OVERRIDES[name]) return ORDER_OVERRIDES[name];
+  let t = cleanLabel(desc || '').split('. ')[0].replace(/\.$/, '');
+  if (!t) return '';
+  if (/^(Achieve|Complete)\b/i.test(t)) { const p = orderTag(t); if (p.length >= 2) return p.join(' · '); }
+  for (const [re, rep] of ORDER_REDUX) t = t.replace(re, rep);
+  t = t.replace(/\s+/g, ' ').trim();
+  for (const kw of ORDER_KEYWORDS) t = t.replace(new RegExp('\\b' + kw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b', 'gi'), (x) => x.toUpperCase());
+  t = t.replace(/\bgrade (a\+|a|s|b|c|d)\b/gi, (x, g) => 'GRADE ' + g.toUpperCase());
+  t = t.replace(/^(Complete|Achieve|Defeat|Deal|Gather|Generate|Capture|Earn|Stun|Acquire|Create|Rapidly)\b/, (x) => x.toLowerCase());
+  return t || cleanLabel(desc || '');
+}
 const emptyPage = (msg) => frame(txt(16, 60, 24, msg, { weight: 600 }));
 
 // =====================================================================
@@ -143,10 +236,12 @@ export async function buildModel(D) {
       const p = progressOf(objs);
       let label = '';
       if (objs[0]) label = cleanLabel((await getDef('DestinyObjectiveDefinition', objs[0].objectiveHash))?.desc);
-      orders.push({ name: idef?.name || `Order ${it.itemHash}`, type: idef?.type || '', desc: idef?.desc || '', label, tier: tierInfo(idef?.tierType, idef?.tier), p, tracked: !!((it.state || 0) & 2) });
+      orders.push({ name: idef?.name || `Order ${it.itemHash}`, type: idef?.type || '', desc: idef?.desc || '', short: shortenOrder(idef?.name, idef?.desc), label, tier: tierInfo(idef?.tierType, idef?.tier), p, tracked: !!((it.state || 0) & 2) });
     } catch {}
   }
-  orders.sort((a, b) => (b.tracked - a.tracked) || ((b.p?.frac || 0) - (a.p?.frac || 0)));
+  // Sort: tracked first, then by rarity (exotic > legendary > rare > common), then by % complete.
+  const RARITY_RANK = { exotic: 3, legendary: 2, rare: 1, common: 0 };
+  orders.sort((a, b) => (b.tracked - a.tracked) || ((RARITY_RANK[b.tier.kind] || 0) - (RARITY_RANK[a.tier.kind] || 0)) || ((b.p?.frac || 0) - (a.p?.frac || 0)));
 
   // ---- QUESTS & BOUNTIES (bucket 1345459588) ----
   const quests = [];
@@ -224,29 +319,40 @@ export async function buildModel(D) {
 // PAGE LAYOUTS
 // =====================================================================
 
-// Orders page — settled "Sample 2". opts: { count, descSize, showNumbers, rarities[] }.
+// Orders page. opts: { count, offset, descSize, showNumbers, rarities[] }.
+// offset lets a second page start where the first left off (split orders across 2 rotation slots).
+// nameSize and glyph scale up automatically when fewer items are shown, using the extra room.
 export function renderSVG(model, opts = {}) {
-  const count = Math.max(1, Math.min(5, opts.count || 5));
-  const descSize = Math.max(14, Math.min(40, opts.descSize || 25));
+  const count    = Math.max(1, Math.min(5, opts.count  || 5));
+  const offset   = Math.max(0, opts.offset || 0);
   const showNumbers = opts.showNumbers !== false;
   let list = model.orders || [];
   if (opts.rarities && opts.rarities.length) { const set = new Set(opts.rarities); list = list.filter((o) => set.has(o.tier.kind)); }
-  const orders = list.slice(0, count);
-  if (!orders.length) return emptyPage('No active orders right now.');
-  const X = 12, BW = 776, STEP = Math.floor(H / orders.length), capH = 22, lineH = Math.round(descSize * 1.12);
-  const pctOf = (p) => (p ? Math.round(p.frac * 100) + '%' : '\u2014');
+  const orders = list.slice(offset, offset + count);
+  if (!orders.length) return emptyPage(offset > 0 ? 'No more orders to show.' : 'No active orders right now.');
+  // Scale name/glyph with how many items fit so fewer items use the extra vertical space.
+  const nameSize = count <= 2 ? 18 : count <= 3 ? 15 : 13;
+  const glyphSc  = count <= 2 ? 0.90 : count <= 3 ? 0.75 : 0.60;
+  const X = 12, BW = 776, STEP = Math.floor(H / orders.length);
+  const capH = Math.round(nameSize * 1.7), dH = STEP - capH - 8;
+  // Shortened, keyword-CAPS descriptions, sized as BIG as fits the row (bigger wins).
+  const texts = orders.map((o) => o.short || o.desc || o.label || '');
+  const descSize = fitFont(texts, dH, BW - 12, 16, 46);
+  const lineH = Math.round(descSize * 1.12);
+  const pctOf = (p) => (p ? Math.round(p.frac * 100) + '%' : '—');
   let defs = '', s = '', y = 4;
   orders.forEach((o, i) => {
     const y0 = y + 2, frac = clamp01(o.p?.frac || 0), fillW = Math.round(BW * frac);
-    s += glyph(X + 8, y0 + 11, o.tier.kind, '#000', 0.6);
-    s += txt(X + 20, y0 + 15, 13, trunc(o.name, 48), { weight: 700 });
-    const capR = o.p ? (showNumbers ? `${fmtNum(o.p.prog)}/${fmtNum(o.p.total)} \u00b7 ${pctOf(o.p)}` : pctOf(o.p)) : '\u2014';
-    s += txt(X + BW - 4, y0 + 15, 13, capR, { anchor: 'end', weight: 600 });
-    const dTop = y0 + capH, dH = STEP - capH - 8, maxLines = dH >= lineH * 3 ? 3 : 2;
+    s += glyph(X + Math.round(nameSize * 0.7), y0 + Math.round(nameSize * 0.85), o.tier.kind, '#000', glyphSc);
+    s += txt(X + Math.round(nameSize * 1.5), y0 + nameSize + 2, nameSize, trunc(o.name, 48), { weight: 700 });
+    const capR = o.p ? (showNumbers ? `${fmtNum(o.p.prog)}/${fmtNum(o.p.total)} · ${pctOf(o.p)}` : pctOf(o.p)) : '—';
+    s += txt(X + BW - 4, y0 + nameSize + 2, nameSize, capR, { anchor: 'end', weight: 600 });
+    const dTop = y0 + capH;
+    const maxLines = Math.max(1, Math.floor(dH / lineH));
     defs += `<clipPath id="df${i}"><rect x="${X}" y="${dTop}" width="${fillW}" height="${dH}"/></clipPath>`;
     defs += `<clipPath id="de${i}"><rect x="${X + fillW}" y="${dTop}" width="${BW - fillW}" height="${dH}"/></clipPath>`;
     s += `<rect x="${X}" y="${dTop}" width="${fillW}" height="${dH}" fill="#000"/>`;
-    const dl = wrapLines(o.desc || o.label || '', descSize, BW - 10, maxLines);
+    const dl = wrapLines(texts[i], descSize, BW - 12, maxLines);
     const dtext = (fill) => dl.map((ln, k) => txt(X + 6, dTop + descSize + 2 + k * lineH, descSize, ln, { weight: 700, fill })).join('');
     s += `<g clip-path="url(#df${i})">${dtext('#fff')}</g><g clip-path="url(#de${i})">${dtext('#000')}</g>`;
     y += STEP;
@@ -273,7 +379,7 @@ export function renderQuestsSVG(model, page = {}, opts = {}) {
       for (let k = 0; k < q.steps; k++) { const cx = px + k * gap + pr, cy = y0 + 11; s += k < q.step ? `<circle cx="${cx}" cy="${cy}" r="${pr}" fill="#000"/>` : `<circle cx="${cx}" cy="${cy}" r="${pr}" fill="none" stroke="#000" stroke-width="1.4"/>`; }
       s += txt(px - 6, y0 + 15, 13, `Step ${q.step}/${q.steps}`, { anchor: 'end', weight: 600 });
     } else {
-      const cap = q.p ? (showNumbers ? `${fmtNum(q.p.prog)}/${fmtNum(q.p.total)} \u00b7 ${Math.round(frac * 100)}%` : Math.round(frac * 100) + '%') : '\u2014';
+      const cap = q.p ? (showNumbers ? `${fmtNum(q.p.prog)}/${fmtNum(q.p.total)} · ${Math.round(frac * 100)}%` : Math.round(frac * 100) + '%') : '—';
       s += txt(X + BW - 4, y0 + 15, 13, cap, { anchor: 'end', weight: 600 });
     }
     const dTop = y0 + capH, dH = STEP - capH - 8, maxLines = dH >= lineH * 3 ? 3 : 2;
@@ -303,7 +409,7 @@ export function renderTriumphsSVG(model, page = {}, opts = {}) {
     if (t.desc) s += txt(X + 18, y + Math.round(STEP * 0.42) + 22, 15, trunc(t.desc, 70), { weight: 400 });
     const barW = 220, barX = X + BW - barW;
     s += bar(barX, midY - 6, barW, frac, 12);
-    const cap = t.p && showNumbers ? `${fmtNum(t.p.prog)}/${fmtNum(t.p.total)} \u00b7 ${Math.round(frac * 100)}%` : Math.round(frac * 100) + '%';
+    const cap = t.p && showNumbers ? `${fmtNum(t.p.prog)}/${fmtNum(t.p.total)} · ${Math.round(frac * 100)}%` : Math.round(frac * 100) + '%';
     s += txt(barX + barW, y + Math.round(STEP * 0.42), 15, cap, { anchor: 'end', weight: 600 });
     y += STEP;
   });
@@ -320,7 +426,7 @@ export function renderTitleSVG(model, page = {}) {
   let s = '', defs = '';
   s += glyph(X + 16, 46, 'exotic', '#000', 1.6);
   s += txt(X + 40, 60, 52, trunc(seal.title, 22), { weight: 800 });
-  if (seal.gilded) s += txt(X + BW, 56, 22, `Gilded \u00d7${seal.gilded}`, { anchor: 'end', weight: 700 });
+  if (seal.gilded) s += txt(X + BW, 56, 22, `Gilded ×${seal.gilded}`, { anchor: 'end', weight: 700 });
   if (seal.subtitle) s += txt(X + BW, 88, 18, trunc(seal.subtitle, 48), { anchor: 'end', weight: 400 });
   const oy = 96, oh = 56, frac = clamp01(seal.frac), fillW = Math.round(BW * frac);
   s += `<rect x="${X}" y="${oy}" width="${BW}" height="${oh}" fill="none" stroke="#000" stroke-width="2"/>`;
@@ -344,7 +450,7 @@ export function renderTitleSVG(model, page = {}) {
       ry += rowH;
     });
   } else {
-    s += txt(X, 200, 22, 'Seal complete \u2014 nothing remaining.', { weight: 600 });
+    s += txt(X, 200, 22, 'Seal complete — nothing remaining.', { weight: 600 });
   }
   return frame(s, defs);
 }
@@ -352,11 +458,11 @@ export function renderTitleSVG(model, page = {}) {
 // Dispatch a page config to its layout.
 export function renderPage(model, page = {}, opts = {}) {
   switch (page.type) {
-    case 'quests': return renderQuestsSVG(model, page, opts);
+    case 'quests':   return renderQuestsSVG(model, page, opts);
     case 'triumphs': return renderTriumphsSVG(model, page, opts);
-    case 'title': return renderTitleSVG(model, page, opts);
+    case 'title':    return renderTitleSVG(model, page, opts);
     case 'orders':
-    default: return renderSVG(model, { count: opts.count, descSize: opts.descSize, showNumbers: opts.showNumbers, rarities: page.rarities });
+    default: return renderSVG(model, { count: opts.count, offset: opts.offset, descSize: opts.descSize, showNumbers: opts.showNumbers, rarities: page.rarities });
   }
 }
 
@@ -366,10 +472,10 @@ async function main() {
   if (!fs.existsSync('./snapshot.json')) { console.error('snapshot.json not found — run auth-and-snapshot.js first.'); process.exit(1); }
   const D = JSON.parse(fs.readFileSync('./snapshot.json', 'utf8'));
   const model = await buildModel(D);
-  const pct = (p) => (p ? Math.round(p.frac * 100) + '%' : '\u2014');
+  const pct = (p) => (p ? Math.round(p.frac * 100) + '%' : '—');
   const mark = { exotic: 'EXOTIC', legendary: 'LEGEND', rare: 'RARE', common: 'common' };
   console.log(`\nACTIVE ORDERS (${model.orders.length}):`);
-  for (const o of model.orders) console.log(`   [${mark[o.tier.kind]}] ${o.name} — ${o.desc || o.label || '\u2014'} (${pct(o.p)})`);
+  for (const o of model.orders) console.log(`   [${mark[o.tier.kind]}] ${o.name} — ${o.short || o.desc || o.label || '—'} (${pct(o.p)})`);
   console.log(`\nQUESTS/BOUNTIES (${model.quests.length}):`);
   for (const q of model.quests.slice(0, 8)) console.log(`   ${q.steps > 1 ? `[${q.step}/${q.steps}]` : '[' + pct(q.p) + ']'} ${q.name}`);
   console.log(`\nSEALS (${model.seals.length}):`);

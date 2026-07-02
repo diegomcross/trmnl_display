@@ -1,0 +1,1181 @@
+[
+  {
+    "hash": 3211104043,
+    "name": "3v3s",
+    "type": "Crucible Order",
+    "tier": "Common",
+    "bucket": 635141261,
+    "desc": "Complete 3v3 matches in the Crucible.",
+    "short": "complete 3v3 matches in the CRUCIBLE"
+  },
+  {
+    "hash": 582968310,
+    "name": "Benefits to Reap",
+    "type": "Crucible Order",
+    "tier": "Exotic",
+    "bucket": 635141261,
+    "desc": "Defeat opposing Guardians in Crucible Ops or Gambit Ops.",
+    "short": "defeat Guardians in CRUCIBLE OPS or GAMBIT OPS"
+  },
+  {
+    "hash": 3211104042,
+    "name": "Competitive Ops Matches",
+    "type": "Crucible Order",
+    "tier": "Common",
+    "bucket": 635141261,
+    "desc": "Complete matches in Crucible Ops or Gambit Ops.",
+    "short": "complete matches in CRUCIBLE OPS or GAMBIT OPS"
+  },
+  {
+    "hash": 3227881623,
+    "name": "Core Crucible",
+    "type": "Crucible Order",
+    "tier": "Common",
+    "bucket": 635141261,
+    "desc": "Complete 6v6 matches in the Crucible.",
+    "short": "complete 6v6 matches in the CRUCIBLE"
+  },
+  {
+    "hash": 1506403330,
+    "name": "Crucible and Gambit Crusher",
+    "type": "Crucible Order",
+    "tier": "Legendary",
+    "bucket": 635141261,
+    "desc": "Achieve grade A+ or higher within Crucible Ops or Gambit Ops activities.",
+    "short": "GRADE A+ · CRUCIBLE OPS"
+  },
+  {
+    "hash": 1506403331,
+    "name": "Faithful Opposition",
+    "type": "Crucible Order",
+    "tier": "Legendary",
+    "bucket": 635141261,
+    "desc": "Defeat opposing Guardians in Crucible Ops or Gambit Ops.",
+    "short": "defeat Guardians in CRUCIBLE OPS or GAMBIT OPS"
+  },
+  {
+    "hash": 3227881621,
+    "name": "Free For All",
+    "type": "Crucible Order",
+    "tier": "Common",
+    "bucket": 635141261,
+    "desc": "Complete Free for All matches in the Crucible.",
+    "short": "complete FREE FOR ALL matches in the CRUCIBLE"
+  },
+  {
+    "hash": 3211104039,
+    "name": "Hunters",
+    "type": "Crucible Order",
+    "tier": "Common",
+    "bucket": 635141261,
+    "desc": "Defeat opposing Hunters.",
+    "short": "defeat HUNTERS"
+  },
+  {
+    "hash": 582968313,
+    "name": "Reaper Supreme",
+    "type": "Crucible Order",
+    "tier": "Exotic",
+    "bucket": 635141261,
+    "desc": "Defeat the most Guardians or earn the highest efficiency in Crucible matches.",
+    "short": "defeat the most Guardians or earn the highest efficiency in CRUCIBLE matches"
+  },
+  {
+    "hash": 3227881620,
+    "name": "Rotators",
+    "type": "Crucible Order",
+    "tier": "Common",
+    "bucket": 635141261,
+    "desc": "Complete Cutting Edge matches in the Crucible.",
+    "short": "complete CUTTING EDGE matches in the CRUCIBLE"
+  },
+  {
+    "hash": 582968311,
+    "name": "Shaxx's Champion",
+    "type": "Crucible Order",
+    "tier": "Exotic",
+    "bucket": 635141261,
+    "desc": "Achieve first place on your team in the Crucible.",
+    "short": "achieve first place on your team in the CRUCIBLE"
+  },
+  {
+    "hash": 1422515306,
+    "name": "Shaxx's Favorite",
+    "type": "Crucible Order",
+    "tier": "Legendary",
+    "bucket": 635141261,
+    "desc": "Earn Bonus Score medals in Crucible Ops activities.",
+    "short": "earn Bonus Score medals in CRUCIBLE OPS"
+  },
+  {
+    "hash": 3211104036,
+    "name": "Titans",
+    "type": "Crucible Order",
+    "tier": "Common",
+    "bucket": 635141261,
+    "desc": "Defeat opposing Titans.",
+    "short": "defeat TITANS"
+  },
+  {
+    "hash": 3211104037,
+    "name": "Warlocks",
+    "type": "Crucible Order",
+    "tier": "Common",
+    "bucket": 635141261,
+    "desc": "Defeat opposing Warlocks.",
+    "short": "defeat WARLOCKS"
+  },
+  {
+    "hash": 3160771180,
+    "name": "Zone of Influence",
+    "type": "Crucible Order",
+    "tier": "Common",
+    "bucket": 635141261,
+    "desc": "Capture zones in Crucible Ops.",
+    "short": "capture ZONES in CRUCIBLE OPS"
+  },
+  {
+    "hash": 1405737718,
+    "name": "Arc Scourge",
+    "type": "Duality Order",
+    "tier": "Legendary",
+    "bucket": 635141261,
+    "desc": "Defeat combatants or Guardians with Arc ability final blows. Combatants affected by Arc debuffs grant greater progress.",
+    "short": "ARC ABILITY kills"
+  },
+  {
+    "hash": 3160771183,
+    "name": "Be Super",
+    "type": "Duality Order",
+    "tier": "Common",
+    "bucket": 635141261,
+    "desc": "Defeat targets with your Super.",
+    "short": "defeat targets with your SUPER"
+  },
+  {
+    "hash": 3177548760,
+    "name": "Dark Abilities",
+    "type": "Duality Order",
+    "tier": "Common",
+    "bucket": 635141261,
+    "desc": "Defeat combatants or Guardians with Darkness ([Stasis]Stasis or [Strand]Strand) ability damage.",
+    "short": "STASIS or STRAND ABILITY damage"
+  },
+  {
+    "hash": 3160771182,
+    "name": "Finishing Moment",
+    "type": "Duality Order",
+    "tier": "Common",
+    "bucket": 635141261,
+    "desc": "Defeat combatants while using your finisher.",
+    "short": "defeat combatants while using your FINISHER"
+  },
+  {
+    "hash": 3127215879,
+    "name": "Forces of Darkness",
+    "type": "Duality Order",
+    "tier": "Common",
+    "bucket": 635141261,
+    "desc": "Defeat combatants or Guardians with Darkness ([Stasis]Stasis or [Strand]Strand) damage.",
+    "short": "STASIS or STRAND damage"
+  },
+  {
+    "hash": 3127215878,
+    "name": "Forces of Light",
+    "type": "Duality Order",
+    "tier": "Common",
+    "bucket": 635141261,
+    "desc": "Defeat combatants or Guardians with Light ([Arc]Arc, [Solar]Solar, or [Void]Void) damage.",
+    "short": "ARC, SOLAR, or VOID damage"
+  },
+  {
+    "hash": 3143993591,
+    "name": "Inner Strength",
+    "type": "Duality Order",
+    "tier": "Common",
+    "bucket": 635141261,
+    "desc": "Defeat combatants or Guardians with abilities.",
+    "short": "ABILITIES"
+  },
+  {
+    "hash": 3177548767,
+    "name": "Light Abilities",
+    "type": "Duality Order",
+    "tier": "Common",
+    "bucket": 635141261,
+    "desc": "Defeat combatants or Guardians with Light ([Arc]Arc, [Solar]Solar, or [Void]Void) ability damage.",
+    "short": "ARC, SOLAR, or VOID ABILITY damage"
+  },
+  {
+    "hash": 1405737714,
+    "name": "Solar Scourge",
+    "type": "Duality Order",
+    "tier": "Legendary",
+    "bucket": 635141261,
+    "desc": "Defeat combatants or Guardians with Solar ability final blows. Combatants affected by Solar debuffs grant greater progress.",
+    "short": "SOLAR ABILITY kills"
+  },
+  {
+    "hash": 1405737716,
+    "name": "Stasis Scourge",
+    "type": "Duality Order",
+    "tier": "Legendary",
+    "bucket": 635141261,
+    "desc": "Defeat combatants or Guardians with Stasis ability final blows. Combatants affected by Stasis debuffs grant greater progress.",
+    "short": "STASIS ABILITY kills"
+  },
+  {
+    "hash": 1405737715,
+    "name": "Strand Scourge",
+    "type": "Duality Order",
+    "tier": "Legendary",
+    "bucket": 635141261,
+    "desc": "Defeat combatants or Guardians with Strand ability final blows. Combatants affected by Strand debuffs grant greater progress.",
+    "short": "STRAND ABILITY kills"
+  },
+  {
+    "hash": 1405737721,
+    "name": "Transcendent Grenadier",
+    "type": "Duality Order",
+    "tier": "Legendary",
+    "bucket": 635141261,
+    "desc": "Defeat targets with Prismatic Grenades while in Transcendence.",
+    "short": "defeat targets with PRISMATIC GRENADES while in TRANSCENDENCE"
+  },
+  {
+    "hash": 2739557089,
+    "name": "Traveler's Tutelage",
+    "type": "Duality Order",
+    "tier": "Exotic",
+    "bucket": 635141261,
+    "desc": "Defeat combatants or Guardians with Arc, Solar, and Void damage. Ability final blows grant significantly greater progress.",
+    "short": "ARC, SOLAR, and VOID damage"
+  },
+  {
+    "hash": 1405737717,
+    "name": "Void Scourge",
+    "type": "Duality Order",
+    "tier": "Legendary",
+    "bucket": 635141261,
+    "desc": "Defeat combatants or Guardians with Void ability final blows. Combatants affected by Void debuffs grant greater progress.",
+    "short": "VOID ABILITY kills"
+  },
+  {
+    "hash": 1444175499,
+    "name": "Good Game",
+    "type": "Event Order",
+    "tier": "Rare",
+    "bucket": 635141261,
+    "desc": "Complete any activity. Bonus progress for completing Guardian Games activities.",
+    "short": "any activity"
+  },
+  {
+    "hash": 3143993589,
+    "name": "3 of a Kind",
+    "type": "Foundry Order",
+    "tier": "Common",
+    "bucket": 635141261,
+    "desc": "Deal multiple final blows against combatants or Guardians.",
+    "short": "multi kills"
+  },
+  {
+    "hash": 3160771177,
+    "name": "Ammo Crate",
+    "type": "Foundry Order",
+    "tier": "Common",
+    "bucket": 635141261,
+    "desc": "Generate ammunition or loot ammo crates in Crucible Ops.",
+    "short": "generate ammunition or loot ammo crates in CRUCIBLE OPS"
+  },
+  {
+    "hash": 3211104038,
+    "name": "Arc",
+    "type": "Foundry Order",
+    "tier": "Common",
+    "bucket": 635141261,
+    "desc": "Defeat combatants or Guardians with [Arc]Arc damage final blows.",
+    "short": "ARC damage kills"
+  },
+  {
+    "hash": 3143993598,
+    "name": "Baned Baddies",
+    "type": "Foundry Order",
+    "tier": "Common",
+    "bucket": 635141261,
+    "desc": "Defeat Baned combatants.",
+    "short": "defeat BANED combatants"
+  },
+  {
+    "hash": 3143993585,
+    "name": "Dethrone",
+    "type": "Foundry Order",
+    "tier": "Common",
+    "bucket": 635141261,
+    "desc": "Defeat Champions or Guardians using their Super.",
+    "short": "defeat CHAMPIONS or Guardians using their SUPER"
+  },
+  {
+    "hash": 3143993584,
+    "name": "Down a Peg",
+    "type": "Foundry Order",
+    "tier": "Common",
+    "bucket": 635141261,
+    "desc": "Defeat miniboss or boss combatants.",
+    "short": "defeat MINIBOSS or BOSS combatants"
+  },
+  {
+    "hash": 3160771169,
+    "name": "Grim Reaper",
+    "type": "Foundry Order",
+    "tier": "Common",
+    "bucket": 635141261,
+    "desc": "Defeat combatants or Guardians without dying.",
+    "short": "kills, no deaths"
+  },
+  {
+    "hash": 3160771176,
+    "name": "Overflowing Power",
+    "type": "Foundry Order",
+    "tier": "Common",
+    "bucket": 635141261,
+    "desc": "Generate or gather Orbs of Power.",
+    "short": "generate or gather ORBS OF POWER"
+  },
+  {
+    "hash": 3160771181,
+    "name": "Piece of Candy",
+    "type": "Foundry Order",
+    "tier": "Common",
+    "bucket": 635141261,
+    "desc": "Gather Elemental pickups.",
+    "short": "gather Elemental pickups"
+  },
+  {
+    "hash": 3143993588,
+    "name": "Pinnacle Power",
+    "type": "Foundry Order",
+    "tier": "Common",
+    "bucket": 635141261,
+    "desc": "Defeat combatants or Guardians while using your Super.",
+    "short": "using your SUPER"
+  },
+  {
+    "hash": 3143993587,
+    "name": "Powerful Players",
+    "type": "Foundry Order",
+    "tier": "Common",
+    "bucket": 635141261,
+    "desc": "Defeat powerful combatants or Guardians.",
+    "short": "defeat POWERFUL combatants or Guardians"
+  },
+  {
+    "hash": 3143993586,
+    "name": "Rapid Response",
+    "type": "Foundry Order",
+    "tier": "Common",
+    "bucket": 635141261,
+    "desc": "Rapidly defeat combatants or Guardians.",
+    "short": "rapid kills"
+  },
+  {
+    "hash": 3177548764,
+    "name": "Shiny New Thing",
+    "type": "Foundry Order",
+    "tier": "Common",
+    "bucket": 635141261,
+    "desc": "Complete an activity with at least 3 pieces of New Gear.",
+    "short": "activity with at least 3 pieces of NEW GEAR"
+  },
+  {
+    "hash": 3211104034,
+    "name": "Solar",
+    "type": "Foundry Order",
+    "tier": "Common",
+    "bucket": 635141261,
+    "desc": "Defeat combatants or Guardians with [Solar]Solar damage final blows.",
+    "short": "SOLAR damage kills"
+  },
+  {
+    "hash": 3160771179,
+    "name": "Standard Orders",
+    "type": "Foundry Order",
+    "tier": "Common",
+    "bucket": 635141261,
+    "desc": "Defeat combatants or Guardians.",
+    "short": "get kills"
+  },
+  {
+    "hash": 3211104032,
+    "name": "Stasis",
+    "type": "Foundry Order",
+    "tier": "Common",
+    "bucket": 635141261,
+    "desc": "Defeat combatants or Guardians with [Stasis]Stasis damage final blows.",
+    "short": "STASIS damage kills"
+  },
+  {
+    "hash": 3211104035,
+    "name": "Strand",
+    "type": "Foundry Order",
+    "tier": "Common",
+    "bucket": 635141261,
+    "desc": "Defeat combatants or Guardians with [Strand]Strand damage final blows.",
+    "short": "STRAND damage kills"
+  },
+  {
+    "hash": 3143993599,
+    "name": "Stunning",
+    "type": "Foundry Order",
+    "tier": "Common",
+    "bucket": 635141261,
+    "desc": "Stun champions.",
+    "short": "stun CHAMPIONS"
+  },
+  {
+    "hash": 3211104033,
+    "name": "Void",
+    "type": "Foundry Order",
+    "tier": "Common",
+    "bucket": 635141261,
+    "desc": "Defeat combatants or Guardians with [Void]Void damage final blows.",
+    "short": "VOID damage kills"
+  },
+  {
+    "hash": 3160771178,
+    "name": "Weak Spot",
+    "type": "Foundry Order",
+    "tier": "Common",
+    "bucket": 635141261,
+    "desc": "Defeat combatants or Guardians with precision damage.",
+    "short": "PRECISION damage"
+  },
+  {
+    "hash": 3227881622,
+    "name": "Auto Rifles",
+    "type": "Gunsmith Order",
+    "tier": "Common",
+    "bucket": 635141261,
+    "desc": "Defeat combatants or Guardians with Auto Rifle final blows.",
+    "short": "AUTO RIFLE kills"
+  },
+  {
+    "hash": 3143993590,
+    "name": "Banshee's Arsenal",
+    "type": "Gunsmith Order",
+    "tier": "Common",
+    "bucket": 635141261,
+    "desc": "Defeat combatants or Guardians with weapons.",
+    "short": "any WEAPON kills"
+  },
+  {
+    "hash": 3194326343,
+    "name": "Bows",
+    "type": "Gunsmith Order",
+    "tier": "Common",
+    "bucket": 635141261,
+    "desc": "Defeat combatants or Guardians with Bow final blows.",
+    "short": "BOW kills"
+  },
+  {
+    "hash": 3160771168,
+    "name": "Close Comfort",
+    "type": "Gunsmith Order",
+    "tier": "Common",
+    "bucket": 635141261,
+    "desc": "Defeat combatants or Guardians with Shotguns, Hand Cannons, Fusion Rifles, or melee damage.",
+    "short": "SHOTGUNS, HAND CANNONS, FUSION RIFLES, or MELEE damage"
+  },
+  {
+    "hash": 1456070478,
+    "name": "Combination Cuts",
+    "type": "Gunsmith Order",
+    "tier": "Legendary",
+    "bucket": 635141261,
+    "desc": "Rapidly defeat combatants or Guardians with Sword final blows.",
+    "short": "rapid SWORD kills"
+  },
+  {
+    "hash": 1456070475,
+    "name": "Concurrent Collisions",
+    "type": "Gunsmith Order",
+    "tier": "Legendary",
+    "bucket": 635141261,
+    "desc": "Defeat multiple combatants or Guardians with Grenade Launcher final blows.",
+    "short": "multi GRENADE LAUNCHER kills"
+  },
+  {
+    "hash": 3177548766,
+    "name": "Dark Weapons",
+    "type": "Gunsmith Order",
+    "tier": "Common",
+    "bucket": 635141261,
+    "desc": "Defeat combatants or Guardians with Darkness ([Stasis]Stasis or [Strand]Strand) weapon damage.",
+    "short": "STASIS or STRAND weapon damage"
+  },
+  {
+    "hash": 3127215883,
+    "name": "Explosive Ordinance",
+    "type": "Gunsmith Order",
+    "tier": "Common",
+    "bucket": 635141261,
+    "desc": "Defeat combatants or Guardians with grenades, Grenade Launchers, or Rocket Launchers.",
+    "short": "GRENADES, GRENADE LAUNCHERS, or ROCKET LAUNCHERS"
+  },
+  {
+    "hash": 3127215876,
+    "name": "Full Auto",
+    "type": "Gunsmith Order",
+    "tier": "Common",
+    "bucket": 635141261,
+    "desc": "Defeat combatants or Guardians with Auto Rifles, Submachine Guns, Trace Rifles, or Machine Guns.",
+    "short": "AUTO RIFLES, SUBMACHINE GUNS, TRACE RIFLES, or MACHINE GUNS"
+  },
+  {
+    "hash": 1716679242,
+    "name": "Fusion Reaction",
+    "type": "Gunsmith Order",
+    "tier": "Legendary",
+    "bucket": 635141261,
+    "desc": "Defeat multiple combatants or Guardians with Fusion Rifle final blows.",
+    "short": "multi FUSION RIFLE kills"
+  },
+  {
+    "hash": 3177548762,
+    "name": "Fusion Rifles",
+    "type": "Gunsmith Order",
+    "tier": "Common",
+    "bucket": 635141261,
+    "desc": "Defeat combatants or Guardians with Fusion Rifle final blows.",
+    "short": "FUSION RIFLE kills"
+  },
+  {
+    "hash": 1456070465,
+    "name": "Glaive Rush",
+    "type": "Gunsmith Order",
+    "tier": "Legendary",
+    "bucket": 635141261,
+    "desc": "Rapidly defeat combatants or Guardians with Glaive final blows.",
+    "short": "rapid GLAIVE kills"
+  },
+  {
+    "hash": 3194326345,
+    "name": "Glaives",
+    "type": "Gunsmith Order",
+    "tier": "Common",
+    "bucket": 635141261,
+    "desc": "Defeat combatants or Guardians with Glaive final blows.",
+    "short": "GLAIVE kills"
+  },
+  {
+    "hash": 3194326351,
+    "name": "Grenade Launchers",
+    "type": "Gunsmith Order",
+    "tier": "Common",
+    "bucket": 635141261,
+    "desc": "Defeat combatants or Guardians with Grenade Launcher final blows.",
+    "short": "GRENADE LAUNCHER kills"
+  },
+  {
+    "hash": 1456070477,
+    "name": "Group Rate",
+    "type": "Gunsmith Order",
+    "tier": "Legendary",
+    "bucket": 635141261,
+    "desc": "Defeat multiple combatants or Guardians with Rocket Launcher final blows.",
+    "short": "multi ROCKET LAUNCHER kills"
+  },
+  {
+    "hash": 3177548761,
+    "name": "Hand Cannons",
+    "type": "Gunsmith Order",
+    "tier": "Common",
+    "bucket": 635141261,
+    "desc": "Defeat combatants or Guardians with Hand Cannon final blows.",
+    "short": "HAND CANNON kills"
+  },
+  {
+    "hash": 1716679237,
+    "name": "Hand-Eye Coordination",
+    "type": "Gunsmith Order",
+    "tier": "Legendary",
+    "bucket": 635141261,
+    "desc": "Defeat combatants or Guardians with Hand Cannon precision final blows.",
+    "short": "HAND CANNON PRECISION kills"
+  },
+  {
+    "hash": 3127215873,
+    "name": "Heavy Lift",
+    "type": "Gunsmith Order",
+    "tier": "Common",
+    "bucket": 635141261,
+    "desc": "Defeat combatants or Guardians with weapons that use Heavy ammo.",
+    "short": "weapons that use HEAVY ammo"
+  },
+  {
+    "hash": 3127215872,
+    "name": "Kinetic Energy",
+    "type": "Gunsmith Order",
+    "tier": "Common",
+    "bucket": 635141261,
+    "desc": "Defeat combatants or Guardians with Kinetic damage.",
+    "short": "KINETIC damage"
+  },
+  {
+    "hash": 3177548765,
+    "name": "Light Weapons",
+    "type": "Gunsmith Order",
+    "tier": "Common",
+    "bucket": 635141261,
+    "desc": "Defeat combatants or Guardians with Light ([Arc]Arc, [Solar]Solar, or [Void]Void) weapon damage.",
+    "short": "ARC, SOLAR, or VOID weapon damage"
+  },
+  {
+    "hash": 1456070464,
+    "name": "Line Them Up",
+    "type": "Gunsmith Order",
+    "tier": "Legendary",
+    "bucket": 635141261,
+    "desc": "Defeat combatants or Guardians with Linear Fusion Rifle precision final blows.",
+    "short": "LINEAR FUSION RIFLE PRECISION kills"
+  },
+  {
+    "hash": 3194326344,
+    "name": "Linear Fusion Rifles",
+    "type": "Gunsmith Order",
+    "tier": "Common",
+    "bucket": 635141261,
+    "desc": "Defeat combatants or Guardians with Linear Fusion Rifle final blows.",
+    "short": "LINEAR FUSION RIFLE kills"
+  },
+  {
+    "hash": 3194326350,
+    "name": "Machine Guns",
+    "type": "Gunsmith Order",
+    "tier": "Common",
+    "bucket": 635141261,
+    "desc": "Defeat combatants or Guardians with Machine Gun final blows.",
+    "short": "MACHINE GUN kills"
+  },
+  {
+    "hash": 582968309,
+    "name": "Melee Master",
+    "type": "Gunsmith Order",
+    "tier": "Exotic",
+    "bucket": 635141261,
+    "desc": "Defeat combatants or Guardians without dying while using Swords, Glaives, or melee attacks.",
+    "short": "no-death SWORDS, GLAIVES, or MELEE attacks"
+  },
+  {
+    "hash": 1456070476,
+    "name": "Millimetric Scout",
+    "type": "Gunsmith Order",
+    "tier": "Legendary",
+    "bucket": 635141261,
+    "desc": "Defeat combatants or Guardians with Scout Rifle precision final blows.",
+    "short": "SCOUT RIFLE PRECISION kills"
+  },
+  {
+    "hash": 582968312,
+    "name": "Omnidextrous",
+    "type": "Gunsmith Order",
+    "tier": "Exotic",
+    "bucket": 635141261,
+    "desc": "Defeat combatants or Guardians with Kinetic, Energy, and Power slot weapon final blows.",
+    "short": "KINETIC, ENERGY, and POWER slot weapon kills"
+  },
+  {
+    "hash": 3127215882,
+    "name": "On Target",
+    "type": "Gunsmith Order",
+    "tier": "Common",
+    "bucket": 635141261,
+    "desc": "Defeat combatants or Guardians with Scout Rifles, Sniper Rifles, Linear Fusion Rifles, or precision damage.",
+    "short": "SCOUT RIFLES, SNIPER RIFLES, LINEAR FUSION RIFLES, or PRECISION damage"
+  },
+  {
+    "hash": 582968308,
+    "name": "Praxic Professional",
+    "type": "Gunsmith Order",
+    "tier": "Exotic",
+    "bucket": 635141261,
+    "desc": "While using the Praxic Blade Exotic Sword, defeat combatants in Solo, Fireteam, Arena, or Pinnacle Ops activities on Expert difficulty or higher without dying. While this Order is active, your Praxic Blade regenerates ammo in Solo, Fireteam, Arena, or Pinnacle Ops activities.",
+    "short": "PRAXIC BLADE kills, no deaths · EXPERT+"
+  },
+  {
+    "hash": 3127215875,
+    "name": "Primary Option",
+    "type": "Gunsmith Order",
+    "tier": "Common",
+    "bucket": 635141261,
+    "desc": "Defeat combatants or Guardians with weapons that use Primary ammo.",
+    "short": "weapons that use PRIMARY ammo"
+  },
+  {
+    "hash": 1405737720,
+    "name": "Pulse Precision",
+    "type": "Gunsmith Order",
+    "tier": "Legendary",
+    "bucket": 635141261,
+    "desc": "Defeat combatants or Guardians with Pulse Rifle precision final blows.",
+    "short": "PULSE RIFLE PRECISION kills"
+  },
+  {
+    "hash": 3227881617,
+    "name": "Pulse Rifles",
+    "type": "Gunsmith Order",
+    "tier": "Common",
+    "bucket": 635141261,
+    "desc": "Defeat combatants or Guardians with Pulse Rifle final blows.",
+    "short": "PULSE RIFLE kills"
+  },
+  {
+    "hash": 1456070474,
+    "name": "Rat-a-tat-tat",
+    "type": "Gunsmith Order",
+    "tier": "Legendary",
+    "bucket": 635141261,
+    "desc": "Rapidly defeat combatants or Guardians with Machine Gun final blows.",
+    "short": "rapid MACHINE GUN kills"
+  },
+  {
+    "hash": 3194326349,
+    "name": "Rocket Launchers",
+    "type": "Gunsmith Order",
+    "tier": "Common",
+    "bucket": 635141261,
+    "desc": "Defeat combatants or Guardians with Rocket Launcher final blows.",
+    "short": "ROCKET LAUNCHER kills"
+  },
+  {
+    "hash": 3194326348,
+    "name": "Scout Rifles",
+    "type": "Gunsmith Order",
+    "tier": "Common",
+    "bucket": 635141261,
+    "desc": "Defeat combatants or Guardians with Scout Rifle final blows.",
+    "short": "SCOUT RIFLE kills"
+  },
+  {
+    "hash": 582968304,
+    "name": "Seasonal Arsenal",
+    "type": "Gunsmith Order",
+    "tier": "Exotic",
+    "bucket": 635141261,
+    "desc": "Defeat combatants or Guardians while using Seasonal Exotic weapons from the Rewards Pass.",
+    "short": "SEASONAL EXOTIC weapon kills"
+  },
+  {
+    "hash": 1405737719,
+    "name": "Short Order",
+    "type": "Gunsmith Order",
+    "tier": "Legendary",
+    "bucket": 635141261,
+    "desc": "Rapidly defeat combatants or Guardians with Auto Rifle final blows.",
+    "short": "rapid AUTO RIFLE kills"
+  },
+  {
+    "hash": 1716679243,
+    "name": "Shotgun Sweep",
+    "type": "Gunsmith Order",
+    "tier": "Legendary",
+    "bucket": 635141261,
+    "desc": "Rapidly defeat combatants or Guardians with Shotgun final blows.",
+    "short": "rapid SHOTGUN kills"
+  },
+  {
+    "hash": 3177548763,
+    "name": "Shotguns",
+    "type": "Gunsmith Order",
+    "tier": "Common",
+    "bucket": 635141261,
+    "desc": "Defeat combatants or Guardians with Shotgun final blows.",
+    "short": "SHOTGUN kills"
+  },
+  {
+    "hash": 3177548756,
+    "name": "Sidearms",
+    "type": "Gunsmith Order",
+    "tier": "Common",
+    "bucket": 635141261,
+    "desc": "Defeat combatants or Guardians with Sidearm final blows.",
+    "short": "SIDEARM kills"
+  },
+  {
+    "hash": 1456070473,
+    "name": "Sidearms Head-on",
+    "type": "Gunsmith Order",
+    "tier": "Legendary",
+    "bucket": 635141261,
+    "desc": "Defeat combatants or Guardians with Sidearm precision final blows.",
+    "short": "SIDEARM PRECISION kills"
+  },
+  {
+    "hash": 1456070472,
+    "name": "SMG Sweep",
+    "type": "Gunsmith Order",
+    "tier": "Legendary",
+    "bucket": 635141261,
+    "desc": "Rapidly defeat combatants or Guardians with Submachine Gun final blows.",
+    "short": "rapid SUBMACHINE GUN kills"
+  },
+  {
+    "hash": 3194326347,
+    "name": "Sniper Rifles",
+    "type": "Gunsmith Order",
+    "tier": "Common",
+    "bucket": 635141261,
+    "desc": "Defeat combatants or Guardians with Sniper Rifle final blows.",
+    "short": "SNIPER RIFLE kills"
+  },
+  {
+    "hash": 3127215874,
+    "name": "Special Cases",
+    "type": "Gunsmith Order",
+    "tier": "Common",
+    "bucket": 635141261,
+    "desc": "Defeat combatants or Guardians with weapons that use Special ammo.",
+    "short": "weapons that use SPECIAL ammo"
+  },
+  {
+    "hash": 1405737712,
+    "name": "Straight and True",
+    "type": "Gunsmith Order",
+    "tier": "Legendary",
+    "bucket": 635141261,
+    "desc": "Defeat combatants or Guardians with Bow precision final blows.",
+    "short": "BOW PRECISION kills"
+  },
+  {
+    "hash": 3177548757,
+    "name": "Submachine Guns",
+    "type": "Gunsmith Order",
+    "tier": "Common",
+    "bucket": 635141261,
+    "desc": "Defeat combatants or Guardians with Submachine Gun final blows.",
+    "short": "SUBMACHINE GUN kills"
+  },
+  {
+    "hash": 3194326346,
+    "name": "Swords",
+    "type": "Gunsmith Order",
+    "tier": "Common",
+    "bucket": 635141261,
+    "desc": "Defeat combatants or Guardians with Sword final blows.",
+    "short": "SWORD kills"
+  },
+  {
+    "hash": 3127215877,
+    "name": "Tight Grip",
+    "type": "Gunsmith Order",
+    "tier": "Common",
+    "bucket": 635141261,
+    "desc": "Defeat combatants or Guardians using melee, Glaive, or Swords.",
+    "short": "MELEE, GLAIVE, or SWORDS"
+  },
+  {
+    "hash": 3194326342,
+    "name": "Trace Rifles",
+    "type": "Gunsmith Order",
+    "tier": "Common",
+    "bucket": 635141261,
+    "desc": "Defeat combatants or Guardians with Trace Rifle final blows.",
+    "short": "TRACE RIFLE kills"
+  },
+  {
+    "hash": 1405737713,
+    "name": "Trace to the Face",
+    "type": "Gunsmith Order",
+    "tier": "Legendary",
+    "bucket": 635141261,
+    "desc": "Rapidly defeat combatants or Guardians with Trace Rifle blows.",
+    "short": "rapid TRACE RIFLE kills"
+  },
+  {
+    "hash": 1456070479,
+    "name": "Unerring Sniper",
+    "type": "Gunsmith Order",
+    "tier": "Legendary",
+    "bucket": 635141261,
+    "desc": "Defeat combatants or Guardians with Sniper Rifle precision final blows.",
+    "short": "SNIPER RIFLE PRECISION kills"
+  },
+  {
+    "hash": 1716679234,
+    "name": "A+ Advanced",
+    "type": "Tower Order",
+    "tier": "Legendary",
+    "bucket": 635141261,
+    "desc": "Achieve performance grade A+ or better on Advanced difficulty activities.",
+    "short": "GRADE A+ · ADV"
+  },
+  {
+    "hash": 1716679235,
+    "name": "A+ Expert",
+    "type": "Tower Order",
+    "tier": "Legendary",
+    "bucket": 635141261,
+    "desc": "Achieve performance grade A+ or better on Expert difficulty activities.",
+    "short": "GRADE A+ · E"
+  },
+  {
+    "hash": 1716679233,
+    "name": "A+ Grandmaster",
+    "type": "Tower Order",
+    "tier": "Legendary",
+    "bucket": 635141261,
+    "desc": "Achieve performance grade A+ or better on Grandmaster difficulty activities.",
+    "short": "GRADE A+ · GM"
+  },
+  {
+    "hash": 1716679232,
+    "name": "A+ Master",
+    "type": "Tower Order",
+    "tier": "Legendary",
+    "bucket": 635141261,
+    "desc": "Achieve performance grade A+ or better on Master difficulty activities.",
+    "short": "GRADE A+ · M"
+  },
+  {
+    "hash": 1422515299,
+    "name": "Avant Master",
+    "type": "Tower Order",
+    "tier": "Legendary",
+    "bucket": 635141261,
+    "desc": "Achieve grade A or better on Master difficulty or higher activities with Equipment Locked Activity Buildcraft Stake active.",
+    "short": "GRADE A · M+ · EQUIP LOCKED"
+  },
+  {
+    "hash": 3312871400,
+    "name": "Baned Battle",
+    "type": "Tower Order",
+    "tier": "Common",
+    "bucket": 635141261,
+    "desc": "Complete any activity with a Bane active.",
+    "short": "any activity with BANE"
+  },
+  {
+    "hash": 3312871398,
+    "name": "Bonus Focus",
+    "type": "Tower Order",
+    "tier": "Common",
+    "bucket": 635141261,
+    "desc": "Acquire a daily Bonus Focus reward.",
+    "short": "acquire a daily BONUS FOCUS reward"
+  },
+  {
+    "hash": 3312871399,
+    "name": "Boon Modifiers",
+    "type": "Tower Order",
+    "tier": "Common",
+    "bucket": 635141261,
+    "desc": "Complete any activity with a Boon or Event Modifier active.",
+    "short": "BOON OR EVENT · BOON"
+  },
+  {
+    "hash": 3312871394,
+    "name": "Competitive Ops",
+    "type": "Tower Order",
+    "tier": "Common",
+    "bucket": 635141261,
+    "desc": "Complete any activity in Crucible Ops or Gambit Ops.",
+    "short": "any activity in CRUCIBLE OPS or GAMBIT OPS"
+  },
+  {
+    "hash": 3312871396,
+    "name": "Difficulty: Advanced+",
+    "type": "Tower Order",
+    "tier": "Common",
+    "bucket": 635141261,
+    "desc": "Complete any activity on Advanced difficulty or higher.",
+    "short": "any activity on ADVANCED DIFF+"
+  },
+  {
+    "hash": 3312871397,
+    "name": "Difficulty: Expert+",
+    "type": "Tower Order",
+    "tier": "Common",
+    "bucket": 635141261,
+    "desc": "Complete any activity on Expert difficulty or higher.",
+    "short": "any activity on EXPERT DIFF+"
+  },
+  {
+    "hash": 3312871395,
+    "name": "Difficulty: Normal+",
+    "type": "Tower Order",
+    "tier": "Common",
+    "bucket": 635141261,
+    "desc": "Complete any activity on Normal difficulty or higher.",
+    "short": "any activity on NORMAL DIFF+"
+  },
+  {
+    "hash": 1422515303,
+    "name": "Finally Full",
+    "type": "Tower Order",
+    "tier": "Legendary",
+    "bucket": 635141261,
+    "desc": "Achieve grade A or better on Grandmaster difficulty or higher activities with a Famine modifier active.",
+    "short": "GRADE A · GM+ · FAMINE"
+  },
+  {
+    "hash": 3312871392,
+    "name": "Fireteam Ops",
+    "type": "Tower Order",
+    "tier": "Common",
+    "bucket": 635141261,
+    "desc": "Complete any Fireteam Ops activity.",
+    "short": "complete any FIRETEAM OPS activity"
+  },
+  {
+    "hash": 1422515302,
+    "name": "High-Level Threat",
+    "type": "Tower Order",
+    "tier": "Legendary",
+    "bucket": 635141261,
+    "desc": "Achieve grade A or better on Master difficulty or higher activities with a Threat modifier active.",
+    "short": "GRADE A · M+ · THREAT"
+  },
+  {
+    "hash": 1422515296,
+    "name": "Hunger Buster",
+    "type": "Tower Order",
+    "tier": "Legendary",
+    "bucket": 635141261,
+    "desc": "Achieve grade A or better on Grandmaster difficulty or higher activities with a Hunger modifier active.",
+    "short": "GRADE A · GM+ · HUNGER"
+  },
+  {
+    "hash": 1716679239,
+    "name": "Hungry for More",
+    "type": "Tower Order",
+    "tier": "Legendary",
+    "bucket": 635141261,
+    "desc": "Complete an activity on Grandmaster difficulty or higher with a Hunger modifier active.",
+    "short": "GM+ · HUNGER"
+  },
+  {
+    "hash": 1716679238,
+    "name": "Master at Stake",
+    "type": "Tower Order",
+    "tier": "Legendary",
+    "bucket": 635141261,
+    "desc": "Complete an activity on Expert difficulty or higher with a Player Stake active.",
+    "short": "E+ · PLAYER STAKE"
+  },
+  {
+    "hash": 1422515307,
+    "name": "Master Modifier",
+    "type": "Tower Order",
+    "tier": "Legendary",
+    "bucket": 635141261,
+    "desc": "Complete an activity on Master difficulty or higher with 3 modifiers active.",
+    "short": "M+ · 3 MODS"
+  },
+  {
+    "hash": 1716679236,
+    "name": "Master Modifier",
+    "type": "Tower Order",
+    "tier": "Legendary",
+    "bucket": 635141261,
+    "desc": "Complete an activity on Master difficulty or higher with a Trade-Off modifier, a Player Stake modifier, and a Boon modifier active.",
+    "short": "M+ · TRADE-OFF · PLAYER STAKE · BOON"
+  },
+  {
+    "hash": 1422515298,
+    "name": "Master of Modifiers",
+    "type": "Tower Order",
+    "tier": "Legendary",
+    "bucket": 635141261,
+    "desc": "Achieve grade A or better on Master difficulty or higher activities with a Trade-Off modifier active.",
+    "short": "GRADE A · M+ · TRADE-OFF"
+  },
+  {
+    "hash": 1422515297,
+    "name": "Master of Negatives",
+    "type": "Tower Order",
+    "tier": "Legendary",
+    "bucket": 635141261,
+    "desc": "Achieve grade A or better on Master difficulty or higher activities with a Major Negative modifier active.",
+    "short": "GRADE A · M+ · MAJOR NEGATIVE"
+  },
+  {
+    "hash": 582968306,
+    "name": "Mastered Pinnacle",
+    "type": "Tower Order",
+    "tier": "Exotic",
+    "bucket": 635141261,
+    "desc": "Complete 2 Pinnacle Ops activities with grade A or higher.",
+    "short": "GRADE A · 2 PINNACLE OPS"
+  },
+  {
+    "hash": 1422515301,
+    "name": "Match Game Master",
+    "type": "Tower Order",
+    "tier": "Legendary",
+    "bucket": 635141261,
+    "desc": "Achieve grade A or better on Master difficulty or higher activities with the Match Game modifier active.",
+    "short": "GRADE A · M+ · MATCH GAME"
+  },
+  {
+    "hash": 3227881616,
+    "name": "Multi Modifiers",
+    "type": "Tower Order",
+    "tier": "Common",
+    "bucket": 635141261,
+    "desc": "Complete an activity with two modifiers active.",
+    "short": "TWO · TWO MODS"
+  },
+  {
+    "hash": 1422515300,
+    "name": "No HUD Expert",
+    "type": "Tower Order",
+    "tier": "Legendary",
+    "bucket": 635141261,
+    "desc": "Achieve grade A or better on Expert difficulty or higher activities with the No HUD Gameplay Stake active.",
+    "short": "GRADE A · E+ · NO HUD"
+  },
+  {
+    "hash": 582968305,
+    "name": "Peaked Pinnacle",
+    "type": "Tower Order",
+    "tier": "Exotic",
+    "bucket": 635141261,
+    "desc": "Achieve grade S or better on Master difficulty or higher in any Pinnacle Ops activity.",
+    "short": "GRADE S · M+ · PINNACLE OPS"
+  },
+  {
+    "hash": 3312871401,
+    "name": "Personal Stakes",
+    "type": "Tower Order",
+    "tier": "Common",
+    "bucket": 635141261,
+    "desc": "Complete any activity with a Player Stake active.",
+    "short": "any activity with PLAYER STAKE"
+  },
+  {
+    "hash": 582968307,
+    "name": "Sightless Mastery",
+    "type": "Tower Order",
+    "tier": "Exotic",
+    "bucket": 635141261,
+    "desc": "Complete a Pinnacle Ops activity on Master difficulty or higher with the No HUD Gameplay Stake active.",
+    "short": "M+ · PINNACLE OPS · NO HUD"
+  },
+  {
+    "hash": 3312871393,
+    "name": "Solo Ops",
+    "type": "Tower Order",
+    "tier": "Common",
+    "bucket": 635141261,
+    "desc": "Complete any Solo Ops activity.",
+    "short": "complete any SOLO OPS activity"
+  },
+  {
+    "hash": 2739557088,
+    "name": "Micah-10's Training",
+    "type": "",
+    "tier": "Exotic",
+    "bucket": 635141261,
+    "desc": "Create orbs and apply buffs to your fireteam. Buffs include Cure, Restoration, Woven Mail, Invisibility, and Overshield.",
+    "short": "create ORBS and apply buffs to your fireteam"
+  }
+]
