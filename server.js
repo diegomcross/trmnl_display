@@ -11,10 +11,13 @@
 // Point TRMNL firmware (Advanced -> Custom Server) at the http://<PC-IP>:<port> URL
 // printed on startup (plain http, no trailing slash). Needs tokens.json (run
 // auth-and-snapshot.js once first). Content picker: http://<PC-IP>:<port>/settings
+//
+// Phone/Android display: http://<PC-IP>:<port>/display  (fullscreen auto-refresh PNG)
 
 import http from 'node:http';
 import os from 'node:os';
 import fs from 'node:fs';
+import { exec } from 'node:child_process';
 import { URL } from 'node:url';
 import { Resvg } from '@resvg/resvg-js';
 import { buildModel, renderPage } from './render.js';
@@ -30,24 +33,61 @@ const COMPONENTS = '100,102,103,104,200,201,202,204,205,206,300,301,302,303,304,
 const W = 800, H = 480;
 const CONFIG_FILE = './config.json';
 
+// Track server start time so we can return a short refresh_rate during startup
+// (lets the TRMNL panel pick up the server quickly without needing a manual reset).
+let serverStartedAt = Date.now();
+
+// Tee all console output to server.log so the always-on (hidden) server stays
+// inspectable — this is where TRMNL device requests and errors get recorded.
+const LOG_FILE = './server.log';
+try {
+  const logStream = fs.createWriteStream(LOG_FILE, { flags: 'a' });
+  for (const m of ['log', 'error', 'warn']) {
+    const orig = console[m].bind(console);
+    console[m] = (...args) => {
+      try { logStream.write(args.map((a) => (typeof a === 'string' ? a : JSON.stringify(a))).join(' ') + '\n'); } catch {}
+      orig(...args);
+    };
+  }
+} catch {}
+
+// TRMNL device + image endpoints we log on every hit (so panel bring-up is visible).
+const DEVICE_PATHS = new Set(['/api/display', '/api/setup', '/api/log', '/screen.bmp', '/setup.bmp']);
+
+// Battery policy state: the e-ink panel only refreshes often while the game is running or
+// right after a settings change; otherwise it goes into deep standby. (See refreshRate.)
+let lastConfigChangeAt = 0;
+let gameRunning = false;
+const GAME_PROCESS = process.env.GAME_PROCESS || 'destiny2.exe';
+function checkGame() {
+  try {
+    exec(`tasklist /FI "IMAGENAME eq ${GAME_PROCESS}" /NH`, { windowsHide: true }, (err, stdout) => {
+      const up = !err && new RegExp(GAME_PROCESS.replace(/\./g, '\\.'), 'i').test(stdout || '');
+      if (up !== gameRunning) console.log(`[${new Date().toLocaleTimeString()}] game ${up ? 'started' : 'closed'} (${GAME_PROCESS})`);
+      gameRunning = up;
+    });
+  } catch { gameRunning = false; }
+}
+checkGame();
+setInterval(checkGame, 30000);
+
 // ---------------- settings (config.json) — the content picker / pages model ----------------
 const PAGE_TYPES = ['orders', 'quests', 'triumphs', 'title'];
 const PAGE_LABEL = { orders: 'Orders', quests: 'Quests & Bounties', triumphs: 'Triumphs', title: 'Title / Seal' };
 function defaultPages() {
   return [
-    { type: 'orders', enabled: true, rarities: ['common', 'legendary', 'exotic'] },
+    { type: 'orders', enabled: true, count: 5, offset: 0, rarities: ['common', 'legendary', 'exotic'] },
     { type: 'quests', enabled: false, count: 4 },
     { type: 'triumphs', enabled: false, count: 6 },
     { type: 'title', enabled: false, sealHash: null },
   ];
 }
-const DEFAULT_CONFIG = { rotationSeconds: 30, refreshSeconds: REFRESH_SECONDS, invert: INVERT, descSize: 25, count: 5, showNumbers: true, pages: defaultPages() };
+const DEFAULT_CONFIG = { rotationSeconds: 30, refreshSeconds: REFRESH_SECONDS, standbySeconds: 1800, invert: INVERT, descSize: 25, count: 5, showNumbers: true, pages: defaultPages() };
 
 function loadConfig() {
   let raw = {};
   try { raw = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8')); } catch { raw = {}; }
   const c = { ...DEFAULT_CONFIG, ...raw };
-  // migrate the old layout-only config (no pages[]) to a single Orders page
   if (!Array.isArray(raw.pages)) c.pages = defaultPages();
   return c;
 }
@@ -60,28 +100,39 @@ function sanitizeConfig(input) {
   const bool = (v) => v === true || v === 'true' || v === 'on';
   if (input.rotationSeconds != null) c.rotationSeconds = input.rotationSeconds === 0 || input.rotationSeconds === '0' ? 0 : num(input.rotationSeconds, 10, 1800, c.rotationSeconds);
   if (input.refreshSeconds != null) c.refreshSeconds = num(input.refreshSeconds, 15, 1800, c.refreshSeconds);
-  if (input.descSize != null) c.descSize = num(input.descSize, 16, 36, c.descSize);
+  if (input.standbySeconds != null) c.standbySeconds = num(input.standbySeconds, 60, 21600, c.standbySeconds);
+  if (input.descSize != null) c.descSize = num(input.descSize, 14, 40, c.descSize);
   if (input.count != null) c.count = num(input.count, 1, 5, c.count);
   if (input.showNumbers != null) c.showNumbers = bool(input.showNumbers);
   if (input.invert != null) c.invert = bool(input.invert);
   if (Array.isArray(input.pages)) {
-    const byType = {};
-    for (const p of input.pages) if (p && PAGE_TYPES.includes(p.type)) byType[p.type] = p;
-    // rebuild in canonical order, validating each type's options
-    c.pages = PAGE_TYPES.map((type) => {
-      const cur = (c.pages || []).find((p) => p.type === type) || {};
-      const inp = byType[type] || {};
-      const page = { type, enabled: inp.enabled != null ? bool(inp.enabled) : cur.enabled !== false };
-      if (type === 'orders') {
-        const allowed = ['common', 'legendary', 'exotic'];
-        let r = Array.isArray(inp.rarities) ? inp.rarities.filter((x) => allowed.includes(x)) : (cur.rarities || allowed);
-        if (!r.length) r = allowed;
-        page.rarities = r;
-      } else if (type === 'quests') page.count = num(inp.count, 3, 5, cur.count || 4);
-      else if (type === 'triumphs') page.count = num(inp.count, 3, 8, cur.count || 6);
-      else if (type === 'title') page.sealHash = inp.sealHash ? String(inp.sealHash) : null;
-      return page;
-    });
+    const allowed_rarities = ['common', 'legendary', 'exotic'];
+    const sanitized = [];
+    let ordersAdded = 0;
+    for (const p of input.pages) {
+      if (!p || !PAGE_TYPES.includes(p.type)) continue;
+      if (p.type === 'orders') {
+        if (ordersAdded >= 2) continue; // max 2 orders pages in rotation
+        ordersAdded++;
+        let r = Array.isArray(p.rarities) ? p.rarities.filter((x) => allowed_rarities.includes(x)) : allowed_rarities;
+        if (!r.length) r = allowed_rarities;
+        sanitized.push({
+          type: 'orders',
+          enabled: p.enabled != null ? bool(p.enabled) : true,
+          count: num(p.count, 1, 5, c.count || 5),
+          offset: Math.max(0, parseInt(p.offset, 10) || 0),
+          rarities: r,
+        });
+      } else if (p.type === 'quests') {
+        sanitized.push({ type: 'quests', enabled: bool(p.enabled), count: num(p.count, 3, 5, 4) });
+      } else if (p.type === 'triumphs') {
+        sanitized.push({ type: 'triumphs', enabled: bool(p.enabled), count: num(p.count, 3, 8, 6) });
+      } else if (p.type === 'title') {
+        sanitized.push({ type: 'title', enabled: bool(p.enabled), sealHash: p.sealHash ? String(p.sealHash) : null });
+      }
+    }
+    if (ordersAdded === 0) sanitized.unshift({ type: 'orders', enabled: true, count: c.count || 5, offset: 0, rarities: allowed_rarities });
+    c.pages = sanitized;
   }
   return c;
 }
@@ -160,7 +211,7 @@ export function svgToBmp1bit(svg, invert = false) {
 }
 
 // ---------------- screen state + model cache + render loop ----------------
-let state = { bmp: null, filename: 'starting.bmp', svg: '', pageIndex: -1, updated: null, error: null };
+let state = { bmp: null, png: null, filename: 'starting.bmp', svg: '', pageIndex: -1, updated: null, error: null };
 let lastModel = null, lastModelAt = 0;
 
 function demoModel() {
@@ -169,7 +220,7 @@ function demoModel() {
     orders: [
       { name: "Micah-10's Training", desc: 'Create orbs and apply buffs to your fireteam (Cure, Restoration, Woven Mail, Invisibility, Overshield).', tier: { name: 'Exotic', kind: 'exotic' }, p: { prog: 2760000, total: 5000000, frac: 0.552 }, tracked: false },
       { name: 'Full Auto', desc: 'Defeat combatants or Guardians with Auto Rifles, SMGs, Trace Rifles, or Machine Guns.', tier: { name: 'Common', kind: 'common' }, p: { prog: 493000, total: 500000, frac: 0.986 }, tracked: true },
-      { name: 'Weak Spot', desc: 'Defeat combatants or Guardians with precision damage.', tier: { name: 'Common', kind: 'common' }, p: { prog: 49500, total: 250000, frac: 0.198 }, tracked: false },
+      { name: 'Weak Spot', desc: 'Defeat combatants or Guardians with precision damage.', tier: { name: 'Legendary', kind: 'legendary' }, p: { prog: 49500, total: 250000, frac: 0.198 }, tracked: false },
       { name: 'Special Cases', desc: 'Defeat combatants or Guardians with special-ammo weapons.', tier: { name: 'Legendary', kind: 'legendary' }, p: { prog: 71000, total: 350000, frac: 0.203 }, tracked: false },
       { name: 'Close Comfort', desc: 'Defeat combatants or Guardians at close range.', tier: { name: 'Common', kind: 'common' }, p: { prog: 12000, total: 90000, frac: 0.133 }, tracked: false },
     ],
@@ -225,12 +276,13 @@ async function refresh() {
     const cfg = loadConfig();
     const model = await getModel(cfg);
     const ps = enabledPages(cfg);
-    const page = ps.length ? ps[Math.min(pickPageIndex(cfg), ps.length - 1)] : { type: 'orders', rarities: ['common', 'legendary', 'exotic'] };
+    const page = ps.length ? ps[Math.min(pickPageIndex(cfg), ps.length - 1)] : { type: 'orders', count: 5, offset: 0, rarities: ['common', 'legendary', 'exotic'] };
     const idx = ps.length ? Math.min(pickPageIndex(cfg), ps.length - 1) : 0;
-    const svg = renderPage(model, page, { count: cfg.count, descSize: cfg.descSize, showNumbers: cfg.showNumbers });
+    const svg = renderPage(model, page, { count: page.count ?? cfg.count, offset: page.offset ?? 0, descSize: cfg.descSize, showNumbers: cfg.showNumbers });
     const ts = new Date().toLocaleTimeString();
     if (svg !== state.svg || idx !== state.pageIndex || !state.bmp) {
       state.bmp = svgToBmp1bit(svg, cfg.invert);
+      state.png = null; // invalidate cached PNG so next /screen.png re-renders
       state.svg = svg; state.pageIndex = idx;
       state.filename = `d2-${Date.now()}.bmp`;
       console.log(`[${ts}] page ${idx + 1}/${ps.length || 1} (${page.type}) changed -> ${state.filename}; panel will redraw`);
@@ -248,7 +300,23 @@ async function refresh() {
 // ---------------- HTTP (TRMNL BYOS protocol) ----------------
 function lanIps() { const out = []; for (const list of Object.values(os.networkInterfaces())) for (const ni of list || []) if (ni.family === 'IPv4' && !ni.internal) out.push(ni.address); return out; }
 function imageUrl(req, name = 'screen.bmp') { const host = req.headers.host || `${lanIps()[0] || 'localhost'}:${PORT}`; return `http://${host}/${name}`; }
-function refreshRate(cfg) { const rotating = cfg.rotationSeconds > 0 && enabledPages(cfg).length > 1; return String(rotating ? Math.min(cfg.refreshSeconds, cfg.rotationSeconds) : cfg.refreshSeconds); }
+// How many seconds until the panel should poll again. Battery-first: the e-ink panel only
+// refreshes often while the game is running or for ~1 min after a settings change; otherwise
+// it goes into deep standby (long interval => rare wakes => long battery life).
+function refreshRate(cfg) {
+  const now = Date.now();
+  // Just changed settings: quick updates for ~1 min so the change shows, then back to standby.
+  if (now - lastConfigChangeAt < 60000) return '15';
+  // In game: live-ish progress updates.
+  if (gameRunning) {
+    const rotating = cfg.rotationSeconds > 0 && enabledPages(cfg).length > 1;
+    return String(rotating ? Math.min(cfg.refreshSeconds, cfg.rotationSeconds) : cfg.refreshSeconds);
+  }
+  // Fresh server start: quick poll so the panel finds the server (bring-up).
+  if (now - serverStartedAt < 90000) return '10';
+  // Idle, not in game: deep standby to save the panel's battery.
+  return String(cfg.standbySeconds || 1800);
+}
 
 // options for the settings picker (names only — no hashes for the user to touch)
 function optionsPayload() {
@@ -265,11 +333,11 @@ function statusPage() {
   const cfg = loadConfig();
   const ps = enabledPages(cfg);
   const rot = cfg.rotationSeconds && ps.length > 1 ? `rotating every ${cfg.rotationSeconds}s` : 'single page';
-  const pagesTxt = ps.length ? ps.map((p) => PAGE_LABEL[p.type]).join(' \u2192 ') : 'none enabled';
+  const pagesTxt = ps.length ? ps.map((p, i) => { const lbl = PAGE_LABEL[p.type] || p.type; return p.type === 'orders' && ps.filter(x => x.type === 'orders').length > 1 ? `${lbl} ${i + 1}` : lbl; }).join(' → ') : 'none enabled';
   return `<!doctype html><meta charset="utf-8"><title>Destiny 2 TRMNL</title><body style="font-family:Arial,Helvetica,sans-serif;margin:24px">`
     + `<h2>Destiny 2 TRMNL dashboard</h2>`
-    + `<p>Last render: <b>${upd}</b> &middot; file: <code>${state.filename}</code>${state.error ? ` &middot; <span style="color:#b00">error: ${state.error}</span>` : ''}</p>`
-    + `<p>Pages: <b>${pagesTxt}</b> &middot; ${rot}${DEMO ? ' &middot; <b>DEMO mode</b>' : ''} &middot; <a href="/settings">Settings</a></p>`
+    + `<p>Last render: <b>${upd}</b> · file: <code>${state.filename}</code>${state.error ? ` · <span style="color:#b00">error: ${state.error}</span>` : ''}</p>`
+    + `<p>Pages: <b>${pagesTxt}</b> · ${rot}${DEMO ? ' · <b>DEMO mode</b>' : ''} · <a href="/settings">Settings</a> · <a href="/display">Phone display</a></p>`
     + `<img src="/screen.bmp?t=${Date.now()}" width="800" height="480" style="border:1px solid #ccc">`
     + `</body>`;
 }
@@ -298,7 +366,7 @@ function settingsPage() {
     + `<div class="lbl">Data refresh (Bungie poll)</div>`
     + `<select id="refreshSeconds"><option value="30">30s</option><option value="60">60s</option><option value="120">2 min</option><option value="300">5 min</option><option value="600">10 min</option></select>`
     + `<div class="lbl">Description text size</div>`
-    + `<select id="descSize"><option value="22">Small</option><option value="25">Medium</option><option value="28">Large</option><option value="32">Extra large</option></select>`
+    + `<select id="descSize"><option value="20">Small (20)</option><option value="25">Medium (25)</option><option value="28">Large (28)</option><option value="32">X-Large (32)</option><option value="36">XX-Large (36)</option><option value="40">Huge (40)</option></select>`
     + `<div class="row"><input type="checkbox" id="showNumbers"><label for="showNumbers">Show raw progress numbers</label></div>`
     + `<div class="row"><input type="checkbox" id="invert"><label for="invert">Invert colors (only if the panel shows white-on-black)</label></div></div>`
     + `<div class="card"><div class="pg"><input type="checkbox" id="en_orders" data-opts="op_orders"><label for="en_orders">Orders</label><span class="cnt" id="cnt_orders"></span></div>`
@@ -306,7 +374,8 @@ function settingsPage() {
     + `<span class="chip"><input type="checkbox" id="r_exotic"><label for="r_exotic">Exotic</label></span>`
     + `<span class="chip"><input type="checkbox" id="r_legendary"><label for="r_legendary">Legendary</label></span>`
     + `<span class="chip"><input type="checkbox" id="r_common"><label for="r_common">Common</label></span></div>`
-    + `<div class="lbl">Orders on screen</div><select id="ordersCount"><option>3</option><option>4</option><option>5</option></select></div></div>`
+    + `<div class="lbl">Orders per screen</div><select id="ordersCount"><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option></select>`
+    + `<div class="row" style="margin-top:12px"><input type="checkbox" id="orders_split"><label for="orders_split">Show remaining orders on a 2nd page (split rotation)</label></div></div></div>`
     + `<div class="card"><div class="pg"><input type="checkbox" id="en_quests" data-opts="op_quests"><label for="en_quests">Quests & Bounties</label><span class="cnt" id="cnt_quests"></span></div>`
     + `<div class="opts" id="op_quests"><div class="lbl">Quests on screen</div><select id="questsCount"><option>3</option><option>4</option><option>5</option></select></div></div>`
     + `<div class="card"><div class="pg"><input type="checkbox" id="en_triumphs" data-opts="op_triumphs"><label for="en_triumphs">Triumphs</label><span class="cnt" id="cnt_triumphs"></span></div>`
@@ -325,29 +394,75 @@ function settingsPage() {
     + `fetch('/api/config').then(function(r){return r.json()}).then(function(c){`
     + `$('rotationSeconds').value=String(c.rotationSeconds);$('refreshSeconds').value=String(c.refreshSeconds);$('descSize').value=String(c.descSize);`
     + `$('showNumbers').checked=!!c.showNumbers;$('invert').checked=!!c.invert;`
-    + `var byT={};(c.pages||[]).forEach(function(p){byT[p.type]=p});`
-    + `var o=byT.orders||{};$('en_orders').checked=o.enabled!==false;var rr=o.rarities||['common','legendary','exotic'];`
-    + `$('r_exotic').checked=rr.indexOf('exotic')>=0;$('r_legendary').checked=rr.indexOf('legendary')>=0;$('r_common').checked=rr.indexOf('common')>=0;$('ordersCount').value=String(c.count||5);`
-    + `$('en_quests').checked=!!(byT.quests&&byT.quests.enabled);$('questsCount').value=String((byT.quests&&byT.quests.count)||4);`
-    + `$('en_triumphs').checked=!!(byT.triumphs&&byT.triumphs.enabled);$('triumphsCount').value=String((byT.triumphs&&byT.triumphs.count)||6);`
-    + `$('en_title').checked=!!(byT.title&&byT.title.enabled);$('sealHash').value=(byT.title&&byT.title.sealHash)||'';`
+    + `var ordPages=(c.pages||[]).filter(function(p){return p.type==='orders'});`
+    + `var o=ordPages[0]||{};$('en_orders').checked=o.enabled!==false;`
+    + `var rr=o.rarities||['common','legendary','exotic'];`
+    + `$('r_exotic').checked=rr.indexOf('exotic')>=0;$('r_legendary').checked=rr.indexOf('legendary')>=0;$('r_common').checked=rr.indexOf('common')>=0;`
+    + `$('ordersCount').value=String(o.count||c.count||5);`
+    + `$('orders_split').checked=ordPages.length>1&&ordPages[1].enabled!==false;`
+    + `$('en_quests').checked=!!(c.pages||[]).find(function(p){return p.type==='quests'&&p.enabled});`
+    + `var qp=(c.pages||[]).find(function(p){return p.type==='quests'});$('questsCount').value=String(qp&&qp.count||4);`
+    + `$('en_triumphs').checked=!!(c.pages||[]).find(function(p){return p.type==='triumphs'&&p.enabled});`
+    + `var tp=(c.pages||[]).find(function(p){return p.type==='triumphs'});$('triumphsCount').value=String(tp&&tp.count||6);`
+    + `$('en_title').checked=!!(c.pages||[]).find(function(p){return p.type==='title'&&p.enabled});`
+    + `var tilp=(c.pages||[]).find(function(p){return p.type==='title'});$('sealHash').value=(tilp&&tilp.sealHash)||'';`
     + `toggleOpts();})}`
     + `function bump(){$('pv').src='/screen.bmp?t='+Date.now()}`
     + `$('save').onclick=function(){var b=$('save');b.disabled=true;$('msg').textContent='Saving…';`
     + `var rar=[];if($('r_exotic').checked)rar.push('exotic');if($('r_legendary').checked)rar.push('legendary');if($('r_common').checked)rar.push('common');`
-    + `var body={rotationSeconds:parseInt($('rotationSeconds').value,10),refreshSeconds:parseInt($('refreshSeconds').value,10),descSize:parseInt($('descSize').value,10),count:parseInt($('ordersCount').value,10),showNumbers:$('showNumbers').checked,invert:$('invert').checked,`
-    + `pages:[{type:'orders',enabled:$('en_orders').checked,rarities:rar},{type:'quests',enabled:$('en_quests').checked,count:parseInt($('questsCount').value,10)},{type:'triumphs',enabled:$('en_triumphs').checked,count:parseInt($('triumphsCount').value,10)},{type:'title',enabled:$('en_title').checked,sealHash:$('sealHash').value||null}]};`
-    + `fetch('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}).then(function(r){return r.json()}).then(function(){$('msg').textContent='Saved \\u2713';b.disabled=false;setTimeout(bump,500)}).catch(function(){$('msg').textContent='Save failed';b.disabled=false})};`
+    + `var ordCnt=parseInt($('ordersCount').value,10);var ordSplit=$('orders_split').checked;`
+    + `var ordEnabled=$('en_orders').checked;`
+    + `var pages=[{type:'orders',enabled:ordEnabled,count:ordCnt,offset:0,rarities:rar}];`
+    + `if(ordSplit)pages.push({type:'orders',enabled:ordEnabled,count:5,offset:ordCnt,rarities:rar});`
+    + `pages.push({type:'quests',enabled:$('en_quests').checked,count:parseInt($('questsCount').value,10)});`
+    + `pages.push({type:'triumphs',enabled:$('en_triumphs').checked,count:parseInt($('triumphsCount').value,10)});`
+    + `pages.push({type:'title',enabled:$('en_title').checked,sealHash:$('sealHash').value||null});`
+    + `var body={rotationSeconds:parseInt($('rotationSeconds').value,10),refreshSeconds:parseInt($('refreshSeconds').value,10),descSize:parseInt($('descSize').value,10),count:ordCnt,showNumbers:$('showNumbers').checked,invert:$('invert').checked,pages:pages};`
+    + `fetch('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}).then(function(r){return r.json()}).then(function(){$('msg').textContent='Saved ✓';b.disabled=false;setTimeout(bump,500)}).catch(function(){$('msg').textContent='Save failed';b.disabled=false})};`
     + `load();setInterval(bump,15000);`
     + `</script></body></html>`;
 }
 
 const server = http.createServer(async (req, res) => {
   const path = (new URL(req.url, 'http://x').pathname).replace(/\/+$/, '') || '/';
+  if (DEVICE_PATHS.has(path)) {
+    const h = req.headers;
+    const ip = String(h['x-forwarded-for'] || req.socket.remoteAddress || '').replace(/^::ffff:/, '');
+    const dev = [
+      h['id'] && `id=${h['id']}`,
+      h['fw-version'] && `fw=${h['fw-version']}`,
+      h['rssi'] && `rssi=${h['rssi']}`,
+      h['battery-voltage'] && `bat=${h['battery-voltage']}`,
+      (h['width'] || h['height']) && `${h['width'] || '?'}x${h['height'] || '?'}`,
+      h['access-token'] && 'token=yes',
+    ].filter(Boolean).join(' ');
+    console.log(`[${new Date().toLocaleTimeString()}] ${req.method} ${path} <- ${ip}${dev ? ' | ' + dev : ''}${h['user-agent'] ? ' | ua=' + h['user-agent'] : ''}`);
+  }
   if (path === '/screen.bmp' || path === '/setup.bmp') {
     if (!state.bmp) { res.writeHead(503); return res.end('not ready'); }
     res.writeHead(200, { 'Content-Type': 'image/bmp', 'Content-Length': state.bmp.length, 'Cache-Control': 'no-cache' });
     return res.end(state.bmp);
+  }
+  // Full-quality PNG — used by /display and suitable for Android/phone clients.
+  if (path === '/screen.png') {
+    if (!state.svg) { res.writeHead(503); return res.end('not ready'); }
+    if (!state.png) state.png = new Resvg(state.svg, { fitTo: { mode: 'original' }, background: '#ffffff' }).render().asPng();
+    res.writeHead(200, { 'Content-Type': 'image/png', 'Content-Length': state.png.length, 'Cache-Control': 'no-cache' });
+    return res.end(state.png);
+  }
+  // Fullscreen auto-refresh page for phone/tablet display.
+  if (path === '/display') {
+    const cfg = loadConfig();
+    // The phone is plugged in (backlit), so keep it responsive regardless of the panel's
+    // battery standby — refresh on the data-poll cadence, capped to a sane 10–60s.
+    const interval = Math.min(60, Math.max(10, cfg.refreshSeconds || 30)) * 1000;
+    const html = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>D2 Display</title>`
+      + `<style>*{margin:0;padding:0;box-sizing:border-box}body{background:#111;display:flex;align-items:center;justify-content:center;min-height:100vh;min-height:100dvh}`
+      + `img{max-width:100vw;max-height:100vh;max-height:100dvh;width:auto;height:auto;image-rendering:auto}</style>`
+      + `<script>var t=${interval};function bump(){var i=document.getElementById('i');var n=new Image();n.onload=function(){i.src=n.src};n.src='/screen.png?t='+Date.now();}setInterval(bump,t);</script>`
+      + `</head><body><img id="i" src="/screen.png"></body></html>`;
+    res.writeHead(200, { 'Content-Type': 'text/html' });
+    return res.end(html);
   }
   if (path === '/api/display') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -363,6 +478,7 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'POST') {
       let input = {}; try { input = JSON.parse(await readBody(req) || '{}'); } catch { input = {}; }
       const cfg = sanitizeConfig(input); saveConfig(cfg);
+      lastConfigChangeAt = Date.now(); // opens a ~1 min quick-refresh window for the panel
       state.pageIndex = -1; // force a redraw on the next refresh so the preview/panel update
       await refresh();
       res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -391,6 +507,7 @@ async function start() {
     if (ips.length) for (const ip of ips) console.log(`  TRMNL "Custom Server" URL:  http://${ip}:${PORT}`);
     else console.log(`  (no LAN IP detected) local URL:  http://localhost:${PORT}`);
     console.log(`  Browser preview + content picker: http://localhost:${PORT}/  and  /settings`);
+    console.log(`  Phone/tablet display:             http://localhost:${PORT}/display`);
     if (DEMO) console.log('  DEMO mode: serving sample data (no Bungie call).');
     console.log('');
   });
