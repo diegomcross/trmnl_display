@@ -15,8 +15,8 @@ Remaining bundle (Diego: "bundle as many as possible"):
    `dim-probe.js`; app registered (`.dim-app.json`), 992 tags read. Server now reads
    DIM tags as truth and writes each change back via `POST /api/tag`.
 2. ✅ **Phase-2 live alerts — SHIPPED & verified** on the real panel (see HANDOFF).
-3. **Fashion loadouts** — §3. Needs a re-auth for cosmetic write scope (Diego action). NOT started.
-4. **⚠ Make vault-verdict.js always-on** so the alert poller runs during play (below).
+3. ✅ **Always-on vault-verdict** — `start-vault.ps1` written; Diego runs `-Install` once (§0b).
+4. **Fashion loadouts** — §3. Needs a re-auth for cosmetic write scope (Diego action). NOT started. (The only feature left.)
 
 ## 0. DIM two-way tag sync — ✅ SHIPPED 2026-07-03 (details in HANDOFF)
 
@@ -33,13 +33,11 @@ Two-way sync is live and verified. Notes worth keeping:
   token to a third party) — Diego ran `node dim-probe.js` once to bootstrap the app.
   After that the *server process* does all DIM calls (not gated).
 
-## 0b. Make vault-verdict.js always-on (NEXT small task)
+## 0b. Always-on vault-verdict — ✅ DONE (`start-vault.ps1`)
 
-The god-roll poller AND live DIM sync only run while `vault-verdict.js` is running.
-`start-display.ps1` supervises `server.js` only. Add a supervised launch for
-vault-verdict (extend `start-display.ps1` to run both, or a sibling `start-vault.ps1`
-with `-Install` to the Startup folder like the display server). Until then Diego must
-`node vault-verdict.js` before playing.
+`start-vault.ps1` (mirrors start-display.ps1) keeps vault-verdict.js alive so the
+poller + DIM sync run whenever the PC is on. Diego runs `start-vault.ps1 -Install`
+once (agent can't install the Startup item itself — sandbox blocks persistence).
 
 ## Where we are (2026-07-03, later)
 

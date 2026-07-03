@@ -69,7 +69,8 @@ Core priorities, in his words:
 | `auth-and-snapshot.js` | Interactive Bungie OAuth + writes `snapshot.json` (full profile dump). Run once / to re-auth. |
 | `render.js` | `buildModel(profile)` -> data model; page renderers (`renderSVG`=Orders, `renderQuestsSVG`, `renderTriumphsSVG`, `renderTitleSVG`, `renderDropAlert`=god-roll drop) + `renderPage()` dispatcher. CLI run writes `screen.png` + prints a report. |
 | `server.js` | Always-on TRMNL BYOS HTTP server. Pulls a fresh profile each cycle, picks the current rotation page, renders, converts to 1-bit BMP, serves it. Interrupts the rotation for `drop-alert.json` god-roll alerts (`activeAlert`). Hosts `/settings`, `/display`, `/screen.png`. |
-| `start-display.ps1` | **Always-on launcher (current default).** Runs `node server.js` and keeps it alive (restart loop). `-Install` adds a hidden **Startup-folder login item** (Task Scheduler is blocked here) + starts it now; `-Uninstall` removes it. Logs to `server.log`. |
+| `start-display.ps1` | **Always-on launcher for the display server.** Runs `node server.js` and keeps it alive (restart loop). `-Install` adds a hidden **Startup-folder login item** (Task Scheduler is blocked here) + starts it now; `-Uninstall` removes it. Logs to `server.log`. |
+| `start-vault.ps1` | **Always-on launcher for Vault Verdict** (port 8787) — mirrors start-display.ps1. Keeps `node vault-verdict.js` alive so the **god-roll drop poller + two-way DIM sync** run whenever the PC is on. `-Install`/`-Uninstall` (Startup-folder item, "TRMNL Vault Verdict.lnk"). Logs to `vault.log`. Independent of the display launcher. |
 | `watch-destiny.ps1` | Optional game-coupled alternative: watches for `destiny2.exe` and starts/stops the server with the game. `-Setup` tried to register a Task Scheduler task but that is **denied** on this PC. Logs to `watcher.log`. |
 | `config.json` | Settings written by the settings page (gitignored; per-machine). |
 | `manifest-cache.json` | Cached Bungie manifest defs (gitignored). `CACHE_SCHEMA` const invalidates it when the stored shape changes. |
@@ -228,8 +229,8 @@ Core priorities, in his words:
     of the rotation, sets `refresh_rate`/tick to 10s, and — key fix — sets `state.alerting`
     so that when the alert ends it **forces a normal redraw** (else the "no progress change"
     guard would hold the stale drop image). Verified end-to-end on the real ESP32 panel.
-    **⚠ vault-verdict.js must be running while playing** for this to fire — see NEXT_PHASE
-    "operational gap" (not yet supervised like server.js).
+    **vault-verdict.js must be running while playing** for this to fire — now supported by
+    `start-vault.ps1 -Install` (always-on launcher, mirrors start-display.ps1).
   - **TESTING HAZARD (learned twice):** never click real perk/tag controls in a test tab —
     they call the page's `const save()`/`saveTags()` and POST the whole shared config;
     `window.save` stubs don't bind. Test write-triggering UI with a read-only simulation
@@ -300,6 +301,11 @@ Core priorities, in his words:
      TRMNL device request, so panel bring-up is visible).
    - `watch-destiny.ps1` (start/stop the server **with the game**) still exists as the optional
      alternative if Diego ever wants the game-coupled behavior instead of always-on.
+1b. **Always-on Vault Verdict** (weapons tools + god-roll drop alerts + DIM sync) — run once:
+   `powershell -ExecutionPolicy Bypass -File "C:\Users\diego\Desktop\cola_ai_v3\trmnl_display\start-vault.ps1" -Install`
+   Same Startup-folder mechanism (`TRMNL Vault Verdict.lnk`), logs to `vault.log`, port 8787.
+   This is what runs the live god-roll poller + DIM tag sync, so keep it installed. `-Uninstall`
+   to remove. It's separate from the display server — install/remove either without affecting the other.
 2. **Point the panel at the PC:** on the TRMNL panel, set **Custom Server URL =
    `http://192.168.1.130:3000`** (plain http, no trailing slash, **not** usetrmnl.com). If it's
    stuck at "wifi connected," this is almost always because the server wasn't running (fixed by
