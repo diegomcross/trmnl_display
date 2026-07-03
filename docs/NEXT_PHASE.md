@@ -3,25 +3,48 @@
 > Maintained per CLAUDE.md. When a feature ships, move it to HANDOFF.md
 > "What works now" and delete it here.
 
-## Where we are (2026-07-03)
+## Where we are (2026-07-03, later)
 
-Just shipped: Vault Verdict set-bonus data fix (`setItems` reverse map), the
-**exotic favorite-stat tuning panel**, and **build synergy for legendaries**
-(Diego chose "drive verdicts": keepers pair-annotated with matching tuned
-exotics, same-slot excluded, off-build keepers demoted to Review, `oSyn`
-toggle in Rules, classes with no tuned exotics untouched).
+Shipped today: set-bonus fix + exotic favorites + build synergy (see HANDOFF),
+then per Diego's corrections: **set drop locations restored** (curated map +
+manifest fallback), **exotic favorites reworked** (max 2 ordered stats =
+primary›secondary, per-class filter tabs), and the **Weapon Watch foundation**
+(`/weapons` page + `/api/weapons` + `/api/watch`) — weapons, perk pools,
+per-roll perks, masterwork, stats, lock state, priority-weighted scoring of
+every existing copy. All tested live against Bungie.
 
 **Known limitation to revisit:** with 28 Warlock exotics tuned covering all six
-stats, "no exotic favors this" never fires for Warlock — demotion only bites on
-selectively-tuned classes. If Diego wants sharper pruning, the refinement is a
-per-exotic build-view filter (pick an exotic → see its best 4 legendary
-partners) or priority tiers on exotics.
+stats, the build-synergy "no exotic favors this" demotion never fires for
+Warlock — only bites on selectively-tuned classes. Refinement candidates:
+per-exotic build-view filter or priority tiers on exotics.
 
-Task order, per Diego:
-1. Weapon perk tracking / god-roll finder (spec below — answers recorded)
-2. Fashion loadouts (only after weapons feature is complete)
+**NEXT TASK: Weapon Watch phase 2 — new-drop detection + TRMNL alert** (below).
+Then fashion loadouts.
 
-## 2. Weapon perk tracking / god-roll finder
+## 2. Weapon perk tracking / god-roll finder — PHASE 2 (detection + alerts)
+
+**Done (phase 1):** manifest slim3 with weapon trait plug sets; `/api/weapons`
+(pools, per-roll perks by NAME — enhanced variants share the name, not the
+hash; masterwork; stats; lock state); `/weapons` tagging UI with per-perk
+priority (tap: track → ★ high → off, 6 max), wanted masterwork, watched stats;
+score per copy = Σ perk priorities (+1 masterwork). Config: `weapon-watch.json`.
+
+**To build (phase 2):**
+- **New-drop detection:** poll the profile on an interval while the game runs
+  (or piggyback server.js's existing cycle); diff instance ids against a
+  seen-ids file (gitignored); score new instances of watched weapons against
+  `weapon-watch.json`.
+- **Pop threshold:** score ≥ what? ASK DIEGO for the default when building.
+- **TRMNL interrupt:** on a hit, take over the panel for **1 minute** (weapon
+  name, tracked perks hit, masterwork, tracked stat numbers), then resume
+  rotation — needs a render page in `render.js` + an interrupt hook in
+  `server.js`'s refresh loop.
+- **Sound:** TRMNL has no speaker — play a sound on the PC while in-game
+  (e.g. PowerShell `[console]::beep` / media file from the watcher or server
+  when destiny2.exe is running).
+- **Auto-lock the drop** via Bungie `SetItemLockState` (needs
+  `MoveEquipDestinyItems` OAuth scope — check the app's scopes; may need a
+  re-auth). No auto-tag: Diego tags manually after reviewing.
 
 **Diego's words:** the app should pull which perks each weapon *can* roll
 (columns 3 and 4 — the trait columns), let him tag **up to 6 perks to track per

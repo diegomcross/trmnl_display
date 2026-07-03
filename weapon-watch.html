@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Weapon Watch — God-Roll Tracker</title>
+<style>
+:root{
+  --bg:#0c0e12; --panel:#151821; --panel2:#1b1f2b; --line:#2a2f3d;
+  --ink:#e9ebf2; --mut:#8b93a7; --dim:#5c6375;
+  --gold:#cfae42; --purp:#a97fd6; --keep:#5fd0dd; --rev:#e8b64c; --junk:#ff6a52;
+  --clip:polygon(10px 0,100% 0,100% calc(100% - 10px),calc(100% - 10px) 100%,0 100%,0 10px);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{-webkit-text-size-adjust:100%}
+body{background:var(--bg);color:var(--ink);font:15px/1.45 "Segoe UI",Roboto,system-ui,sans-serif;padding:12px;padding-bottom:40px}
+.disp{font-family:Bahnschrift,"Roboto Condensed","Arial Narrow",sans-serif;text-transform:uppercase;letter-spacing:.09em}
+h1{font-size:22px;font-weight:600}
+h1 span{color:var(--gold)}
+.sub{color:var(--mut);font-size:12px;margin:2px 0 12px}
+.sub a{color:var(--keep);text-decoration:none}
+.bar{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;align-items:center}
+.btn{background:var(--panel2);border:1px solid var(--gold);color:var(--gold);padding:8px 13px;font-size:12px;cursor:pointer;clip-path:var(--clip);font-family:inherit}
+.btn:active{background:var(--gold);color:#000}
+.btn.sm{padding:5px 10px;font-size:11px}
+.btn.red{border-color:var(--junk);color:var(--junk)}
+input[type=search],select{background:var(--panel);border:1px solid var(--line);color:var(--ink);padding:8px 10px;font-size:13px;clip-path:var(--clip);appearance:none}
+input[type=search]{flex:1;min-width:160px}
+.panel{background:var(--panel);border:1px solid var(--line);clip-path:var(--clip);padding:12px;margin-bottom:14px}
+.panel h2{font-size:13px;color:var(--mut);margin-bottom:8px}
+.card{background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--gold);clip-path:var(--clip);padding:10px 12px;margin-bottom:10px}
+.nm{font-weight:600;font-size:15px;color:var(--gold)}
+.meta{color:var(--mut);font-size:11.5px;margin:3px 0}
+.meta b{color:var(--ink)}
+.colh{font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.08em;margin:8px 0 4px;font-family:Bahnschrift,"Roboto Condensed",sans-serif}
+.pool{display:flex;gap:4px;flex-wrap:wrap}
+.pk{background:var(--panel2);border:1px solid var(--line);color:var(--mut);padding:5px 9px;font-size:11px;cursor:pointer;clip-path:polygon(6px 0,100% 0,100% calc(100% - 6px),calc(100% - 6px) 100%,0 100%,0 6px);font-family:inherit}
+.pk.t1{background:rgba(95,208,221,.15);color:var(--keep);border-color:var(--keep)}
+.pk.t2{background:rgba(207,174,66,.22);color:var(--gold);border-color:var(--gold);font-weight:600}
+.pk.t2::before{content:"★ "}
+.copy{border-top:1px dashed var(--line);padding:7px 0;font-size:12px}
+.copy .cp{color:var(--mut)}
+.copy .hit{color:var(--keep)}
+.copy .hi{color:var(--gold);font-weight:600}
+.copy .act{text-decoration:underline}
+.score{float:right;font-size:12px;padding:2px 9px;clip-path:var(--clip);background:var(--panel2);color:var(--mut);font-variant-numeric:tabular-nums}
+.score.hot{background:rgba(207,174,66,.2);color:var(--gold);font-weight:700}
+.row{display:flex;justify-content:space-between;gap:8px;align-items:center;border-top:1px solid var(--line);padding:8px 0}
+.row .rn{font-weight:600;font-size:13px}
+.row .ri{color:var(--mut);font-size:11px}
+.count{color:var(--mut);font-size:12px;margin:8px 0}
+.note{font-size:10.5px;color:var(--dim);margin-top:6px}
+:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+@media(min-width:760px){body{max-width:880px;margin:0 auto}}
+</style>
+</head>
+<body>
+<h1 class="disp">Weapon <span>Watch</span></h1>
+<p class="sub">God-roll tracker · tag up to 6 perks per weapon (tap: track → ★ high priority → off) · <a href="/">← Vault Verdict</a></p>
+<div class="bar"><button class="btn" id="refreshBtn">Refresh from Bungie</button><span class="count" id="status" style="margin:0"></span></div>
+
+<div id="watched"></div>
+
+<div class="panel">
+  <h2 class="disp">Add weapons to the watchlist</h2>
+  <div class="bar"><input type="search" id="q" placeholder="Search weapon name / type…"></div>
+  <div id="allList"></div>
+</div>
+
+<script>
+let DATA={weapons:[],defs:{}}, WATCH={}, q='';
+const $=id=>document.getElementById(id);
+const esc=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;');
+
+// score: tracked perk anywhere on the roll counts its priority (normal 1, ★ high 2);
+// masterwork match +1. Perks are keyed by NAME so enhanced variants match too.
+// Stat tracking is display-only for now.
+function scoreCopy(w,cfg){
+  let sc=0;
+  const rollPerks=new Set([...w.cols[0],...w.cols[1]].map(p=>p.n));
+  for(const [n,pr] of Object.entries(cfg.perks||{})) if(rollPerks.has(n)) sc+=pr;
+  if(cfg.mw && w.mw===cfg.mw) sc+=1;
+  return sc;
+}
+const trackedCount=cfg=>Object.keys(cfg.perks||{}).length;
+
+const MWS=['range','stability','handling','reload','accuracy','blast_radius','velocity','impact','draw_time','charge_time','projectile_speed'];
+const STAT_PICK=['Range','Stability','Handling','Reload Speed','Aim Assistance','Airborne Effectiveness','Zoom','Recoil Direction','Magazine','Blast Radius','Velocity','Impact','Accuracy','Charge Time','Draw Time'];
+
+function render(){
+  const copiesOf={}; DATA.weapons.forEach(w=>{(copiesOf[w.hash]=copiesOf[w.hash]||[]).push(w);});
+
+  // ---- watched cards ----
+  $('watched').innerHTML=Object.entries(WATCH).map(([hash,cfg])=>{
+    const d=DATA.defs[hash]; if(!d) return '';
+    const copies=copiesOf[hash]||[];
+    const mwOpts=[...new Set([...MWS,...copies.map(c=>c.mw).filter(Boolean)])];
+    const poolBtns=ci=>(d.pool[ci]||[]).map(n=>{
+      const pr=(cfg.perks||{})[n]||0;
+      return `<button class="pk ${pr===1?'t1':pr===2?'t2':''}" data-w="${hash}" data-p="${esc(n)}">${esc(n)}</button>`;
+    }).join('')||'<span class="note">no random perks in this column</span>';
+    const statBtns=STAT_PICK.map(s=>{
+      const on=(cfg.stats||[]).includes(s);
+      return `<button class="pk ${on?'t1':''}" data-w="${hash}" data-st="${esc(s)}">${esc(s)}</button>`;
+    }).join('');
+    const copyRows=copies.map(w=>{
+      const sc=scoreCopy(w,cfg);
+      const col=ci=>w.cols[ci].map(p=>{
+        const pr=(cfg.perks||{})[p.n]||0;
+        return `<span class="${pr===2?'hi':pr===1?'hit':'cp'} ${p.on?'act':''}">${esc(p.n)}</span>`;
+      }).join(' · ')||'—';
+      const stats=(cfg.stats||[]).map(s=>`${esc(s)} <b>${w.stats[s]??'—'}</b>`).join(' · ');
+      return `<div class="copy"><span class="score ${sc>=3?'hot':''}">score ${sc}</span>
+        ${w.locked?'🔒 ':''}${w.own!=='Vault'?'on '+w.own:'Vault'} · ${w.pwr}${w.tag?' · ★'+w.tag:''}
+        · MW: <span class="${cfg.mw&&w.mw===cfg.mw?'hi':'cp'}">${w.mw||'—'}</span><br>
+        <b>3:</b> ${col(0)}<br><b>4:</b> ${col(1)}${stats?`<br>${stats}`:''}</div>`;
+    }).join('');
+    return `<div class="card">
+      <span class="nm">${esc(d.n)}</span>
+      <button class="btn sm red" style="float:right" data-unwatch="${hash}">Unwatch</button>
+      <div class="meta">${esc(d.ty)} · ${d.slot} · ${d.ammo} · ${d.dmg}${d.src?` · <b>${esc(d.src)}</b>`:''} · ${copies.length} in vault · tracking ${trackedCount(cfg)}/6 perks</div>
+      <div class="colh">Column 3 — possible perks</div><div class="pool">${poolBtns(0)}</div>
+      <div class="colh">Column 4 — possible perks</div><div class="pool">${poolBtns(1)}</div>
+      <div class="colh">Wanted masterwork</div>
+      <select data-mw="${hash}"><option value="">any</option>${mwOpts.map(s=>`<option ${cfg.mw===s?'selected':''}>${s}</option>`).join('')}</select>
+      <div class="colh">Watched stats (shown per copy)</div><div class="pool">${statBtns}</div>
+      ${copyRows||'<p class="note">No copies in the vault right now — new drops will be scored against this.</p>'}
+    </div>`;
+  }).join('')||'<p class="count">Nothing watched yet — add weapons below.</p>';
+
+  // ---- add list ----
+  const ql=q.toLowerCase();
+  const rows=Object.entries(DATA.defs)
+    .filter(([h,d])=>!WATCH[h]&&(!ql||d.n.toLowerCase().includes(ql)||d.ty.toLowerCase().includes(ql)))
+    .sort((a,b)=>a[1].n.localeCompare(b[1].n));
+  $('allList').innerHTML=rows.slice(0,ql?200:30).map(([h,d])=>`<div class="row">
+    <div><div class="rn">${esc(d.n)}</div><div class="ri">${esc(d.ty)} · ${d.slot} · ${d.ammo} · ${d.dmg} · ${(copiesOf[h]||[]).length} in vault${d.src?` · ${esc(d.src)}`:''}</div></div>
+    <button class="btn sm" data-watch="${h}">Watch</button></div>`).join('')
+    +(rows.length>(ql?200:30)?`<p class="count">…${rows.length-(ql?200:30)} more — refine the search.</p>`:'');
+}
+
+async function save(){ await fetch('/api/watch',{method:'POST',body:JSON.stringify(WATCH)}); }
+
+document.body.addEventListener('click',e=>{
+  const t=e.target.closest('[data-watch],[data-unwatch],.pk');
+  if(!t) return;
+  if(t.dataset.watch){ const h=t.dataset.watch; WATCH[h]={name:DATA.defs[h].n,perks:{},mw:'',stats:[]}; save(); render(); }
+  else if(t.dataset.unwatch){ if(confirm('Stop watching '+DATA.defs[t.dataset.unwatch].n+'?')){ delete WATCH[t.dataset.unwatch]; save(); render(); } }
+  else if(t.dataset.p){ // perk cycle: off -> track -> high -> off
+    const cfg=WATCH[t.dataset.w]; cfg.perks=cfg.perks||{};
+    const h=t.dataset.p, cur=cfg.perks[h]||0;
+    if(cur===0){ if(trackedCount(cfg)>=6){ t.textContent='6 max!'; setTimeout(render,900); return; } cfg.perks[h]=1; }
+    else if(cur===1) cfg.perks[h]=2;
+    else delete cfg.perks[h];
+    save(); render();
+  }
+  else if(t.dataset.st){ const cfg=WATCH[t.dataset.w]; cfg.stats=cfg.stats||[];
+    cfg.stats=cfg.stats.includes(t.dataset.st)?cfg.stats.filter(s=>s!==t.dataset.st):[...cfg.stats,t.dataset.st];
+    save(); render();
+  }
+});
+document.body.addEventListener('change',e=>{
+  const s=e.target.closest('select[data-mw]');
+  if(s){ WATCH[s.dataset.mw].mw=s.value; save(); render(); }
+});
+$('q').oninput=e=>{q=e.target.value;render();};
+$('refreshBtn').onclick=()=>load(true);
+
+async function load(fresh){
+  $('status').textContent=fresh?'Pulling fresh drops from Bungie…':'Loading…';
+  try{
+    const [d,w]=await Promise.all([
+      fetch('/api/weapons'+(fresh?'?fresh=1':'')).then(r=>r.json()),
+      fetch('/api/watch').then(r=>r.json()),
+    ]);
+    if(d.error) throw new Error(d.error);
+    DATA=d; WATCH=w||{};
+    $('status').textContent=`${DATA.weapons.length} weapons · synced ${new Date(d.fetchedAt).toLocaleTimeString()}`;
+    render();
+  }catch(err){ $('status').textContent='Load failed: '+err.message; }
+}
+load(false);
+</script>
+</body>
+</html>

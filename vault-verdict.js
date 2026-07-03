@@ -76,55 +76,84 @@ async function bungie(url, e, tok) {
 }
 
 // ---------- manifest (slimmed + cached to disk) ----------
-let MANIFEST = null; // { version, items:{hash:{n,b,c,tt,it,set,pc,inv}}, sets:{hash:{n,perks:[{count,n,d}]}} }
+// slim3 shape:
+//   items:    hash -> {n,b,c,tt,it,set,pc,inv,src, ty,ammo,dmg,tr,ti}  (armor it=2, weapons it=3, plugs)
+//             weapons: ty=type name, ammo 1/2/3, dmg damage type, tr=[col3,col4 plugSet hashes],
+//             ti=[col3,col4 socketEntry indexes] (cols 3+4 = 3rd/4th index of the WEAPON_PERKS category)
+//   sets:     hash -> {n,perks:[{count,n,d}]}         (set membership is setItems, reverse-mapped onto items)
+//   plugSets: hash -> [plugItemHash,...]              (only sets referenced by weapon trait columns)
+//   statNames: statHash -> display name
+let MANIFEST = null;
+const WEAPON_PERKS_CAT = 4241085061;
+
+// Set drop location: majority vote of collectible sourceStrings across ALL pieces
+// of the set (some pieces carry junk like "Random Perks: … cannot be reacquired").
+function setSrcMap(setsRaw, srcOfItem) {
+  const out = {};
+  for (const [hash, d] of Object.entries(setsRaw)) {
+    const votes = {};
+    for (const ih of d.setItems || []) {
+      const s = srcOfItem[ih];
+      if (!s || /cannot be reacquired|random perks/i.test(s)) continue;
+      votes[s] = (votes[s] || 0) + 1;
+    }
+    const best = Object.entries(votes).sort((a, b) => b[1] - a[1])[0];
+    if (best) out[hash] = best[0];
+  }
+  return out;
+}
 
 async function loadManifest(e) {
   const meta = await bungie(`${BASE}/Destiny2/Manifest/`, e);
   const version = meta.version;
   fs.mkdirSync(CACHE_DIR, { recursive: true });
-  // slim2: set membership comes from DestinyEquipableItemSetDefinition.setItems
-  // (set -> item hashes); item defs carry no set hash of their own.
-  const cacheFile = path.join(CACHE_DIR, `slim2-${version}.json`);
+  const cacheFile = path.join(CACHE_DIR, `slim3-${version}.json`);
   if (MANIFEST?.version === version) return MANIFEST;
   if (fs.existsSync(cacheFile)) {
     MANIFEST = JSON.parse(fs.readFileSync(cacheFile, 'utf8'));
     console.log(`Manifest ${version} loaded from cache.`);
+    if (!Object.values(MANIFEST.sets).some((s) => s.src)) { // patch older slim3 caches in place (small fetches only)
+      const paths = meta.jsonWorldComponentContentPaths.en;
+      const [setsRaw, colRaw] = await Promise.all([
+        fetch(`https://www.bungie.net${paths.DestinyEquipableItemSetDefinition}`).then((r) => r.json()),
+        fetch(`https://www.bungie.net${paths.DestinyCollectibleDefinition}`).then((r) => r.json()),
+      ]);
+      const srcOfItem = {};
+      for (const c of Object.values(colRaw)) if (c.itemHash && c.sourceString) srcOfItem[c.itemHash] = c.sourceString.replace(/^Source:\s*/i, '');
+      const srcs = setSrcMap(setsRaw, srcOfItem);
+      for (const [h, s] of Object.entries(srcs)) if (MANIFEST.sets[h]) MANIFEST.sets[h].src = s;
+      fs.writeFileSync(cacheFile, JSON.stringify(MANIFEST));
+      console.log(`Patched drop sources onto ${Object.keys(srcs).length} sets.`);
+    }
     return MANIFEST;
   }
+  console.log(`Downloading manifest ${version} (one-time, the item table is a few hundred MB)...`);
   const paths = meta.jsonWorldComponentContentPaths.en;
-  const setsRaw = paths.DestinyEquipableItemSetDefinition
-    ? await (await fetch(`https://www.bungie.net${paths.DestinyEquipableItemSetDefinition}`)).json() : {};
+  const grab = (name) => paths[name] ? fetch(`https://www.bungie.net${paths[name]}`).then((r) => r.json()) : {};
+  const [items, setsRaw, perksRaw, colRaw, plugSetsRaw, statsRaw] = await Promise.all([
+    grab('DestinyInventoryItemDefinition'), grab('DestinyEquipableItemSetDefinition'),
+    grab('DestinySandboxPerkDefinition'), grab('DestinyCollectibleDefinition'),
+    grab('DestinyPlugSetDefinition'), grab('DestinyStatDefinition'),
+  ]);
+
   const setOfItem = {};
   for (const [hash, d] of Object.entries(setsRaw))
     for (const ih of d.setItems || []) setOfItem[ih] = Number(hash);
-
-  // Cheap path: a slim(1) cache for this version only lacks item->set links; patch
-  // it with the reverse map instead of re-downloading the full item table.
-  const oldCache = path.join(CACHE_DIR, `slim-${version}.json`);
-  if (fs.existsSync(oldCache)) {
-    MANIFEST = JSON.parse(fs.readFileSync(oldCache, 'utf8'));
-    for (const [hash, it] of Object.entries(MANIFEST.items)) it.set = setOfItem[hash] || 0;
-    fs.writeFileSync(cacheFile, JSON.stringify(MANIFEST));
-    for (const f of fs.readdirSync(CACHE_DIR)) if (f !== path.basename(cacheFile)) fs.unlinkSync(path.join(CACHE_DIR, f));
-    console.log(`Manifest ${version}: patched set links into cache (${Object.keys(setOfItem).length} set items).`);
-    return MANIFEST;
-  }
-
-  console.log(`Downloading manifest ${version} (one-time, this is the big one — a few hundred MB)...`);
-  const items = await (await fetch(`https://www.bungie.net${paths.DestinyInventoryItemDefinition}`)).json();
-  const perksRaw = await (await fetch(`https://www.bungie.net${paths.DestinySandboxPerkDefinition}`)).json();
+  const srcOfItem = {}; // drop location, e.g. 'Vault of Glass raid'
+  for (const c of Object.values(colRaw))
+    if (c.itemHash && c.sourceString) srcOfItem[c.itemHash] = c.sourceString.replace(/^Source:\s*/i, '');
 
   const slimItems = {};
+  const traitSets = new Set();
   for (const [hash, d] of Object.entries(items)) {
-    const isArmor = d.itemType === 2;
-    const isPlug = !!d.plug;
-    if (!isArmor && !isPlug) continue;
+    const isArmor = d.itemType === 2, isWeapon = d.itemType === 3, isPlug = !!d.plug;
+    if (!isArmor && !isWeapon && !isPlug) continue;
     const inv = {};
     for (const st of d.investmentStats || []) {
       const k = STAT[st.statTypeHash];
       if (k && !st.isConditionallyActive) inv[k] = (inv[k] || 0) + st.value;
     }
-    slimItems[hash] = {
+    const slim = {
       n: d.displayProperties?.name || '',
       b: d.inventory?.bucketTypeHash || 0,
       c: d.classType ?? 3,
@@ -133,12 +162,32 @@ async function loadManifest(e) {
       set: setOfItem[hash] || 0,
       pc: d.plug?.plugCategoryIdentifier || '',
       inv: Object.keys(inv).length ? inv : undefined,
+      src: srcOfItem[hash] || undefined,
     };
+    if (isWeapon) {
+      slim.ty = d.itemTypeDisplayName || '';
+      slim.ammo = d.equippingBlock?.ammoType || 0;
+      slim.dmg = d.defaultDamageType || 0;
+      const cat = d.sockets?.socketCategories?.find((c) => c.socketCategoryHash === WEAPON_PERKS_CAT);
+      const idx = cat?.socketIndexes || [];
+      const tr = [], ti = [];
+      for (const i of [idx[2], idx[3]]) { // 3rd + 4th perk sockets = trait columns 3 and 4
+        const s = i !== undefined ? d.sockets.socketEntries[i] : null;
+        const ps = s ? (s.randomizedPlugSetHash || s.reusablePlugSetHash || 0) : 0;
+        tr.push(ps); ti.push(i ?? -1);
+        if (ps) traitSets.add(ps);
+      }
+      if (tr[0] || tr[1]) { slim.tr = tr; slim.ti = ti; }
+    }
+    slimItems[hash] = slim;
   }
+
+  const setSrcs = setSrcMap(setsRaw, srcOfItem);
   const slimSets = {};
   for (const [hash, d] of Object.entries(setsRaw)) {
     slimSets[hash] = {
       n: d.displayProperties?.name || `Set ${hash}`,
+      src: setSrcs[hash] || '',
       perks: (d.setPerks || []).map((p) => ({
         count: p.requiredSetCount,
         n: perksRaw[p.sandboxPerkHash]?.displayProperties?.name || '',
@@ -146,10 +195,24 @@ async function loadManifest(e) {
       })),
     };
   }
-  MANIFEST = { version, items: slimItems, sets: slimSets };
+
+  const slimPlugSets = {};
+  for (const h of traitSets) {
+    const d = plugSetsRaw[h];
+    if (!d) continue;
+    slimPlugSets[h] = [...new Set((d.reusablePlugItems || [])
+      .filter((p) => p.currentlyCanRoll !== false)
+      .map((p) => p.plugItemHash))];
+  }
+
+  const statNames = {};
+  for (const [h, d] of Object.entries(statsRaw))
+    if (d.displayProperties?.name) statNames[h] = d.displayProperties.name;
+
+  MANIFEST = { version, items: slimItems, sets: slimSets, plugSets: slimPlugSets, statNames };
   fs.writeFileSync(cacheFile, JSON.stringify(MANIFEST));
   for (const f of fs.readdirSync(CACHE_DIR)) if (f !== path.basename(cacheFile)) fs.unlinkSync(path.join(CACHE_DIR, f));
-  console.log(`Manifest slimmed + cached (${Object.keys(slimItems).length} defs).`);
+  console.log(`Manifest slimmed + cached (${Object.keys(slimItems).length} defs, ${Object.keys(slimPlugSets).length} trait plug sets).`);
   return MANIFEST;
 }
 
@@ -174,8 +237,27 @@ function dimOverlay() {
   return { tags, loadoutCount };
 }
 
-// ---------- profile -> items ----------
-async function fetchArmor(e) {
+// Hand-curated set drop locations (short names Diego prefers; recovered from the
+// original static build). Keyed by set name, trailing " Set" ignored when matching.
+// Used before the manifest sourceString, which is verbose and missing for ~half
+// the sets (their collectibles only say "cannot be reacquired").
+const CURATED_SRC = { 'AION Adapter': 'Kepler', "Apostate's Blade": 'Pit of Heresy', "Atheon's Memory": 'Vault of Glass',
+  Bushido: 'Vanguard Ops', Circuit: 'Sparrow Racing League', 'Collective Psyche': 'The Desert Perpetual',
+  "Crota's Memory": "Crota's End", 'Cruel Electrum': 'Trials', Crystocrene: 'Europa', 'Cyberserpent Null': 'Gambit',
+  'Deep Explorer': 'Duality', 'Disaster Corps': 'Rewards Pass', Dreambane: 'The Moon', Eutechnology: 'Vanguard Ops',
+  'Exodus Down': 'Nessus', Ferropotent: 'Vanguard Ops', 'First Ascent': 'The Pale Heart', Flain: 'Sundered Doctrine',
+  'Iron Panoply': 'Iron Banner', 'Last Discipline': 'Rewards Pass (PvP)', "Legacy's Oath": 'Deep Stone Crypt',
+  Luminopotent: 'Vanguard Ops', Lustrous: 'Solstice', 'New Demotic': 'Trials', "Nezarec's Nightmare": 'Root of Nightmares',
+  'Pantheos Resplendent': 'Pantheon', Promised: "Salvation's Edge", 'Reverie Dawn': 'Dreaming City',
+  'Sage Protector': 'Equilibrium', 'Seventh Seraph': 'Cosmodrome', 'Shrewd Survivor': 'Renegades',
+  'Smoke Jumper': 'Vanguard Ops', Swordmaster: 'Vanguard Ops', "Techeun's Regalia": 'Shattered Throne',
+  Techsec: 'Vanguard Ops', 'Thriving Survivor': 'Renegades', Thunderhead: 'Neomuna', 'TM Custom': 'Spire of the Watcher',
+  'Triumphal Anthem': 'Monument of Triumph', 'Twofold Crown': 'Trials', Veritas: 'Throne World',
+  'Wild Anthem': 'Rewards Pass', Wildwood: 'EDZ', 'Resonant Fury': 'Vow of the Disciple' };
+const curatedSrc = (name) => CURATED_SRC[name] || CURATED_SRC[name.replace(/\s+Set$/i, '')] || '';
+
+// ---------- profile fetch (shared by armor + weapons) ----------
+async function fetchProfile(e) {
   const tok = await accessToken(e);
   const ms = await bungie(`${BASE}/User/GetMembershipsById/${tok.membership_id}/254/`, e, tok.access_token);
   const primary = ms.primaryMembershipId;
@@ -183,25 +265,29 @@ async function fetchArmor(e) {
     || (ms.destinyMemberships || []).find((x) => x.crossSaveOverride === 0 || x.crossSaveOverride === x.membershipType)
     || ms.destinyMemberships[0];
   const prof = await bungie(
-    `${BASE}/Destiny2/${m.membershipType}/Profile/${m.membershipId}/?components=102,200,201,205,300,304,305`,
+    `${BASE}/Destiny2/${m.membershipType}/Profile/${m.membershipId}/?components=102,200,201,205,300,304,305,310`,
     e, tok.access_token
   );
   const man = await loadManifest(e);
-  const { tags, loadoutCount } = dimOverlay();
-
   const charName = {};
   for (const [cid, c] of Object.entries(prof.characters?.data || {})) charName[cid] = CLASS[c.classType] || 'Unknown';
-
-  const instances = prof.itemComponents?.instances?.data || {};
-  const liveStats = prof.itemComponents?.stats?.data || {};
-  const sockets = prof.itemComponents?.sockets?.data || {};
-
   const raw = [];
   for (const it of prof.profileInventory?.data?.items || []) raw.push({ it, own: 'Vault' });
   for (const [cid, inv] of Object.entries(prof.characterInventories?.data || {}))
     for (const it of inv.items || []) raw.push({ it, own: charName[cid] });
   for (const [cid, eq] of Object.entries(prof.characterEquipment?.data || {}))
     for (const it of eq.items || []) raw.push({ it, own: charName[cid] });
+  return { prof, man, m, raw };
+}
+
+// ---------- profile -> armor items ----------
+async function fetchArmor(e) {
+  const { prof, man, m, raw } = await fetchProfile(e);
+  const { tags, loadoutCount } = dimOverlay();
+
+  const instances = prof.itemComponents?.instances?.data || {};
+  const liveStats = prof.itemComponents?.stats?.data || {};
+  const sockets = prof.itemComponents?.sockets?.data || {};
 
   const out = [];
   for (const { it, own } of raw) {
@@ -244,7 +330,7 @@ async function fetchArmor(e) {
       n: def.n, id, hash: it.itemHash,
       tag: dim.tag || '', note: dim.note || '',
       x: def.tt === 6, t: inst.gearTier ?? 0,
-      slot, cls: CLASS[def.c] || '—', src: '',
+      slot, cls: CLASS[def.c] || '—', src: def.src || '',
       a: archetype, ter, mw: 0,
       pwr: inst.primaryStat?.value || 0, own,
       lo: loadoutCount[id] || 0,
@@ -253,17 +339,93 @@ async function fetchArmor(e) {
     });
   }
 
-  // sets payload from live manifest (only sets present in the vault)
+  // sets payload from live manifest (only sets present in the vault);
+  // src = drop location from the collectible sourceString of any piece in the set
   const setsOut = {};
   for (const i of out) {
     if (!i.sb || setsOut[i.sb]) continue;
     const sd = Object.values(man.sets).find((s) => s.n === i.sb);
     if (!sd) continue;
     const p2 = sd.perks.find((p) => p.count === 2), p4 = sd.perks.find((p) => p.count === 4);
-    setsOut[i.sb] = { src: '', p2: [p2?.n || '2-piece', p2?.d || ''], p4: [p4?.n || '4-piece', p4?.d || ''] };
+    setsOut[i.sb] = { src: curatedSrc(i.sb) || sd.src || '', p2: [p2?.n || '2-piece', p2?.d || ''], p4: [p4?.n || '4-piece', p4?.d || ''] };
   }
   return { items: out, sets: setsOut, fetchedAt: new Date().toISOString(), account: `${m.membershipType}/${m.membershipId}` };
 }
+
+// ---------- profile -> weapons (god-roll tracker) ----------
+const WBUCKET = { 1498876634: 'Kinetic', 2465295065: 'Energy', 953998645: 'Power' };
+const AMMO = { 1: 'Primary', 2: 'Special', 3: 'Heavy' };
+const DMG = { 1: 'Kinetic', 2: 'Arc', 3: 'Solar', 4: 'Void', 6: 'Stasis', 7: 'Strand' };
+
+async function fetchWeapons(e) {
+  const { prof, man, m, raw } = await fetchProfile(e);
+  const { tags } = dimOverlay();
+
+  const instances = prof.itemComponents?.instances?.data || {};
+  const liveStats = prof.itemComponents?.stats?.data || {};
+  const sockets = prof.itemComponents?.sockets?.data || {};
+  const reusable = prof.itemComponents?.reusablePlugs?.data || {};
+
+  const weapons = [], defsOut = {};
+  for (const { it, own } of raw) {
+    const def = man.items[it.itemHash];
+    if (!def || def.it !== 3 || !it.itemInstanceId || !WBUCKET[def.b]) continue;
+    const id = it.itemInstanceId;
+    const inst = instances[id] || {};
+    const socks = sockets[id]?.sockets || [];
+    const reuse = reusable[id]?.plugs || {};
+
+    // trait columns: every perk available on THIS roll (multi-perk drops included).
+    // Perks are identified by NAME: enhanced and normal variants of the same perk
+    // have different hashes, and the watch config must match either.
+    const cols = [[], []];
+    (def.ti || []).forEach((si, ci) => {
+      if (si < 0) return;
+      const opts = reuse[si]?.map((p) => p.plugItemHash) || (socks[si]?.plugHash ? [socks[si].plugHash] : []);
+      const byName = new Map();
+      for (const h of opts) {
+        const n = man.items[h]?.n || `#${h}`;
+        if (!byName.has(n)) byName.set(n, { n, on: false });
+        if (socks[si]?.plugHash === h) byName.get(n).on = true;
+      }
+      cols[ci] = [...byName.values()];
+    });
+
+    // masterwork: plug category 'masterworks.stat.<stat>'
+    let mw = '';
+    for (const s of socks) {
+      const mm = s.plugHash && man.items[s.plugHash]?.pc.match(/masterworks\.stat\.(\w+)/);
+      if (mm) { mw = mm[1]; break; }
+    }
+
+    const stats = {};
+    for (const [sh, sv] of Object.entries(liveStats[id]?.stats || {})) {
+      const nm = man.statNames[sh];
+      if (nm) stats[nm] = sv.value;
+    }
+
+    if (!defsOut[it.itemHash]) {
+      defsOut[it.itemHash] = {
+        n: def.n, ty: def.ty, tt: def.tt, slot: WBUCKET[def.b],
+        ammo: AMMO[def.ammo] || '', dmg: DMG[def.dmg] || '', src: def.src || '',
+        pool: (def.tr || []).map((ps) => [...new Set((man.plugSets[ps] || []).map((h) => man.items[h]?.n || `#${h}`))]),
+      };
+    }
+    weapons.push({
+      id, hash: it.itemHash, own, locked: !!(it.state & 1),
+      tag: tags[id]?.tag || '', pwr: inst.primaryStat?.value || 0,
+      cols, mw, stats,
+    });
+  }
+  return { weapons, defs: defsOut, fetchedAt: new Date().toISOString(), account: `${m.membershipType}/${m.membershipId}` };
+}
+
+// ---------- god-roll watch config ----------
+const WATCH_FILE = path.join(__dirname, 'weapon-watch.json');
+function loadWatch() {
+  try { return JSON.parse(fs.readFileSync(WATCH_FILE, 'utf8')); } catch { return {}; }
+}
+function saveWatch(w) { fs.writeFileSync(WATCH_FILE, JSON.stringify(w, null, 2)); }
 
 // ---------- probe mode for debugging ----------
 async function probe(nameLike) {
@@ -275,19 +437,37 @@ async function probe(nameLike) {
 }
 
 // ---------- server ----------
+const readBody = (req) => new Promise((ok) => {
+  let b = ''; req.on('data', (c) => b += c); req.on('end', () => ok(b));
+});
+
 async function main() {
   if (process.argv[2] === 'probe') return probe(process.argv[3] || '');
   const e = env();
-  let cache = null;
+  let cache = null, wcache = null;
   const server = http.createServer(async (req, res) => {
     try {
+      const json = (obj) => { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(obj)); };
       if (req.url.startsWith('/api/armor')) {
         const fresh = req.url.includes('fresh=1');
         if (!cache || fresh) cache = await fetchArmor(e);
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        return res.end(JSON.stringify(cache));
+        return json(cache);
+      }
+      if (req.url.startsWith('/api/weapons')) {
+        const fresh = req.url.includes('fresh=1');
+        if (!wcache || fresh) wcache = await fetchWeapons(e);
+        return json(wcache);
+      }
+      if (req.url.startsWith('/api/watch')) {
+        if (req.method === 'POST') {
+          const body = JSON.parse(await readBody(req) || '{}');
+          saveWatch(body);
+          return json({ ok: true });
+        }
+        return json(loadWatch());
       }
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+      if (req.url.startsWith('/weapons')) return res.end(fs.readFileSync(path.join(__dirname, 'weapon-watch.html')));
       return res.end(fs.readFileSync(HTML_FILE));
     } catch (err) {
       console.error(err);

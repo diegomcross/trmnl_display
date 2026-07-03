@@ -73,8 +73,9 @@ Core priorities, in his words:
 | `watch-destiny.ps1` | Optional game-coupled alternative: watches for `destiny2.exe` and starts/stops the server with the game. `-Setup` tried to register a Task Scheduler task but that is **denied** on this PC. Logs to `watcher.log`. |
 | `config.json` | Settings written by the settings page (gitignored; per-machine). |
 | `manifest-cache.json` | Cached Bungie manifest defs (gitignored). `CACHE_SCHEMA` const invalidates it when the stored shape changes. |
-| `vault-verdict.js` | **Vault Verdict** server (port **8787**): live Armor 3.0 vault triage. Reuses `.env` + `tokens.json`. Slims the manifest to `vault-manifest-cache/slim2-<version>.json`. `node vault-verdict.js probe "name"` dumps one item for debugging. |
-| `vault-verdict.html` | Vault Verdict frontend (served by `vault-verdict.js`): verdict engine, set-bonus 4pc/2pc rating panel, exotic favorite-stat tuning panel, DIM query export. |
+| `vault-verdict.js` | **Vault Verdict** server (port **8787**): live Armor 3.0 vault triage + weapons API. Reuses `.env` + `tokens.json`. Slims the manifest to `vault-manifest-cache/slim3-<version>.json` (armor + weapons + trait plug sets + drop sources). `node vault-verdict.js probe "name"` dumps one item for debugging. |
+| `vault-verdict.html` | Vault Verdict frontend (served at `/`): verdict engine, set-bonus 4pc/2pc rating panel with drop locations, exotic favorite-stat tuning panel (per-class filter, primary›secondary), DIM query export. |
+| `weapon-watch.html` | **Weapon Watch** god-roll tracker UI (served at `/weapons`): pick weapons, tag up to 6 perks (normal/★high priority), wanted masterwork + watched stats; scores every copy in the vault. Config saved server-side to `weapon-watch.json` (gitignored). |
 | `CLAUDE.md` | Working rules for agents: never drop features, test before push, and **mandatory upkeep of this file + `docs/NEXT_PHASE.md`**. |
 | `docs/NEXT_PHASE.md` | The pickup point: specs + open questions for upcoming features. |
 
@@ -144,13 +145,28 @@ Core priorities, in his words:
     set membership lives in `DestinyEquipableItemSetDefinition.setItems`
     (set → item hashes). The slimmer builds the reverse map (`slim2-` cache;
     an old `slim-` cache gets patched in place, no manifest re-download).
-  - **Exotic favorite-stat tuning (NEW):** per-exotic favorite stat(s) — the stats
-    that synergize with the exotic's function (Diego's list is seeded as defaults
-    in `DEFAULT_FAVS`; note the game spells it "Mataiodoxía" with í). Exotics with
-    favorites keep only the copy with the highest favorite-stat total; untuned
+  - **Exotic favorite-stat tuning:** per-exotic favorite stats, **max 2, ordered —
+    first pick is primary, second secondary**; copies ranked by primary stat then
+    secondary. Panel has per-class filter tabs. Diego's list is seeded as defaults
+    in `DEFAULT_FAVS` (note the game spells it "Mataiodoxía" with í). Untuned
     exotics fall back to per-archetype niches and show under the **Pending**
     filter. Ratings + favorites persist (`vv-ratings` / `vv-exofavs`, localStorage
     + `window.storage` when present) and ride along in Export/Import ratings.
+  - **Set drop locations:** each set row shows where it drops. Hand-curated map
+    (`CURATED_SRC` in vault-verdict.js — short names like "Vanguard Ops") first,
+    manifest collectible `sourceString` (majority vote across the set's pieces,
+    junk "cannot be reacquired" strings filtered) as fallback. **Do not remove.**
+  - **Weapon Watch (NEW — god-roll tracker foundation, `/weapons`):** `/api/weapons`
+    returns every vault/character weapon with its possible col-3/col-4 perk pools
+    (from `randomizedPlugSetHash` of the 3rd/4th sockets in socket category
+    4241085061), the actual roll's perk options (component **310** reusablePlugs —
+    multi-perk drops included), masterwork (plug pc `masterworks.stat.<stat>`),
+    live stats, and lock state. **Perks are matched by NAME, not hash** — enhanced
+    variants have different hashes. UI: watchlist per weapon with up to 6 tracked
+    perks (tap cycles track → ★ high priority → off), wanted masterwork, watched
+    stats; every copy gets a score (perk hit = its priority 1/2, masterwork +1).
+    Config persists server-side in `weapon-watch.json` via GET/POST `/api/watch`.
+    Detection/alerting of NEW drops is not built yet — see NEXT_PHASE.md.
   - **Build synergy (NEW):** legendary keepers get "Pairs with <exotic>" notes when
     their archetype stats match a tuned exotic's favorites (same slot excluded);
     keepers no tuned exotic favors demote to Review (`oSyn` rules toggle). Classes

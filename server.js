@@ -211,8 +211,21 @@ export function svgToBmp1bit(svg, invert = false) {
 }
 
 // ---------------- screen state + model cache + render loop ----------------
-let state = { bmp: null, png: null, filename: 'starting.bmp', svg: '', pageIndex: -1, updated: null, error: null };
+let state = { bmp: null, png: null, filename: 'starting.bmp', svg: '', pageIndex: -1, updated: null, error: null, sig: '' };
 let lastModel = null, lastModelAt = 0;
+
+// Content signature of the model's *meaningful* progress across every page type.
+// Order-independent (entries sorted) so a reshuffle from Bungie with identical values
+// does not count as a change. The panel only redraws when this signature changes — a
+// pure rotation tick with static data must NOT wake the e-ink (see refresh()).
+function modelSignature(model) {
+  const n = (v) => Math.round(Number(v) || 0);
+  const orders = (model.orders || []).map((o) => `${o.name}|${n(o.p?.prog)}|${n(o.p?.total)}|${o.tracked ? 1 : 0}`).sort();
+  const quests = (model.quests || []).map((q) => `${q.name}|${n(q.step)}|${n(q.steps)}|${n(q.p?.prog)}|${n(q.p?.total)}|${q.tracked ? 1 : 0}`).sort();
+  const triumphs = (model.triumphs || []).map((t) => `${t.name}|${n(t.p?.prog)}|${n(t.p?.total)}|${n((t.frac || 0) * 1000)}`).sort();
+  const seals = (model.seals || []).map((s) => `${s.title}|${n(s.done)}|${n(s.totalReq)}|${n((s.frac || 0) * 1000)}`).sort();
+  return JSON.stringify({ orders, quests, triumphs, seals });
+}
 
 function demoModel() {
   return {
@@ -271,25 +284,38 @@ function pickPageIndex(cfg) {
   return Math.floor(Date.now() / 1000 / cfg.rotationSeconds) % ps.length;
 }
 
-async function refresh() {
+async function refresh(force = false) {
+  const ts = new Date().toLocaleTimeString();
   try {
     const cfg = loadConfig();
     const model = await getModel(cfg);
+    const sig = modelSignature(model);
+    const dataChanged = sig !== state.sig;
+    state.sig = sig;
+    state.updated = new Date(); state.error = null;
+
+    // Flicker/battery guard: unless a settings change or first render forces it, only proceed
+    // when some order/quest/triumph progress actually moved. A rotation tick with static data
+    // holds the current image so the e-ink panel does not redraw every 30s.
+    if (!force && !dataChanged && state.bmp) {
+      console.log(`[${ts}] no progress change; holding ${state.filename} (panel stays asleep)`);
+      return;
+    }
+
     const ps = enabledPages(cfg);
-    const page = ps.length ? ps[Math.min(pickPageIndex(cfg), ps.length - 1)] : { type: 'orders', count: 5, offset: 0, rarities: ['common', 'legendary', 'exotic'] };
     const idx = ps.length ? Math.min(pickPageIndex(cfg), ps.length - 1) : 0;
+    const page = ps.length ? ps[idx] : { type: 'orders', count: 5, offset: 0, rarities: ['common', 'legendary', 'exotic'] };
     const svg = renderPage(model, page, { count: page.count ?? cfg.count, offset: page.offset ?? 0, descSize: cfg.descSize, showNumbers: cfg.showNumbers });
-    const ts = new Date().toLocaleTimeString();
-    if (svg !== state.svg || idx !== state.pageIndex || !state.bmp) {
+    if (svg !== state.svg || !state.bmp) {
       state.bmp = svgToBmp1bit(svg, cfg.invert);
       state.png = null; // invalidate cached PNG so next /screen.png re-renders
       state.svg = svg; state.pageIndex = idx;
       state.filename = `d2-${Date.now()}.bmp`;
-      console.log(`[${ts}] page ${idx + 1}/${ps.length || 1} (${page.type}) changed -> ${state.filename}; panel will redraw`);
+      const why = force ? 'settings/startup' : 'progress changed';
+      console.log(`[${ts}] page ${idx + 1}/${ps.length || 1} (${page.type}) ${why} -> ${state.filename}; panel will redraw`);
     } else {
-      console.log(`[${ts}] page ${idx + 1}/${ps.length || 1} (${page.type}) unchanged; panel stays asleep`);
+      console.log(`[${ts}] page ${idx + 1}/${ps.length || 1} (${page.type}) render identical; panel stays asleep`);
     }
-    state.updated = new Date(); state.error = null;
   } catch (e) {
     state.error = e.message;
     console.error('refresh error:', e.message);
@@ -479,8 +505,7 @@ const server = http.createServer(async (req, res) => {
       let input = {}; try { input = JSON.parse(await readBody(req) || '{}'); } catch { input = {}; }
       const cfg = sanitizeConfig(input); saveConfig(cfg);
       lastConfigChangeAt = Date.now(); // opens a ~1 min quick-refresh window for the panel
-      state.pageIndex = -1; // force a redraw on the next refresh so the preview/panel update
-      await refresh();
+      await refresh(true); // force a redraw so the preview/panel reflect the new settings
       res.writeHead(200, { 'Content-Type': 'application/json' });
       return res.end(JSON.stringify({ ok: true, config: cfg }));
     }
