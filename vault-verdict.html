@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Vault Verdict — Armor 3.0 Triage</title>
+<style>
+:root{
+  --bg:#0c0e12; --panel:#151821; --panel2:#1b1f2b; --line:#2a2f3d;
+  --ink:#e9ebf2; --mut:#8b93a7; --dim:#5c6375;
+  --gold:#cfae42; --purp:#a97fd6;
+  --keep:#5fd0dd; --rev:#e8b64c; --junk:#ff6a52; --und:#a97fd6;
+  --clip:polygon(10px 0,100% 0,100% calc(100% - 10px),calc(100% - 10px) 100%,0 100%,0 10px);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{-webkit-text-size-adjust:100%}
+body{background:var(--bg);color:var(--ink);font:15px/1.45 "Segoe UI",Roboto,system-ui,sans-serif;padding:12px;padding-bottom:80px}
+.disp{font-family:Bahnschrift,"Roboto Condensed","Arial Narrow",sans-serif;text-transform:uppercase;letter-spacing:.09em}
+h1{font-size:22px;font-weight:600}
+h1 span{color:var(--gold)}
+.sub{color:var(--mut);font-size:12px;margin:2px 0 12px}
+.chips{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px}
+.chip{background:var(--panel);border:1px solid var(--line);clip-path:var(--clip);padding:8px 14px;min-width:70px}
+.chip b{display:block;font-size:20px;font-variant-numeric:tabular-nums}
+.chip small{color:var(--mut);font-size:10px;text-transform:uppercase;letter-spacing:.08em}
+.chip.k b{color:var(--keep)}.chip.r b{color:var(--rev)}.chip.j b{color:var(--junk)}.chip.u b{color:var(--und)}
+.bar{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}
+.tab{background:var(--panel);border:1px solid var(--line);color:var(--mut);padding:7px 13px;cursor:pointer;font-size:12px;clip-path:var(--clip)}
+.tab.on{color:var(--ink);border-color:var(--gold);background:var(--panel2)}
+select,input[type=search]{background:var(--panel);border:1px solid var(--line);color:var(--ink);padding:8px 10px;font-size:13px;clip-path:var(--clip);appearance:none}
+input[type=search]{flex:1;min-width:140px}
+.tgl{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--mut);padding:5px 0;cursor:pointer;user-select:none}
+.tgl input{accent-color:var(--gold);width:16px;height:16px;flex-shrink:0}
+.panel{background:var(--panel);border:1px solid var(--line);clip-path:var(--clip);padding:12px;margin-bottom:14px}
+.panel h2{font-size:13px;color:var(--mut);margin-bottom:8px}
+details.panel summary{font-size:13px;color:var(--mut);cursor:pointer;text-transform:uppercase;letter-spacing:.09em;font-family:Bahnschrift,"Roboto Condensed","Arial Narrow",sans-serif;list-style:none}
+details.panel summary::after{content:" +";color:var(--gold)}
+details.panel[open] summary::after{content:" –"}
+.mtx{width:100%;border-collapse:collapse;font-size:11px;table-layout:fixed}
+.mtx th{color:var(--dim);font-weight:400;padding:3px 1px;text-transform:uppercase;font-size:9px;letter-spacing:.05em}
+.mtx td{border:1px solid var(--line);text-align:center;padding:7px 0;cursor:pointer;font-variant-numeric:tabular-nums;color:var(--mut)}
+.mtx td.hot{color:var(--ink);background:rgba(95,208,221,.10)}
+.mtx td.sel{outline:2px solid var(--gold);outline-offset:-2px;color:var(--gold)}
+.mtx th.rowh{text-align:left;font-size:10px;color:var(--mut);width:86px}
+.mtx th.rowh i{font-style:normal;color:var(--dim)}
+.new::before{content:"◆ ";color:var(--gold);font-size:8px}
+.card{background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--dim);clip-path:var(--clip);padding:10px 12px;margin-bottom:8px}
+.card.vkeep{border-left-color:var(--keep)}
+.card.vreview{border-left-color:var(--rev)}
+.card.vjunk{border-left-color:var(--junk)}
+.card .top{display:flex;justify-content:space-between;gap:8px;align-items:baseline}
+.nm{font-weight:600;font-size:14px}
+.nm.ex{color:var(--gold)}
+.vb{font-size:10px;padding:2px 8px;clip-path:var(--clip);white-space:nowrap}
+.vb.vkeep{background:rgba(95,208,221,.15);color:var(--keep)}
+.vb.vreview{background:rgba(232,182,76,.15);color:var(--rev)}
+.vb.vjunk{background:rgba(255,106,82,.15);color:var(--junk)}
+.meta{color:var(--mut);font-size:11.5px;margin:3px 0}
+.meta b{color:var(--ink);font-weight:600}
+.pips{letter-spacing:2px;color:var(--gold);font-size:9px}
+.pips .off{color:var(--line)}
+.stats{display:flex;gap:4px;margin-top:6px;flex-wrap:wrap}
+.st{background:var(--panel2);padding:3px 7px;font-size:11px;color:var(--dim);font-variant-numeric:tabular-nums;clip-path:var(--clip)}
+.st b{color:var(--ink);font-weight:600}
+.st.hi{background:rgba(207,174,66,.14)}.st.hi b{color:var(--gold)}
+.why{font-size:11.5px;color:var(--mut);margin-top:6px;border-top:1px dashed var(--line);padding-top:5px}
+.why em{color:var(--rev);font-style:normal}
+.why u{color:var(--und);text-decoration:none}
+.flag{font-size:10px;color:var(--purp)}
+.btn{background:var(--panel2);border:1px solid var(--gold);color:var(--gold);padding:9px 14px;font-size:12px;cursor:pointer;clip-path:var(--clip);font-family:inherit}
+.btn:active{background:var(--gold);color:#000}
+.btn.sm{padding:5px 10px;font-size:11px}
+.export{position:fixed;bottom:0;left:0;right:0;background:rgba(12,14,18,.96);border-top:1px solid var(--line);padding:10px 12px;display:flex;gap:8px;overflow-x:auto;backdrop-filter:blur(6px)}
+.count{color:var(--mut);font-size:12px;margin:10px 0}
+.more{width:100%;margin-top:6px}
+/* set rating rows */
+.srow{border-top:1px solid var(--line);padding:10px 0}
+.srow .sh{display:flex;justify-content:space-between;gap:8px;align-items:baseline;flex-wrap:wrap}
+.srow .snm{font-weight:600;font-size:13.5px}
+.srow .ssrc{color:var(--dim);font-size:10.5px}
+.perk{font-size:11.5px;color:var(--mut);margin:5px 0 0;line-height:1.4}
+.perk b{color:var(--ink)}
+.perk .pcx{color:var(--gold);font-size:10px;font-family:Bahnschrift,"Roboto Condensed",sans-serif;letter-spacing:.06em}
+.seg{display:flex;gap:0;margin-top:8px}
+.seg button{flex:1;background:var(--panel2);border:1px solid var(--line);color:var(--mut);padding:7px 4px;font-size:10.5px;cursor:pointer;text-transform:uppercase;letter-spacing:.05em;font-family:inherit}
+.seg button:first-child{clip-path:polygon(8px 0,100% 0,100% 100%,0 100%,0 8px)}
+.seg button:last-child{clip-path:polygon(0 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%)}
+.seg button.on4{background:rgba(95,208,221,.2);color:var(--keep);border-color:var(--keep)}
+.seg button.on2{background:rgba(207,174,66,.2);color:var(--gold);border-color:var(--gold)}
+.seg button.onI{background:rgba(255,106,82,.18);color:var(--junk);border-color:var(--junk)}
+.seg button.onU{background:rgba(169,127,214,.18);color:var(--und);border-color:var(--und)}
+.savenote{font-size:10.5px;color:var(--dim);margin-top:8px}
+:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+@media(prefers-reduced-motion:no-preference){.card{animation:in .18s ease both}@keyframes in{from{opacity:0;transform:translateY(4px)}to{opacity:1}}}
+@media(min-width:760px){body{max-width:880px;margin:0 auto}}
+</style>
+</head>
+<body>
+<h1 class="disp">Vault <span>Verdict</span></h1>
+<p class="sub">Armor 3.0 triage · live from Bungie · set ratings drive the verdicts</p>
+<div class="bar"><button class="btn" id="refreshBtn">Refresh from Bungie</button><span class="count" id="status" style="margin:0;align-self:center"></span></div>
+
+<div class="chips" id="chips"></div>
+
+<div class="bar" id="clsTabs"></div>
+<div class="bar" id="vTabs"></div>
+<div class="bar">
+  <select id="slotSel"><option value="">All slots</option></select>
+  <select id="setSel"><option value="">All bonus sets</option></select>
+  <input type="search" id="q" placeholder="Search name / note…">
+</div>
+
+<details class="panel" id="setPanel">
+  <summary>Set bonuses — rate what matters to you</summary>
+  <p class="savenote">4-pc: keep full slot coverage per archetype+tertiary · 2-pc: keep best per slot+archetype (enough to wear any two) · Ignore: pieces survive only if they beat everything globally for the 180 target · Undecided: protected + flagged. Ratings save automatically.</p>
+  <div class="bar" style="margin-top:8px">
+    <button class="btn sm" id="expBtn">Export ratings</button>
+    <button class="btn sm" id="impBtn">Import ratings</button>
+  </div>
+  <div id="setList"></div>
+</details>
+
+<details class="panel">
+  <summary>Rules — tune the verdict engine</summary>
+  <label class="tgl"><input type="checkbox" id="oHp" checked> Demote Health-primary keepers (Bulwark, Siegebreaker) to Review — Health is not a target stat</label>
+  <label class="tgl"><input type="checkbox" id="oFav" checked> Never junk items tagged favorite (demote to Review)</label>
+  <label class="tgl"><input type="checkbox" id="oLo" checked> Never junk items used in DIM loadouts (demote to Review)</label>
+</details>
+
+<div class="panel">
+  <h2 class="disp">Niche matrix — keepers per archetype × tertiary <span style="color:var(--dim)">(tap to filter · ◆ = Monument archetype)</span></h2>
+  <table class="mtx" id="mtx"></table>
+</div>
+
+<div class="count" id="count"></div>
+<div id="list"></div>
+<button class="btn more" id="more" hidden>Show 60 more</button>
+
+<div class="export">
+  <button class="btn" data-x="junk">Copy junk DIM query</button>
+  <button class="btn" data-x="review">Copy review query</button>
+  <button class="btn" data-x="pending">Copy set-pending</button>
+  <button class="btn" data-x="filtered">Copy current view</button>
+</div>
+
+<script>
+let ITEMS = [];
+let SETS = {};
+let FETCHED = '';
+const ARCH = {Paragon:['s','m'],Grenadier:['g','s'],Specialist:['c','w'],Brawler:['m','h'],Bulwark:['h','c'],Gunner:['w','g'],
+Powerhouse:['w','s'],Colossus:['s','h'],Demolitionist:['g','c'],Reaver:['c','m'],Siegebreaker:['h','g'],Skirmisher:['m','w']};
+const NEWA = new Set(['Powerhouse','Colossus','Demolitionist','Reaver','Siegebreaker','Skirmisher']);
+const STATN = {w:'Wpn',h:'Hlth',c:'Cls',g:'Grn',s:'Spr',m:'Mel'};
+const TERS = ['Weapons','Health','Class','Grenade','Super','Melee'];
+const TAGRANK = {favorite:3,keep:2,'':1,infuse:1,junk:0};
+const isClassItem = s => ['Bond','Cloak','Mark'].includes(s);
+const RLBL = {'4pc':'4-piece','2pc':'2-pc only','ignore':'Ignore','und':'Undecided'};
+
+// ---------- persistence ----------
+let ratings = {};
+async function loadRatings(){
+  try{ if(window.storage){ const r=await window.storage.get('vv-ratings'); if(r&&r.value){ratings=JSON.parse(r.value);return;} } }catch(e){}
+  try{ const s=localStorage.getItem('vv-ratings'); if(s)ratings=JSON.parse(s); }catch(e){}
+}
+async function saveRatings(){
+  const s=JSON.stringify(ratings);
+  try{ if(window.storage){ await window.storage.set('vv-ratings',s); return; } }catch(e){}
+  try{ localStorage.setItem('vv-ratings',s); }catch(e){}
+}
+const rateOf = sb => sb ? (ratings[sb]||'und') : 'ignore';
+
+// ---------- verdict engine ----------
+function compute(o){
+  const groups = new Map();
+  for(const it of ITEMS){
+    it.v=null; it.why=''; it.pend=false;
+    if(it.tag==='junk'){ it.v='junk'; it.why='You tagged it junk.'; continue; }
+    if(it.t===0){ it.v='review'; it.why='Armor 2.0 legacy — keep only for raid mod slots or a stat combo no archetype can roll.'; continue; }
+    const slot = isClassItem(it.slot)?'Class Item':it.slot;
+    let key;
+    if(it.x){ key = `X|${it.cls}|${it.n}|${it.a}|${it.ter}`; }
+    else{
+      const r = rateOf(it.sb);
+      it.pend = (r==='und' && !!it.sb);
+      if(r==='ignore')      key = `L|${it.cls}|${slot}|${it.a}|${it.ter}|`;              // global stat pool
+      else if(r==='2pc')    key = `L|${it.cls}|${slot}|${it.a}|2|${it.sb}`;              // per slot+archetype
+      else                  key = `L|${it.cls}|${slot}|${it.a}|${it.ter}|${it.sb}`;      // 4pc / undecided: full split
+    }
+    if(!groups.has(key)) groups.set(key,[]);
+    groups.get(key).push(it);
+  }
+  for(const arr of groups.values()){
+    arr.sort((a,b)=> b.t-a.t || b.tot-a.tot || b.mw-a.mw || (TAGRANK[b.tag]-TAGRANK[a.tag]) || b.lo-a.lo);
+    const best = arr[0];
+    best.v='keep';
+    const r = best.x?'':rateOf(best.sb);
+    best.why = (arr.length>1?`Best of ${arr.length} in this niche.`:'Only piece in this niche.');
+    if(r==='2pc') best.why += ' Held for the 2-piece bonus.';
+    if(r==='ignore'&&best.sb) best.why += ' Set ignored — earning its slot on stats alone.';
+    if(best.pend) best.why += ' <u>Set rating pending — decide in the set panel.</u>';
+    if(best.t<5){ best.v='review'; best.why += ' <em>Sub-Tier 5 — farmable upgrade exists.</em>'; }
+    for(let i=1;i<arr.length;i++){
+      const it=arr[i];
+      it.v='junk';
+      it.why=`Outclassed by <b>${best.n}</b> (T${best.t}, ${best.tot} base).`;
+      if(o.fav && it.tag==='favorite'){ it.v='review'; it.why+=' <em>Kept from junk: tagged favorite.</em>'; }
+      else if(o.lo && it.lo>0){ it.v='review'; it.why+=` <em>Kept from junk: in ${it.lo} loadout${it.lo>1?'s':''}.</em>`; }
+    }
+    if(o.hp && !best.x && (best.a==='Bulwark'||best.a==='Siegebreaker') && best.v==='keep'){
+      best.v='review'; best.why+=' <em>Health-primary archetype — off-target for your 180 builds.</em>';
+    }
+  }
+}
+
+// ---------- state ----------
+let F={cls:'',v:'',slot:'',set:'',q:'',a:'',ter:'',pend:false}, shown=60;
+const $=id=>document.getElementById(id);
+const opts=()=>({hp:$('oHp').checked,fav:$('oFav').checked,lo:$('oLo').checked});
+
+function filtered(){
+  const q=F.q.toLowerCase();
+  return ITEMS.filter(i=>
+    (!F.cls||i.cls===F.cls)&&(!F.v||i.v===F.v)&&(!F.pend||i.pend)&&
+    (!F.slot||(isClassItem(i.slot)?'Class Item':i.slot)===F.slot)&&
+    (!F.set||i.sb===F.set)&&
+    (!F.a||i.a===F.a)&&(!F.ter||i.ter===F.ter)&&
+    (!q||i.n.toLowerCase().includes(q)||i.note.toLowerCase().includes(q)));
+}
+
+function render(){
+  compute(opts());
+  const c={keep:0,review:0,junk:0}; let pend=0;
+  ITEMS.forEach(i=>{c[i.v]++; if(i.pend)pend++;});
+  $('chips').innerHTML=
+    `<div class="chip"><b>${ITEMS.length}</b><small>pieces</small></div>`+
+    `<div class="chip k"><b>${c.keep}</b><small>keep</small></div>`+
+    `<div class="chip r"><b>${c.review}</b><small>review</small></div>`+
+    `<div class="chip j"><b>${c.junk}</b><small>junk · frees ${c.junk}</small></div>`+
+    `<div class="chip u"><b>${pend}</b><small>set pending</small></div>`;
+
+  $('clsTabs').innerHTML=['','Warlock','Hunter','Titan'].map(x=>
+    `<button class="tab disp ${F.cls===x?'on':''}" data-cls="${x}">${x||'All classes'}</button>`).join('');
+  $('vTabs').innerHTML=[['','All'],['keep','Keep'],['review','Review'],['junk','Junk']].map(([v,l])=>
+    `<button class="tab disp ${F.v===v&&!F.pend?'on':''}" data-v="${v}">${l}</button>`).join('')+
+    `<button class="tab disp ${F.pend?'on':''}" data-pend="1">Set pending</button>`;
+
+  const pool=ITEMS.filter(i=>(!F.cls||i.cls===F.cls)&&i.v==='keep'&&i.a!=='—');
+  let h='<tr><th class="rowh"></th>'+TERS.map(t=>`<th>${t.slice(0,4)}</th>`).join('')+'</tr>';
+  for(const a of Object.keys(ARCH)){
+    const[p,s]=ARCH[a];
+    h+=`<tr><th class="rowh ${NEWA.has(a)?'new':''}">${a} <i>${STATN[p]}/${STATN[s]}</i></th>`;
+    for(const t of TERS){
+      const n=pool.filter(i=>i.a===a&&i.ter===t).length;
+      const sel=F.a===a&&F.ter===t;
+      h+=`<td class="${n?'hot':''} ${sel?'sel':''}" data-a="${a}" data-ter="${t}">${n||'·'}</td>`;
+    }
+    h+='</tr>';
+  }
+  $('mtx').innerHTML=h;
+
+  renderSets();
+
+  const rows=filtered();
+  $('count').textContent=`${rows.length} shown${F.a?` · ${F.a} / ${F.ter} (tap cell again to clear)`:''}`;
+  $('list').innerHTML=rows.slice(0,shown).map(card).join('');
+  $('more').hidden=rows.length<=shown;
+}
+
+function renderSets(){
+  const counts={};
+  ITEMS.forEach(i=>{ if(i.sb) counts[i.sb]=(counts[i.sb]||0)+1; });
+  const names=Object.keys(counts).sort((a,b)=>counts[b]-counts[a]);
+  $('setList').innerHTML=names.map(nm=>{
+    const s=SETS[nm], r=ratings[nm]||'und';
+    return `<div class="srow">
+      <div class="sh"><span class="snm">${nm} <span style="color:var(--dim);font-weight:400">· ${counts[nm]} pcs</span></span><span class="ssrc">${s.src}</span></div>
+      <p class="perk"><span class="pcx">2-pc ${s.p2[0]}</span> — ${s.p2[1]}</p>
+      <p class="perk"><span class="pcx">4-pc ${s.p4[0]}</span> — ${s.p4[1]}</p>
+      <div class="seg" data-set="${nm}">
+        <button class="${r==='4pc'?'on4':''}" data-r="4pc">4-piece</button>
+        <button class="${r==='2pc'?'on2':''}" data-r="2pc">2-pc only</button>
+        <button class="${r==='ignore'?'onI':''}" data-r="ignore">Ignore</button>
+        <button class="${r==='und'?'onU':''}" data-r="und">Undecided</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function card(i){
+  const[p,s]=ARCH[i.a]||[];
+  const pips='●'.repeat(i.t)+'<span class="off">'+'●'.repeat(Math.max(0,5-i.t))+'</span>';
+  const stats=['w','h','c','g','s','m'].map(k=>
+    `<span class="st ${i.s[k]>=20?'hi':''}">${STATN[k]} <b>${i.s[k]}</b></span>`).join('');
+  const rl = i.sb ? ` · <span class="flag">${i.sb}: ${RLBL[rateOf(i.sb)]}</span>` : '';
+  return `<div class="card v${i.v}">
+    <div class="top"><span class="nm ${i.x?'ex':''}">${i.n}</span><span class="vb v${i.v} disp">${i.v}</span></div>
+    <div class="meta"><b>${i.cls}</b> · ${i.slot} · <b>${i.a}</b>${p?` (${STATN[p]}/${STATN[s]})`:''} · 3rd: <b>${i.ter}</b> · <span class="pips">${pips}</span> ${i.tot} base
+    ${i.tag?` · <span class="flag">★ ${i.tag}</span>`:''}${i.lo?` · <span class="flag">${i.lo} loadout${i.lo>1?'s':''}</span>`:''}${i.own!=='Vault'?` · on ${i.own}`:''}${rl}</div>
+    <div class="stats">${stats}</div>
+    <div class="why">${i.why}${i.note?`<br><span class="flag">note: ${i.note}</span>`:''}</div>
+  </div>`;
+}
+
+// ---------- events ----------
+document.body.addEventListener('click',e=>{
+  const seg=e.target.closest('.seg button');
+  if(seg){ ratings[seg.parentElement.dataset.set]=seg.dataset.r; saveRatings(); const keep=$('setPanel').open; render(); $('setPanel').open=keep; return; }
+  const t=e.target.closest('[data-cls],[data-v],[data-a],[data-pend],.btn[data-x]');
+  if(!t)return;
+  if(t.dataset.cls!==undefined){F.cls=t.dataset.cls;shown=60;render();}
+  else if(t.dataset.a){ if(F.a===t.dataset.a&&F.ter===t.dataset.ter){F.a='';F.ter='';}else{F.a=t.dataset.a;F.ter=t.dataset.ter;} shown=60;render(); }
+  else if(t.dataset.pend){F.pend=!F.pend;F.v='';shown=60;render();}
+  else if(t.dataset.x){ exportQ(t.dataset.x,t); }
+  else if(t.dataset.v!==undefined){F.v=t.dataset.v;F.pend=false;shown=60;render();}
+});
+$('slotSel').onchange=e=>{F.slot=e.target.value;shown=60;render();};
+$('setSel').onchange=e=>{F.set=e.target.value;shown=60;render();};
+$('q').oninput=e=>{F.q=e.target.value;shown=60;render();};
+['oHp','oFav','oLo'].forEach(id=>$(id).onchange=()=>{shown=60;render();});
+$('more').onclick=()=>{shown+=60;render();};
+$('expBtn').onclick=()=>{ copyText(JSON.stringify(ratings), $('expBtn'), 'Ratings copied ✓'); };
+$('impBtn').onclick=()=>{ const s=prompt('Paste exported ratings JSON:'); if(!s)return;
+  try{ ratings=JSON.parse(s); saveRatings(); render(); }catch(e){ alert('Invalid JSON'); } };
+
+function exportQ(kind,btn){
+  let src;
+  if(kind==='filtered') src=filtered();
+  else if(kind==='pending') src=ITEMS.filter(i=>i.pend);
+  else src=ITEMS.filter(i=>i.v===kind);
+  if(!src.length){const o=btn.textContent;btn.textContent='Nothing to copy';setTimeout(()=>btn.textContent=o,1200);return;}
+  copyText(src.map(i=>`id:"${i.id}"`).join(' or '), btn, `Copied ${src.length} ids ✓`);
+}
+function copyText(text,btn,msg){
+  const done=()=>{const old=btn.textContent;btn.textContent=msg;setTimeout(()=>btn.textContent=old,1600);};
+  const fb=()=>{const ta=document.createElement('textarea');ta.value=text;document.body.appendChild(ta);ta.select();document.execCommand('copy');ta.remove();done();};
+  if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(text).then(done,fb);}else fb();
+}
+
+async function loadData(fresh){
+  $('status').textContent = fresh?'Pulling fresh drops from Bungie…':'Loading…';
+  try{
+    const r = await fetch('/api/armor'+(fresh?'?fresh=1':''));
+    const d = await r.json();
+    if(d.error) throw new Error(d.error);
+    ITEMS = d.items; SETS = d.sets; FETCHED = d.fetchedAt;
+    $('slotSel').innerHTML='<option value="">All slots</option>'+[...new Set(ITEMS.map(i=>isClassItem(i.slot)?'Class Item':i.slot))].sort().map(s=>`<option>${s}</option>`).join('');
+    $('setSel').innerHTML='<option value="">All bonus sets</option>'+[...new Set(ITEMS.filter(i=>i.sb).map(i=>i.sb))].sort().map(s=>`<option>${s}</option>`).join('');
+    $('status').textContent = `${ITEMS.length} pieces · synced ${new Date(FETCHED).toLocaleTimeString()}`;
+    render();
+  }catch(err){
+    $('status').textContent = 'Load failed: '+err.message+' — is vault-verdict.js running? Try: node auth-and-snapshot.js';
+  }
+}
+$('refreshBtn').onclick=()=>loadData(true);
+(async function init(){
+  await loadRatings();
+  loadData(false);
+})();
+</script>
+</body>
+</html>
