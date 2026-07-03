@@ -19,6 +19,9 @@ h1{font-size:22px;font-weight:600}
 h1 span{color:var(--gold)}
 .sub{color:var(--mut);font-size:12px;margin:2px 0 12px}
 .sub a{color:var(--keep);text-decoration:none}
+.nav{display:flex;gap:6px;margin:6px 0 4px}
+.nav a{font-family:Bahnschrift,"Roboto Condensed","Arial Narrow",sans-serif;text-transform:uppercase;letter-spacing:.06em;font-size:12px;text-decoration:none;color:var(--mut);border:1px solid var(--line);padding:5px 12px;clip-path:polygon(8px 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%,0 8px)}
+.nav a.on{color:var(--gold);border-color:var(--gold);background:rgba(207,174,66,.12)}
 .bar{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;align-items:center}
 .btn{background:var(--panel2);border:1px solid var(--gold);color:var(--gold);padding:8px 13px;font-size:12px;cursor:pointer;clip-path:var(--clip);font-family:inherit}
 .btn:active{background:var(--gold);color:#000}
@@ -38,10 +41,8 @@ input[type=checkbox]{accent-color:var(--gold);width:15px;height:15px;flex-shrink
 .wbody{padding:0 12px 10px;border-top:1px dashed var(--line)}
 .meta{color:var(--mut);font-size:11.5px;margin:6px 0}
 .meta b{color:var(--ink)}
-details.trk{margin:6px 0}
-details.trk summary{font-size:11px;color:var(--mut);cursor:pointer;text-transform:uppercase;letter-spacing:.08em;font-family:Bahnschrift,"Roboto Condensed",sans-serif;list-style:none}
-details.trk summary::after{content:" +";color:var(--gold)}
-details.trk[open] summary::after{content:" –"}
+.trk{margin:6px 0;padding:8px 10px;background:var(--panel2);clip-path:var(--clip)}
+.trk .thd{font-size:11px;color:var(--gold);text-transform:uppercase;letter-spacing:.08em;font-family:Bahnschrift,"Roboto Condensed",sans-serif;margin-bottom:2px}
 .colh{font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.08em;margin:8px 0 4px;font-family:Bahnschrift,"Roboto Condensed",sans-serif}
 .pool{display:flex;gap:4px;flex-wrap:wrap}
 .pk{background:var(--panel2);border:1px solid var(--line);color:var(--mut);padding:5px 9px;font-size:11px;cursor:pointer;clip-path:polygon(6px 0,100% 0,100% calc(100% - 6px),calc(100% - 6px) 100%,0 100%,0 6px);font-family:inherit}
@@ -75,13 +76,24 @@ details.trk[open] summary::after{content:" –"}
 .tgl{display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--mut);cursor:pointer;user-select:none}
 .tgl input{accent-color:var(--gold);width:14px;height:14px}
 .badge{background:rgba(207,174,66,.25);color:var(--gold);font-weight:700;font-size:10.5px;padding:2px 8px;clip-path:var(--clip);margin-left:4px;white-space:nowrap}
+.hperks{color:var(--dim);font-size:11px;margin-top:2px}
+.hperks b{color:var(--keep);font-weight:400}
+.hperks .hp2{color:var(--gold)}
+.hperks{overflow:hidden;text-overflow:ellipsis}
 :focus-visible{outline:2px solid var(--gold);outline-offset:2px}
 @media(min-width:760px){body{max-width:880px;margin:0 auto}}
+@media(max-width:520px){
+  .copy{flex-wrap:wrap}
+  .copy .score,.copy .lockb,.copy select[data-tag]{margin-bottom:2px}
+  .tools{gap:4px}
+  .pk{padding:6px 10px}   /* bigger tap targets on phone */
+}
 </style>
 </head>
 <body>
 <h1 class="disp">Weapon <span>Watch</span></h1>
-<p class="sub">God-roll tracker · tap a card to expand · <a href="/">← Vault Verdict</a></p>
+<nav class="nav"><a href="/">Vault Verdict</a><a href="/weapons" class="on">Weapon Watch</a></nav>
+<p class="sub">God-roll tracker · tap a card to expand</p>
 <div class="bar"><button class="btn" id="refreshBtn">Refresh from Bungie</button><span class="count" id="status" style="margin:0"></span></div>
 
 <div class="bar" id="wBar">
@@ -127,9 +139,15 @@ function copyText(text,btn,msg){
 const MWS=['range','stability','handling','reload','accuracy','blast_radius','velocity','impact','draw_time','charge_time','projectile_speed'];
 const STAT_PICK=['Range','Stability','Handling','Reload Speed','Aim Assistance','Airborne Effectiveness','Zoom','Recoil Direction','Magazine','Blast Radius','Velocity','Impact','Accuracy','Charge Time','Draw Time'];
 const TAG_OPTS=['none','keep','favorite','junk'];
+const copiesByHash=()=>{const m={};DATA.weapons.forEach(w=>{(m[w.hash]=m[w.hash]||[]).push(w);});return m;};
+// tracked perk names for the collapsed header, high-priority (★) first
+const trackedNames=cfg=>Object.entries(cfg.perks||{}).sort((a,b)=>b[1]-a[1]).map(([n,pr])=>({n,hi:pr===2}));
 
-function render(){
-  const copiesOf={}; DATA.weapons.forEach(w=>{(copiesOf[w.hash]=copiesOf[w.hash]||[]).push(w);});
+function render(){ renderWatched(); renderAdd(); }
+
+function renderWatched(){
+  const y=window.scrollY;                         // preserve scroll across full rebuild
+  const copiesOf=copiesByHash();
 
   $('wAmmoTabs').innerHTML=['','Kinetic','Energy','Power'].map(x=>
     `<button class="tab ${wAmmo===x?'on':''}" data-wammo="${x}">${x||'All ammo'}</button>`).join('');
@@ -143,8 +161,10 @@ function render(){
 
   $('watched').innerHTML=(entries.length?entries.map(({hash,cfg,d,copies,best,hasGod})=>{
     const isOpen=openCards.has(hash);
+    const tn=trackedNames(cfg);
+    const hperks=tn.length?`<div class="hperks">${tn.map(p=>`<${p.hi?'b class="hp2"':'b'}>${p.hi?'★':''}${esc(p.n)}</b>`).join(' · ')}</div>`:'';
     const head=`<div class="whead" data-open="${hash}">
-      <span><span class="nm">${esc(d.n)}</span> <span class="sum">· ${esc(d.ty)} · ${copies.length} cop${copies.length===1?'y':'ies'} · best score ${best} · tracking ${trackedCount(cfg)}/6</span>${hasGod?'<span class="badge">🎯 GOD ROLL</span>':''}</span>
+      <span><span class="nm">${esc(d.n)}</span> <span class="sum">· ${esc(d.ty)} · ${copies.length} cop${copies.length===1?'y':'ies'} · best score ${best} · tracking ${trackedCount(cfg)}/6</span>${hasGod?'<span class="badge">🎯 GOD ROLL</span>':''}${isOpen?'':hperks}</span>
       <span class="sum">${isOpen?'▾':'▸'}</span></div>`;
     if(!isOpen) return `<div class="card">${head}</div>`;
 
@@ -190,13 +210,14 @@ function render(){
     return `<div class="card">${head}<div class="wbody">
       <div class="meta">${esc(d.ty)} · ${d.slot} · ${d.ammo} · ${d.dmg}${d.src?` · <b>${esc(d.src)}</b>`:''}
         <button class="btn sm red" style="float:right" data-unwatch="${hash}">Unwatch</button></div>
-      <details class="trk"><summary>Edit tracking — perks / masterwork / stats</summary>
-        <div class="colh">Column 3 — possible perks (tap: track → ★ high → off)</div><div class="pool">${poolBtns(0)}</div>
-        <div class="colh">Column 4 — possible perks</div><div class="pool">${poolBtns(1)}</div>
+      <div class="trk">
+        <div class="thd">Track perks — tap: track → ★ high → off (${trackedCount(cfg)}/6)</div>
+        <div class="colh">Column 3</div><div class="pool">${poolBtns(0)}</div>
+        <div class="colh">Column 4</div><div class="pool">${poolBtns(1)}</div>
         <div class="colh">Wanted masterwork</div>
         <select data-mw="${hash}"><option value="">any</option>${mwOpts.map(s=>`<option ${cfg.mw===s?'selected':''}>${s}</option>`).join('')}</select>
-        <div class="colh">Watched stats — shows highest possible on each roll (barrel/mag included)</div><div class="pool">${statBtns}</div>
-      </details>
+        <div class="colh">Watched stats — highest possible on each roll (barrel/mag included)</div><div class="pool">${statBtns}</div>
+      </div>
       <div class="tools">
         <button class="btn sm mut" data-selall="${hash}">Select all</button>
         <button class="btn sm mut" data-selnone="${hash}">Clear</button>
@@ -210,6 +231,11 @@ function render(){
     </div></div>`;
   }).join('') : (Object.keys(WATCH).length?'<p class="count">No watched weapons match this filter.</p>':'<p class="count">Nothing watched yet — add weapons below.</p>'));
 
+  window.scrollTo(0,y);   // hold scroll so perk/stat/tag toggles don't jump the page
+}
+
+function renderAdd(){
+  const copiesOf=copiesByHash();
   const ql=q.toLowerCase();
   const rows=Object.entries(DATA.defs)
     .filter(([h,d])=>!WATCH[h]&&(!ql||d.n.toLowerCase().includes(ql)||d.ty.toLowerCase().includes(ql)))
@@ -231,52 +257,49 @@ async function setLock(id,to){
 const copyIds=hash=>DATA.weapons.filter(w=>w.hash===Number(hash)||String(w.hash)===hash).map(w=>w.id);
 
 document.body.addEventListener('click',async e=>{
-  if(e.target.closest('details.trk summary,select,input[type=checkbox]')) {
-    const cb=e.target.closest('input[data-sel]');
-    if(cb){ cb.checked?sel.add(cb.dataset.sel):sel.delete(cb.dataset.sel); }
-    return;
-  }
+  // native controls (tag/mw selects, checkboxes) are handled by the change listener
+  if(e.target.closest('select,input[type=checkbox]')) return;
   const t=e.target.closest('[data-open],[data-watch],[data-unwatch],[data-lock],[data-selall],[data-selnone],[data-btag],[data-block],[data-junkrest],[data-wammo],.pk');
   if(!t) return;
-  if(t.dataset.wammo!==undefined){ wAmmo=t.dataset.wammo; render(); }
-  else if(t.dataset.open){ openCards.has(t.dataset.open)?openCards.delete(t.dataset.open):openCards.add(t.dataset.open); render(); }
+  if(t.dataset.wammo!==undefined){ wAmmo=t.dataset.wammo; renderWatched(); }
+  else if(t.dataset.open){ openCards.has(t.dataset.open)?openCards.delete(t.dataset.open):openCards.add(t.dataset.open); renderWatched(); }
   else if(t.dataset.watch){ const h=t.dataset.watch; WATCH[h]={name:DATA.defs[h].n,perks:{},mw:'',stats:[]}; openCards.add(h); save(); render(); }
   else if(t.dataset.unwatch){ if(confirm('Stop watching '+DATA.defs[t.dataset.unwatch].n+'?')){ delete WATCH[t.dataset.unwatch]; save(); render(); } }
-  else if(t.dataset.lock){ t.disabled=true; if(await setLock(t.dataset.lock,+t.dataset.to)) render(); else t.disabled=false; }
-  else if(t.dataset.selall){ copyIds(t.dataset.selall).forEach(id=>sel.add(id)); render(); }
-  else if(t.dataset.selnone){ copyIds(t.dataset.selnone).forEach(id=>sel.delete(id)); render(); }
-  else if(t.dataset.btag){ for(const id of copyIds(t.dataset.btag)) if(sel.has(id)) TAGS[id]=t.dataset.t; saveTags(); render(); }
-  else if(t.dataset.block){ t.disabled=true; for(const id of copyIds(t.dataset.block)) if(sel.has(id)) await setLock(id,+t.dataset.to); render(); }
+  else if(t.dataset.lock){ t.disabled=true; if(await setLock(t.dataset.lock,+t.dataset.to)) renderWatched(); else t.disabled=false; }
+  else if(t.dataset.selall){ copyIds(t.dataset.selall).forEach(id=>sel.add(id)); renderWatched(); }
+  else if(t.dataset.selnone){ copyIds(t.dataset.selnone).forEach(id=>sel.delete(id)); renderWatched(); }
+  else if(t.dataset.btag){ for(const id of copyIds(t.dataset.btag)) if(sel.has(id)) TAGS[id]=t.dataset.t; saveTags(); renderWatched(); }
+  else if(t.dataset.block){ t.disabled=true; for(const id of copyIds(t.dataset.block)) if(sel.has(id)) await setLock(id,+t.dataset.to); renderWatched(); }
   else if(t.dataset.junkrest){
     const ids=copyIds(t.dataset.junkrest).filter(id=>!sel.has(id));
     if(!ids.length||!confirm(`Tag ${ids.length} unselected cop${ids.length===1?'y':'ies'} as junk?`)) return;
-    ids.forEach(id=>TAGS[id]='junk'); saveTags(); render();
+    ids.forEach(id=>TAGS[id]='junk'); saveTags(); renderWatched();
   }
   else if(t.dataset.p){ // perk cycle: off -> track -> high -> off
     const cfg=WATCH[t.dataset.w]; cfg.perks=cfg.perks||{};
     const n=t.dataset.p, cur=cfg.perks[n]||0;
-    if(cur===0){ if(trackedCount(cfg)>=6){ t.textContent='6 max!'; setTimeout(render,900); return; } cfg.perks[n]=1; }
+    if(cur===0){ if(trackedCount(cfg)>=6){ t.textContent='6 max!'; setTimeout(renderWatched,900); return; } cfg.perks[n]=1; }
     else if(cur===1) cfg.perks[n]=2;
     else delete cfg.perks[n];
-    save(); render();
+    save(); renderWatched();
   }
   else if(t.dataset.st){ const cfg=WATCH[t.dataset.w]; cfg.stats=cfg.stats||[];
     cfg.stats=cfg.stats.includes(t.dataset.st)?cfg.stats.filter(s=>s!==t.dataset.st):[...cfg.stats,t.dataset.st];
-    save(); render();
+    save(); renderWatched();
   }
 });
 document.body.addEventListener('change',e=>{
   const mw=e.target.closest('select[data-mw]');
-  if(mw){ WATCH[mw.dataset.mw].mw=mw.value; save(); render(); return; }
+  if(mw){ WATCH[mw.dataset.mw].mw=mw.value; save(); renderWatched(); return; }
   const tg=e.target.closest('select[data-tag]');
-  if(tg){ TAGS[tg.dataset.tag]=tg.value; saveTags(); }
+  if(tg){ TAGS[tg.dataset.tag]=tg.value; saveTags(); renderWatched(); return; }  // reflect tag styling + junk count now
   const cb=e.target.closest('input[data-sel]');
   if(cb){ cb.checked?sel.add(cb.dataset.sel):sel.delete(cb.dataset.sel); }
 });
-$('q').oninput=e=>{q=e.target.value;render();};
+$('q').oninput=e=>{q=e.target.value;renderAdd();};
 $('refreshBtn').onclick=()=>load(true);
-$('wSort').onchange=e=>{wSort=e.target.value;render();};
-$('wOnlyHits').onchange=e=>{wOnlyHits=e.target.checked;render();};
+$('wSort').onchange=e=>{wSort=e.target.value;renderWatched();};
+$('wOnlyHits').onchange=e=>{wOnlyHits=e.target.checked;renderWatched();};
 $('expJunkBtn').onclick=()=>{
   const ids=DATA.weapons.filter(w=>tagOf(w)==='junk').map(w=>w.id);
   if(!ids.length){ const o=$('expJunkBtn').textContent; $('expJunkBtn').textContent='Nothing junked'; setTimeout(()=>$('expJunkBtn').textContent=o,1200); return; }

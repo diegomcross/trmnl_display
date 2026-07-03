@@ -176,6 +176,15 @@ Core priorities, in his words:
     unselected**. Config: `weapon-watch.json` + `weapon-tags.json` (gitignored)
     via GET/POST `/api/watch`, `/api/tags`, POST `/api/lock`.
     New-drop detection/alerting is not built yet — see NEXT_PHASE.md.
+  - Weapon Watch UX (refreshed): both pages share a top nav (`.nav`: Vault Verdict ·
+    Weapon Watch). Perk pools are **always visible when a card is open** — the old
+    collapsed "Edit tracking" disclosure was removed because a full re-render dropped
+    its open state (perks appeared to close on every click). `render()` is split into
+    `renderWatched()` + `renderAdd()`; `renderWatched()` saves/restores `window.scrollY`
+    so perk/stat/tag toggles never collapse or jump. Collapsed cards show tracked perk
+    names in the header. Rule of thumb for this file: **don't reintroduce a wholesale
+    `innerHTML` rebuild on every interaction** — target the list that changed and
+    preserve scroll.
   - **Build synergy (NEW):** legendary keepers get "Pairs with <exotic>" notes when
     their archetype stats match a tuned exotic's favorites (same slot excluded);
     keepers no tuned exotic favors demote to Review (`oSyn` rules toggle). Classes

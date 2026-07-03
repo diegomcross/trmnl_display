@@ -33,11 +33,28 @@ buttons (live Bungie SetLockState — write scope confirmed working), local tag
 overlay (keep/favorite/junk/none, DIM tag shown alongside), batch select +
 tag/lock + junk-all-unselected. Config: `weapon-watch.json`, `weapon-tags.json`.
 
-**Note on tags:** the overlay is local-only; DIM can't see it. To push junk tags
-into DIM, use DIM's CSV import or an id: search query — a "copy DIM query from
-my junk tags" export button is an easy add if Diego wants it.
+**Note on tags:** the overlay is local-only; DIM can't see it. Shipped: a "Copy
+junk DIM query" button (top bar) exports every junk-tagged id as an `id:` search.
 
-**To build (phase 2):**
+**UX refresh (shipped 2026-07-03):** cross-page nav on both pages; perk pools are
+always visible when a card is open (no more collapsed "Edit tracking"); `render()`
+split into `renderWatched()`/`renderAdd()` with scroll preserved so perk/stat/tag
+toggles don't collapse or jump; collapsed cards list tracked perks in the header;
+ammo-type filter tabs, sort, "only hits" toggle, god-roll 🎯 badge. See the audit
+at `.claude/plans/there-is-no-link-reactive-engelbart.md`.
+
+**NEXT — Visual "New Drops" dashboard (before fashion picker):**
+Verified feasible from the Bungie manifest directly — **no light.gg/DIM scraping**.
+- Weapon icon `displayProperties.icon` + full `screenshot`; each perk plug's
+  `displayProperties.icon`; masterwork stat icon. All `https://www.bungie.net`+path,
+  loaded as plain `<img>` (local server tab, not a CSP artifact — no proxy needed).
+- Needs a manifest slim bump (**slim5**): add `icon` to weapons + each pool perk +
+  masterwork icon (string fields; forces one re-download).
+- Dashboard = presentation layer over phase-2 new-drop detection: for each newly
+  dropped instance of a watched weapon, a visual card — weapon art, rolled perks
+  with icons per column, masterwork icon, tracked stat values.
+
+**To build (phase 2 detection, feeds the dashboard + TRMNL):**
 - **New-drop detection:** poll the profile on an interval while the game runs
   (or piggyback server.js's existing cycle); diff instance ids against a
   seen-ids file (gitignored); score new instances of watched weapons against
