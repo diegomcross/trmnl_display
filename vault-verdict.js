@@ -555,6 +555,11 @@ async function fetchWeapons(e) {
   }
   for (const w of weapons) w.hash = canonical[w.hash] || w.hash;
 
+  // new-drop detection: flag copies whose instance id we haven't seen before.
+  const seen = loadSeen();
+  if (!seen.seeded) { for (const w of weapons) seen.ids.add(w.id); seen.seeded = true; saveSeen(seen); }
+  for (const w of weapons) w.fresh = !seen.ids.has(w.id);
+
   return { weapons, defs: mergedDefs, perkIcons, fetchedAt: new Date().toISOString(), account: `${m.membershipType}/${m.membershipId}` };
 }
 
@@ -574,6 +579,13 @@ const loadWatch = () => loadJson(WATCH_FILE);
 const saveWatch = (w) => saveJsonSafe(WATCH_FILE, w);
 const loadTags = () => loadJson(TAGS_FILE);
 const saveTags = (t) => saveJsonSafe(TAGS_FILE, t);
+
+// Seen-instances store for new-drop detection. First fetch seeds every current id
+// (so nothing is falsely "new"); after that any unseen instance id is a fresh drop.
+// Ack (from the Drops dashboard, or later the alert poller) moves ids into seen.
+const SEEN_FILE = path.join(__dirname, 'weapon-seen.json');
+const loadSeen = () => { const s = loadJson(SEEN_FILE); return { seeded: !!s.seeded, ids: new Set(s.ids || []) }; };
+const saveSeen = (s) => saveJsonSafe(SEEN_FILE, { seeded: s.seeded, ids: [...s.ids] });
 
 // ---------- probe mode for debugging ----------
 async function probe(nameLike) {
@@ -643,8 +655,18 @@ async function main() {
         if (wcache) { const w = wcache.weapons.find((x) => x.id === id); if (w) w.own = r.own; }
         return json({ ok: true, own: r.own });
       }
+      if (req.url.startsWith('/api/drops/ack') && req.method === 'POST') {
+        const { ids } = JSON.parse(await readBody(req) || '{}');
+        const seen = loadSeen();
+        const toAck = (ids && ids.length) ? ids : (wcache?.weapons || []).map((w) => w.id);
+        for (const id of toAck) seen.ids.add(id);
+        seen.seeded = true; saveSeen(seen);
+        if (wcache) for (const w of wcache.weapons) if (seen.ids.has(w.id)) w.fresh = false;
+        return json({ ok: true, acked: toAck.length });
+      }
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
       if (req.url.startsWith('/weapons')) return res.end(fs.readFileSync(path.join(__dirname, 'weapon-watch.html')));
+      if (req.url.startsWith('/drops')) return res.end(fs.readFileSync(path.join(__dirname, 'weapon-drops.html')));
       return res.end(fs.readFileSync(HTML_FILE));
     } catch (err) {
       console.error(err);

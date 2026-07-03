@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>New Drops — Weapon Watch</title>
+<style>
+:root{
+  --bg:#0c0e12; --panel:#151821; --panel2:#1b1f2b; --line:#2a2f3d;
+  --ink:#e9ebf2; --mut:#8b93a7; --dim:#5c6375;
+  --gold:#cfae42; --keep:#5fd0dd; --junk:#ff6a52;
+  --clip:polygon(10px 0,100% 0,100% calc(100% - 10px),calc(100% - 10px) 100%,0 100%,0 10px);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--ink);font:15px/1.45 "Segoe UI",Roboto,system-ui,sans-serif;padding:12px;padding-bottom:40px}
+.disp{font-family:Bahnschrift,"Roboto Condensed","Arial Narrow",sans-serif;text-transform:uppercase;letter-spacing:.09em}
+h1{font-size:22px;font-weight:600}
+h1 span{color:var(--gold)}
+.sub{color:var(--mut);font-size:12px;margin:2px 0 10px}
+.nav{display:flex;gap:6px;margin:6px 0 4px;flex-wrap:wrap}
+.nav a{font-family:Bahnschrift,"Roboto Condensed","Arial Narrow",sans-serif;text-transform:uppercase;letter-spacing:.06em;font-size:12px;text-decoration:none;color:var(--mut);border:1px solid var(--line);padding:5px 12px;clip-path:polygon(8px 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%,0 8px)}
+.nav a.on{color:var(--gold);border-color:var(--gold);background:rgba(207,174,66,.12)}
+.bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
+.btn{background:var(--panel2);border:1px solid var(--gold);color:var(--gold);padding:8px 13px;font-size:12px;cursor:pointer;clip-path:var(--clip);font-family:inherit}
+.btn:active{background:var(--gold);color:#000}
+.btn.sm{padding:5px 10px;font-size:11px}
+.btn.mut{border-color:var(--line);color:var(--mut)}
+.count{color:var(--mut);font-size:12px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:12px}
+.drop{background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--gold);clip-path:var(--clip);overflow:hidden}
+.drop.god{border-left-color:var(--gold);box-shadow:inset 0 0 0 1px rgba(207,174,66,.35)}
+.art{position:relative;height:118px;background-size:cover;background-position:center;border-bottom:1px solid var(--line)}
+.art .shade{position:absolute;inset:0;background:linear-gradient(90deg,rgba(12,14,18,.85),rgba(12,14,18,.15))}
+.art .nm{position:absolute;left:12px;bottom:8px;right:12px;font-weight:600;font-size:16px;text-shadow:0 1px 4px #000}
+.art .sc{position:absolute;right:10px;top:10px;background:rgba(12,14,18,.8);border:1px solid var(--line);color:var(--mut);font-weight:700;font-size:14px;padding:3px 9px;clip-path:var(--clip);font-variant-numeric:tabular-nums}
+.art .sc.hot{border-color:var(--gold);color:var(--gold)}
+.art .tag{position:absolute;left:12px;top:10px;font-size:10px;color:var(--gold);border:1px solid var(--gold);background:rgba(207,174,66,.15);padding:2px 8px;clip-path:var(--clip);text-transform:uppercase;letter-spacing:.05em}
+.body{padding:10px 12px}
+.colh{font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.08em;margin:7px 0 4px;font-family:Bahnschrift,"Roboto Condensed",sans-serif}
+.perks{display:flex;gap:6px;flex-wrap:wrap}
+.perk{display:flex;align-items:center;gap:5px;background:var(--panel2);border:1px solid var(--line);color:var(--mut);padding:3px 8px 3px 4px;font-size:11px;clip-path:polygon(6px 0,100% 0,100% calc(100% - 6px),calc(100% - 6px) 100%,0 100%,0 6px)}
+.perk img{width:20px;height:20px;flex-shrink:0}
+.perk.roll{color:var(--ink);border-color:var(--mut)}
+.perk.match{color:var(--gold);border-color:var(--gold);background:rgba(207,174,66,.14);font-weight:600}
+.meta{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:9px;font-size:11px;color:var(--mut)}
+.meta img{width:18px;height:18px;vertical-align:middle}
+.st{background:var(--panel2);padding:2px 7px;font-size:11px;color:var(--mut);clip-path:var(--clip);font-variant-numeric:tabular-nums}
+.st b{color:var(--ink)} .st.hi b{color:var(--gold)}
+.acts{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
+.lockb{background:none;border:1px solid var(--line);color:var(--mut);cursor:pointer;font-size:11px;padding:4px 10px;clip-path:var(--clip);font-family:inherit}
+.lockb.on{border-color:var(--gold);color:var(--gold)}
+.note{color:var(--dim);font-size:12px}
+.big{text-align:center;color:var(--mut);padding:40px 12px}
+:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+@media(min-width:760px){body{max-width:1100px;margin:0 auto}}
+</style>
+</head>
+<body>
+<h1 class="disp">New <span>Drops</span></h1>
+<nav class="nav"><a href="/">Vault Verdict</a><a href="/weapons">Weapon Watch</a><a href="/drops" class="on">New Drops</a></nav>
+<p class="sub">Fresh drops of your watched weapons, scored against your god-roll wishlist.</p>
+<div class="bar">
+  <button class="btn" id="refreshBtn">Refresh from Bungie</button>
+  <button class="btn sm mut" id="ackBtn">Mark all seen</button>
+  <label class="count"><input type="checkbox" id="onlyGod"> god rolls only</label>
+  <span class="count" id="status"></span>
+</div>
+<div id="grid" class="grid"></div>
+
+<script>
+const $=id=>document.getElementById(id);
+const esc=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
+const BN='https://www.bungie.net';
+let DATA={weapons:[],defs:{},perkIcons:{}}, WATCH={}, onlyGod=false;
+
+const GOD_MIN_PCT=75, GOD_MIN_MATCHES=3, GOD_MIN_SELECTED=4;
+function scoreCopy(w,cfg,rankOf){
+  const perks=cfg.perks||{}, roll=new Set([...w.cols[0],...w.cols[1]].map(p=>p.n));
+  let selW=0,matchW=0,matched=0,selN=0;
+  for(const [n,pr] of Object.entries(perks)){ selW+=pr; selN++; if(roll.has(n)){ matchW+=pr; matched++; } }
+  if(cfg.mw){ selW+=1; selN++; if(w.mw===cfg.mw){ matchW+=1; matched++; } }
+  for(const s of (cfg.stats||[])){ selW+=1; selN++; if(rankOf?.[s] && rankOf[s](w.statsMax[s]??-1)==='s1'){ matchW+=1; matched++; } }
+  const pct=selW?Math.round(100*matchW/selW):0;
+  const god=selN>=GOD_MIN_SELECTED && matched>=GOD_MIN_MATCHES && pct>=GOD_MIN_PCT;
+  return {pct,matched,selN,god};
+}
+const icon=n=>DATA.perkIcons[n]?`<img src="${BN}${DATA.perkIcons[n]}" alt="">`:'';
+
+function render(){
+  const copiesOf={}; DATA.weapons.forEach(w=>{(copiesOf[w.hash]=copiesOf[w.hash]||[]).push(w);});
+  const drops=[];
+  for(const w of DATA.weapons){
+    if(!w.fresh) continue;
+    const cfg=WATCH[w.hash]; if(!cfg) continue;              // only watched weapons
+    const d=DATA.defs[w.hash]; if(!d) continue;
+    const raw=copiesOf[w.hash]||[];
+    const rankOf={};
+    for(const s of (cfg.stats||[])){ const vals=[...new Set(raw.map(x=>x.statsMax[s]??-1))].sort((a,b)=>b-a); rankOf[s]=v=>{const i=vals.indexOf(v);return i===0?'s1':i===1?'s2':i===2?'s3':'';}; }
+    drops.push({w,d,cfg,sc:scoreCopy(w,cfg,rankOf),rankOf});
+  }
+  drops.sort((a,b)=>b.sc.pct-a.sc.pct);
+  const shown=drops.filter(x=>!onlyGod||x.sc.god);
+  $('status').textContent=`${drops.length} new drop${drops.length===1?'':'s'} of watched weapons${drops.length?` · synced ${new Date(DATA.fetchedAt).toLocaleTimeString()}`:''}`;
+  if(!shown.length){ $('grid').innerHTML=`<div class="big note">${drops.length?'No god rolls among the new drops.':'No new drops of your watched weapons. New drops will show here — tag weapons on Weapon Watch to track them.'}</div>`; return; }
+
+  $('grid').innerHTML=shown.map(({w,d,cfg,sc})=>{
+    const col=ci=>{
+      const perks=cfg.perks||{};
+      return (w.cols[ci]||[]).map(p=>{
+        const cls=perks[p.n]?'perk match':(p.on?'perk roll':'perk');
+        return `<span class="${cls}">${icon(p.n)}${esc(p.n)}</span>`;
+      }).join('')||'<span class="note">—</span>';
+    };
+    const stats=(cfg.stats||[]).map(s=>{const v=w.statsMax[s];return `<span class="st ${cfg.stats&&v!==undefined?'':''}">${esc(s)} <b>${v??'—'}</b></span>`;}).join('');
+    const art=d.shot?`background-image:url('${BN}${d.shot}')`:(d.icon?`background-image:url('${BN}${d.icon}');background-size:contain;background-repeat:no-repeat`:'');
+    const mw=w.mw?`<span>${w.mwIcon?`<img src="${BN}${w.mwIcon}" alt="">`:''} MW ${esc(w.mw)}</span>`:'';
+    return `<div class="drop ${sc.god?'god':''}">
+      <div class="art" style="${art}">
+        <div class="shade"></div>
+        <span class="tag">New${w.own!=='Vault'?' · '+esc(w.own):''}</span>
+        <span class="sc ${sc.god?'hot':''}">${sc.pct}%${sc.god?' 🎯':''}</span>
+        <span class="nm">${esc(d.n)}</span>
+      </div>
+      <div class="body">
+        <div class="colh">Column 3</div><div class="perks">${col(0)}</div>
+        <div class="colh">Column 4</div><div class="perks">${col(1)}</div>
+        <div class="meta">${mw}<span>${d.ty} · ${w.pwr}</span></div>
+        ${stats?`<div class="meta">${stats}</div>`:''}
+        <div class="acts">
+          <button class="lockb ${w.locked?'on':''}" data-lock="${w.id}" data-to="${w.locked?0:1}">${w.locked?'🔒 Locked':'🔓 Lock'}</button>
+          ${w.own==='Vault'?`<button class="lockb" data-equip="${w.id}" data-rhash="${w.rhash}" data-own="${esc(w.own)}">Equip</button>`:`<button class="lockb" data-vault="${w.id}" data-rhash="${w.rhash}" data-own="${esc(w.own)}">→ Vault</button>`}
+          <button class="lockb" data-ack="${w.id}">Seen</button>
+        </div>
+      </div></div>`;
+  }).join('');
+}
+
+async function itemAction(url,body){ const r=await fetch(url,{method:'POST',body:JSON.stringify(body)}).then(r=>r.json()); if(r.error){$('status').textContent='Failed: '+r.error;return null;} return r; }
+
+document.body.addEventListener('click',async e=>{
+  const t=e.target.closest('[data-lock],[data-equip],[data-vault],[data-ack]'); if(!t) return;
+  t.disabled=true;
+  if(t.dataset.lock){ const r=await itemAction('/api/lock',{id:t.dataset.lock,locked:+t.dataset.to}); if(r){const w=DATA.weapons.find(x=>x.id===t.dataset.lock);if(w)w.locked=!!+t.dataset.to;} render(); }
+  else if(t.dataset.equip){ const r=await itemAction('/api/equip',{id:t.dataset.equip,hash:t.dataset.rhash,own:t.dataset.own}); if(r){const w=DATA.weapons.find(x=>x.id===t.dataset.equip);if(w)w.own=r.own;} render(); }
+  else if(t.dataset.vault){ const r=await itemAction('/api/vault',{id:t.dataset.vault,hash:t.dataset.rhash,own:t.dataset.own}); if(r){const w=DATA.weapons.find(x=>x.id===t.dataset.vault);if(w)w.own=r.own;} render(); }
+  else if(t.dataset.ack){ const r=await itemAction('/api/drops/ack',{ids:[t.dataset.ack]}); if(r){const w=DATA.weapons.find(x=>x.id===t.dataset.ack);if(w)w.fresh=false;} render(); }
+});
+$('onlyGod').onchange=e=>{onlyGod=e.target.checked;render();};
+$('refreshBtn').onclick=()=>load(true);
+$('ackBtn').onclick=async()=>{ if(!confirm('Mark all current new drops as seen?'))return; await itemAction('/api/drops/ack',{}); DATA.weapons.forEach(w=>w.fresh=false); render(); };
+
+async function load(fresh){
+  $('status').textContent=fresh?'Pulling fresh drops…':'Loading…';
+  try{
+    const [d,w]=await Promise.all([
+      fetch('/api/weapons'+(fresh?'?fresh=1':'')).then(r=>r.json()),
+      fetch('/api/watch').then(r=>r.json()),
+    ]);
+    if(d.error) throw new Error(d.error);
+    DATA=d; WATCH=w||{}; render();
+  }catch(err){ $('status').textContent='Error: '+err.message; }
+}
+load(false);
+</script>
+</body>
+</html>
