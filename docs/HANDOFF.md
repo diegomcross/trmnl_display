@@ -73,6 +73,10 @@ Core priorities, in his words:
 | `watch-destiny.ps1` | Optional game-coupled alternative: watches for `destiny2.exe` and starts/stops the server with the game. `-Setup` tried to register a Task Scheduler task but that is **denied** on this PC. Logs to `watcher.log`. |
 | `config.json` | Settings written by the settings page (gitignored; per-machine). |
 | `manifest-cache.json` | Cached Bungie manifest defs (gitignored). `CACHE_SCHEMA` const invalidates it when the stored shape changes. |
+| `vault-verdict.js` | **Vault Verdict** server (port **8787**): live Armor 3.0 vault triage. Reuses `.env` + `tokens.json`. Slims the manifest to `vault-manifest-cache/slim2-<version>.json`. `node vault-verdict.js probe "name"` dumps one item for debugging. |
+| `vault-verdict.html` | Vault Verdict frontend (served by `vault-verdict.js`): verdict engine, set-bonus 4pc/2pc rating panel, exotic favorite-stat tuning panel, DIM query export. |
+| `CLAUDE.md` | Working rules for agents: never drop features, test before push, and **mandatory upkeep of this file + `docs/NEXT_PHASE.md`**. |
+| `docs/NEXT_PHASE.md` | The pickup point: specs + open questions for upcoming features. |
 
 ---
 
@@ -128,6 +132,28 @@ Core priorities, in his words:
     auto-start silently failed before.
   - **Crash recovery:** if the game is running but the server process died, it restarts it.
   - Writes `watcher.log` for diagnostics. `-Uninstall` removes the task.
+
+- **Vault Verdict (NEW — separate tool, same repo):** `node vault-verdict.js` →
+  `http://127.0.0.1:8787` (LAN-reachable for the phone). Live vault pull
+  (components 102,200,201,205,300,304,305), Armor 3.0 triage:
+  - **Verdict engine** (all in the HTML): groups pieces into niches, keeps the best
+    per niche, junks outclassed copies. Tunable rules (Health-primary demotion,
+    protect DIM favorites/loadout pieces).
+  - **Set-bonus ratings** (4-piece / 2-pc only / Ignore / Undecided per set) change
+    the grouping. **Gotcha that cost a day:** armor item defs have NO set hash —
+    set membership lives in `DestinyEquipableItemSetDefinition.setItems`
+    (set → item hashes). The slimmer builds the reverse map (`slim2-` cache;
+    an old `slim-` cache gets patched in place, no manifest re-download).
+  - **Exotic favorite-stat tuning (NEW):** per-exotic favorite stat(s) — the stats
+    that synergize with the exotic's function (Diego's list is seeded as defaults
+    in `DEFAULT_FAVS`; note the game spells it "Mataiodoxía" with í). Exotics with
+    favorites keep only the copy with the highest favorite-stat total; untuned
+    exotics fall back to per-archetype niches and show under the **Pending**
+    filter. Ratings + favorites persist (`vv-ratings` / `vv-exofavs`, localStorage
+    + `window.storage` when present) and ride along in Export/Import ratings.
+  - **Next:** favorites should also steer which LEGENDARIES are kept (builds
+    revolve around an exotic) — see `docs/NEXT_PHASE.md`.
+  - DIM overlay: optional `dim-data.json` (tags + loadouts) merges into verdicts.
 
 ---
 
