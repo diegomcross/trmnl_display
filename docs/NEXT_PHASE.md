@@ -3,6 +3,51 @@
 > Maintained per CLAUDE.md. When a feature ships, move it to HANDOFF.md
 > "What works now" and delete it here.
 
+## Where we are (2026-07-03, latest)
+
+Since the phase-1 wrap: god-roll flag threshold raised to **75%** (`GOD_MIN_PCT`,
+Diego's pick); **Equip / send-to-vault buttons** shipped per weapon copy (see
+HANDOFF — `/api/equip`, `/api/vault`, real-hash `rhash`, vault path tested live).
+
+Then Diego asked for **DIM tag sync** (tags currently local-only). Speccing below;
+**BLOCKED: awaiting Diego** on sync direction (asked; he stepped away — default to
+two-way). Do not start the DIM API calls until he confirms direction + that DIM
+Sync is enabled in his DIM settings.
+
+## 0. DIM tag sync (NEXT once Diego answers) — BLOCKED: awaiting Diego
+
+**Goal (Diego):** the app's keep/favorite/junk tags and DIM's should be in sync,
+not two disconnected systems.
+
+**Feasibility:** DIM exposes a **Sync API** at `https://api.destinyitemmanager.com`.
+Everything can be done server-side with credentials we already hold (no browser
+steps for Diego); the only prerequisite is **DIM Sync enabled in his DIM settings**
+(default on — it stores tags in DIM's cloud keyed to his Bungie login).
+
+**Integration steps (researched, verify exact shapes when building):**
+- **Register a DIM API app once:** `POST /new_app` with `{ id, bungieApiKey (ours,
+  in .env), origin }` → returns a `dimApiKey`. Store it in `.env`
+  (`DIM_API_KEY=`). One-time; self-serve (confirm the endpoint isn't gated).
+- **Auth:** `POST /auth/token` header `X-API-Key: <dimApiKey>`, body
+  `{ bungieAccessToken (from tokens.json via accessToken()), membershipId (bungie.net
+  id), platformMembershipId (the Destiny membershipId we already use) }` → `{ accessToken }`.
+- **Read tags:** `GET /profile?platformMembershipId=<id>&destinyVersion=2&components=tags`
+  Bearer the accessToken → `{ tags:[{ id:<itemInstanceId>, tag, notes }] }`.
+- **Write tags:** `POST /profile` body `{ platformMembershipId, destinyVersion:2,
+  updates:[{ action:'tag', payload:{ id, tag } }] }`.
+- **Tag vocab mapping:** DIM = `favorite | keep | infuse | junk | archive`; ours =
+  `keep | favorite | junk | none`. Map favorite/keep/junk 1:1; our `none` = remove
+  the annotation; leave DIM `infuse`/`archive` untouched (don't clobber them).
+
+**Direction (the blocked decision):** two-way (recommended — one source of truth,
+needs last-writer reconciliation), read-only DIM→app, or push-only app→DIM. Record
+Diego's answer verbatim here once given.
+
+**Files:** `vault-verdict.js` (DIM auth + read/write helpers, merge DIM tags into
+`fetchWeapons` / `dimOverlay`, wire the tag `<select>` POST to also push to DIM),
+`.env` (`DIM_API_KEY`), maybe a small `dim-token.json` cache (gitignored) for the
+DIM accessToken. Frontend `weapon-watch.html`: show DIM tag as the live source.
+
 ## Where we are (2026-07-03, later)
 
 Shipped today: set-bonus fix + exotic favorites + build synergy (see HANDOFF),
