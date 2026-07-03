@@ -50,13 +50,27 @@ input[type=checkbox]{accent-color:var(--gold);width:15px;height:15px;flex-shrink
 .pk.t2{background:rgba(207,174,66,.22);color:var(--gold);border-color:var(--gold);font-weight:600}
 .pk.t2::before{content:"★ "}
 .tools{display:flex;gap:5px;flex-wrap:wrap;align-items:center;border-top:1px solid var(--line);padding:7px 0;font-size:11px;color:var(--dim)}
-.copy{border-top:1px dashed var(--line);padding:7px 0;font-size:12px;display:flex;gap:8px;align-items:flex-start}
-.copy .body{flex:1;min-width:0}
+.copy{display:grid;grid-template-columns:82px minmax(0,1fr) minmax(155px,auto);gap:16px;border-top:1px dashed var(--line);padding:10px 0;font-size:12px;align-items:start}
+.copy .cA{display:flex;flex-direction:column;gap:6px;align-items:flex-start}
+.copy .cB{min-width:0}
+.copy .cC{display:flex;flex-direction:column;gap:7px;align-items:flex-end;text-align:right}
+.copy .rollline{line-height:1.5}
+.copy .statline{margin-top:4px}
 .copy .cp{color:var(--mut)}
 .copy .hit{color:var(--keep)}
 .copy .hi{color:var(--gold);font-weight:600}
 .copy .act{text-decoration:underline}
-.score{font-size:11px;padding:2px 8px;clip-path:var(--clip);background:var(--panel2);color:var(--mut);font-variant-numeric:tabular-nums;white-space:nowrap}
+.frac{font-size:10px;color:var(--dim);font-variant-numeric:tabular-nums}
+.chips{display:flex;gap:4px;flex-wrap:wrap}
+.chip{background:var(--panel2);border:1px solid var(--line);color:var(--mut);padding:5px 9px;font-size:10.5px;cursor:pointer;clip-path:polygon(5px 0,100% 0,100% calc(100% - 5px),calc(100% - 5px) 100%,0 100%,0 5px);font-family:inherit;text-transform:uppercase;letter-spacing:.04em}
+.chip.on.keep{border-color:var(--keep);color:var(--keep);background:rgba(95,208,221,.14)}
+.chip.on.favorite{border-color:var(--gold);color:var(--gold);background:rgba(207,174,66,.16)}
+.chip.on.junk{border-color:var(--junk);color:var(--junk);background:rgba(255,106,82,.14)}
+.copy .loc{font-size:10.5px;color:var(--mut);line-height:1.55}
+.copy .loc b{color:var(--ink)}
+.copy .acts{display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
+.lockb.mv{font-size:11px;padding:4px 10px}
+.score{font-size:14px;font-weight:700;padding:3px 9px;clip-path:var(--clip);background:var(--panel2);color:var(--mut);font-variant-numeric:tabular-nums;white-space:nowrap;display:inline-block}
 .score.hot{background:rgba(207,174,66,.2);color:var(--gold);font-weight:700}
 .lockb{background:none;border:1px solid var(--line);color:var(--mut);cursor:pointer;font-size:13px;padding:2px 7px;clip-path:var(--clip)}
 .lockb.on{border-color:var(--gold);color:var(--gold)}
@@ -83,10 +97,11 @@ input[type=checkbox]{accent-color:var(--gold);width:15px;height:15px;flex-shrink
 :focus-visible{outline:2px solid var(--gold);outline-offset:2px}
 @media(min-width:760px){body{max-width:880px;margin:0 auto}}
 @media(max-width:520px){
-  .copy{flex-wrap:wrap}
-  .copy .score,.copy .lockb,.copy select[data-tag]{margin-bottom:2px}
+  .copy{grid-template-columns:1fr;gap:9px}
+  .copy .cC{align-items:flex-start;text-align:left}
+  .copy .acts{justify-content:flex-start}
   .tools{gap:4px}
-  .pk{padding:6px 10px}   /* bigger tap targets on phone */
+  .pk,.chip{padding:7px 11px}   /* bigger tap targets on phone */
 }
 </style>
 </head>
@@ -100,7 +115,9 @@ input[type=checkbox]{accent-color:var(--gold);width:15px;height:15px;flex-shrink
   <select id="wSort"><option value="score">Sort: best match %</option><option value="name">Sort: name</option></select>
   <div class="bar" id="wAmmoTabs" style="margin:0"></div>
   <label class="tgl"><input type="checkbox" id="wOnlyHits"> Only show weapons with a hit</label>
+  <button class="btn sm mut" id="selModeBtn">Select multiple</button>
   <button class="btn sm mut" id="expJunkBtn">Copy junk DIM query</button>
+  <span class="count" id="wCount" style="margin:0"></span>
 </div>
 
 <div id="watched"></div>
@@ -112,7 +129,7 @@ input[type=checkbox]{accent-color:var(--gold);width:15px;height:15px;flex-shrink
 </div>
 
 <script>
-let DATA={weapons:[],defs:{}}, WATCH={}, TAGS={}, q='', wSort='score', wAmmo='', wOnlyHits=false;
+let DATA={weapons:[],defs:{}}, WATCH={}, TAGS={}, q='', wSort='score', wAmmo='', wOnlyHits=false, selMode=false;
 const openCards=new Set(), sel=new Set();
 const $=id=>document.getElementById(id);
 const esc=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
@@ -158,6 +175,18 @@ const trackedNames=cfg=>Object.entries(cfg.perks||{}).sort((a,b)=>b[1]-a[1]).map
 
 function render(){ renderWatched(); renderAdd(); }
 
+// Re-render the watched list while keeping the card you're editing visually fixed.
+// Selecting a perk/stat changes that weapon's best %, which can re-sort the list and
+// move the card — anchoring to the card's on-screen position stops the page from jumping.
+function renderKeepingAnchor(hash){
+  const sel=`[data-open="${hash}"]`;
+  const el=document.querySelector(sel);
+  const before=el?el.getBoundingClientRect().top:null;
+  renderWatched();
+  const el2=document.querySelector(sel);
+  if(before!=null && el2) window.scrollBy(0, el2.getBoundingClientRect().top - before);
+}
+
 function renderWatched(){
   const y=window.scrollY;                         // preserve scroll across full rebuild
   const copiesOf=copiesByHash();
@@ -176,8 +205,15 @@ function renderWatched(){
     }
     const copies=raw.map(w=>({w,sc:scoreCopy(w,cfg,rankOf)})).sort((a,b)=>b.sc.pct-a.sc.pct||b.sc.matchW-a.sc.matchW);
     return {hash,cfg,d,rankOf,copies,best:copies[0]?.sc.pct??0,hasGod:copies.some(c=>c.sc.god)};
-  }).filter(en=>en.d && (!wAmmo||en.d.slot===wAmmo) && (!wOnlyHits||en.best>0));
+  });
+  const totalWatched=entries.length;
+  entries=entries.filter(en=>en.d && (!wAmmo||en.d.slot===wAmmo) && (!wOnlyHits||en.best>0));
   entries.sort((a,b)=> wSort==='score' ? (b.best-a.best || a.d.n.localeCompare(b.d.n)) : a.d.n.localeCompare(b.d.n));
+  $('wCount').textContent=totalWatched?`showing ${entries.length} of ${totalWatched}`:'';
+  $('selModeBtn').classList.toggle('on',selMode);
+  $('selModeBtn').textContent=selMode?'Done selecting':'Select multiple';
+  $('selModeBtn').style.borderColor=selMode?'var(--gold)':'';
+  $('selModeBtn').style.color=selMode?'var(--gold)':'';
 
   $('watched').innerHTML=(entries.length?entries.map(({hash,cfg,d,rankOf,copies,best,hasGod})=>{
     const isOpen=openCards.has(hash);
@@ -209,17 +245,30 @@ function renderWatched(){
         return `<span class="st ${v!==undefined?rankOf[s](v):''}">${esc(s)} <b>${v??'—'}</b></span>`;
       }).join('');
       const tag=tagOf(w);
+      const chips=['keep','favorite','junk'].map(t=>
+        `<button class="chip ${tag===t?'on '+t:''}" data-ctag="${w.id}" data-t="${t}" title="Tag ${t}${tag===t?' — tap again to clear':''}">${t==='favorite'?'fav':t}</button>`).join('');
+      const inVault=w.own==='Vault';
+      const moveBtn=inVault
+        ? `<button class="lockb mv" data-equip="${w.id}" data-rhash="${w.rhash}" data-own="${esc(w.own)}" title="Pull to your character and equip">Equip</button>`
+        : `<button class="lockb mv" data-vault="${w.id}" data-rhash="${w.rhash}" data-own="${esc(w.own)}" title="Send this copy to the vault">→ Vault</button>`;
       return `<div class="copy">
-        <input type="checkbox" data-sel="${w.id}" ${sel.has(w.id)?'checked':''}>
-        <div class="body">
-          <span class="score ${sc.god?'hot':''}" title="${sc.matched}/${sc.selN} criteria, weighted">${sc.pct}%${sc.selN?` · ${sc.matched}/${sc.selN}`:''}</span>${sc.god?'<span class="badge">🎯</span>':''}
-          <button class="lockb ${w.locked?'on':''}" data-lock="${w.id}" data-to="${w.locked?0:1}" title="${w.locked?'Unlock':'Lock'}">${w.locked?'🔒':'🔓'}</button>
-          <button class="lockb" data-equip="${w.id}" data-rhash="${w.rhash}" data-own="${esc(w.own)}" title="Equip this weapon">Equip</button>
-          <button class="lockb" data-vault="${w.id}" data-rhash="${w.rhash}" data-own="${esc(w.own)}" title="Send to vault" ${w.own==='Vault'?'disabled':''}>Vault</button>
-          <select class="sm" data-tag="${w.id}">${TAG_OPTS.map(t=>`<option ${t===tag?'selected':''}>${t}</option>`).join('')}</select>
-          <span class="cp">${w.own!=='Vault'?'on '+w.own:'Vault'} · ${w.pwr} · MW <span class="${cfg.mw&&w.mw===cfg.mw?'hi':'cp'}">${w.mw||'—'}</span></span>
-          ${w.tag?`<span class="tagv"> DIM: ${w.tag}</span>`:'<span class="tagv"> DIM: none</span>'}
-          <br><b>3:</b> ${col(0)}<br><b>4:</b> ${col(1)}${stats?`<br>${stats}`:''}
+        <div class="cA">
+          <span class="score ${sc.god?'hot':''}" title="${sc.matched}/${sc.selN} criteria matched, weighted">${sc.pct}%</span>
+          ${sc.selN?`<span class="frac">${sc.matched}/${sc.selN}${sc.god?' 🎯':''}</span>`:''}
+          <div class="chips">${chips}</div>
+        </div>
+        <div class="cB">
+          <div class="rollline"><b>3:</b> ${col(0)}</div>
+          <div class="rollline"><b>4:</b> ${col(1)}</div>
+          ${stats?`<div class="statline">${stats}</div>`:''}
+        </div>
+        <div class="cC">
+          <div class="loc">${inVault?'Vault':'on <b>'+esc(w.own)+'</b>'} · ${w.pwr}<br>MW <span class="${cfg.mw&&w.mw===cfg.mw?'hi':'cp'}">${w.mw||'—'}</span> · DIM ${w.tag||'none'}</div>
+          <div class="acts">
+            ${selMode?`<input type="checkbox" data-sel="${w.id}" ${sel.has(w.id)?'checked':''}>`:''}
+            <button class="lockb ${w.locked?'on':''}" data-lock="${w.id}" data-to="${w.locked?0:1}" title="${w.locked?'Unlock':'Lock'}">${w.locked?'🔒':'🔓'}</button>
+            ${moveBtn}
+          </div>
         </div></div>`;
     }).join('');
 
@@ -234,7 +283,7 @@ function renderWatched(){
         <select data-mw="${hash}"><option value="">any</option>${mwOpts.map(s=>`<option ${cfg.mw===s?'selected':''}>${s}</option>`).join('')}</select>
         <div class="colh">Watched stats — highest possible on each roll (barrel/mag included)</div><div class="pool">${statBtns}</div>
       </div>
-      <div class="tools">
+      ${selMode?`<div class="tools">
         <button class="btn sm mut" data-selall="${hash}">Select all</button>
         <button class="btn sm mut" data-selnone="${hash}">Clear</button>
         <span>tag selected:</span>
@@ -242,7 +291,7 @@ function renderWatched(){
         <button class="btn sm mut" data-block="${hash}" data-to="1">🔒 selected</button>
         <button class="btn sm mut" data-block="${hash}" data-to="0">🔓 selected</button>
         <button class="btn sm red" data-junkrest="${hash}">Junk all unselected</button>
-      </div>
+      </div>`:''}
       ${copyRows||'<p class="note">No copies in the vault right now — new drops will be scored against this.</p>'}
     </div></div>`;
   }).join('') : (Object.keys(WATCH).length?'<p class="count">No watched weapons match this filter.</p>':'<p class="count">Nothing watched yet — add weapons below.</p>'));
@@ -281,7 +330,7 @@ const copyIds=hash=>DATA.weapons.filter(w=>w.hash===Number(hash)||String(w.hash)
 document.body.addEventListener('click',async e=>{
   // native controls (tag/mw selects, checkboxes) are handled by the change listener
   if(e.target.closest('select,input[type=checkbox]')) return;
-  const t=e.target.closest('[data-open],[data-watch],[data-unwatch],[data-lock],[data-equip],[data-vault],[data-selall],[data-selnone],[data-btag],[data-block],[data-junkrest],[data-wammo],.pk');
+  const t=e.target.closest('[data-open],[data-watch],[data-unwatch],[data-lock],[data-equip],[data-vault],[data-ctag],[data-selall],[data-selnone],[data-btag],[data-block],[data-junkrest],[data-wammo],.pk');
   if(!t) return;
   if(t.dataset.wammo!==undefined){ wAmmo=t.dataset.wammo; renderWatched(); }
   else if(t.dataset.open){ openCards.has(t.dataset.open)?openCards.delete(t.dataset.open):openCards.add(t.dataset.open); renderWatched(); }
@@ -289,7 +338,12 @@ document.body.addEventListener('click',async e=>{
   else if(t.dataset.unwatch){ if(confirm('Stop watching '+DATA.defs[t.dataset.unwatch].n+'?')){ delete WATCH[t.dataset.unwatch]; save(); render(); } }
   else if(t.dataset.lock){ t.disabled=true; if(await setLock(t.dataset.lock,+t.dataset.to)) renderWatched(); else t.disabled=false; }
   else if(t.dataset.equip){ t.disabled=true; t.textContent='…'; if(await itemAction('/api/equip',t.dataset.equip,t.dataset.rhash,t.dataset.own)) renderWatched(); else { t.disabled=false; t.textContent='Equip'; } }
-  else if(t.dataset.vault){ t.disabled=true; t.textContent='…'; if(await itemAction('/api/vault',t.dataset.vault,t.dataset.rhash,t.dataset.own)) renderWatched(); else { t.disabled=false; t.textContent='Vault'; } }
+  else if(t.dataset.vault){ t.disabled=true; t.textContent='…'; if(await itemAction('/api/vault',t.dataset.vault,t.dataset.rhash,t.dataset.own)) renderWatched(); else { t.disabled=false; t.textContent='→ Vault'; } }
+  else if(t.dataset.ctag){ // direct per-copy tag chip: tap to set, tap active to clear
+    const id=t.dataset.ctag, w=DATA.weapons.find(x=>x.id===id);
+    const cur=TAGS[id]!==undefined?TAGS[id]:((w&&w.tag)||'none');
+    TAGS[id]=(cur===t.dataset.t)?'none':t.dataset.t; saveTags(); renderWatched();
+  }
   else if(t.dataset.selall){ copyIds(t.dataset.selall).forEach(id=>sel.add(id)); renderWatched(); }
   else if(t.dataset.selnone){ copyIds(t.dataset.selnone).forEach(id=>sel.delete(id)); renderWatched(); }
   else if(t.dataset.btag){ for(const id of copyIds(t.dataset.btag)) if(sel.has(id)) TAGS[id]=t.dataset.t; saveTags(); renderWatched(); }
@@ -302,19 +356,19 @@ document.body.addEventListener('click',async e=>{
   else if(t.dataset.p){ // perk cycle: off -> track -> high -> off
     const cfg=WATCH[t.dataset.w]; cfg.perks=cfg.perks||{};
     const n=t.dataset.p, cur=cfg.perks[n]||0;
-    if(cur===0){ if(trackedCount(cfg)>=6){ t.textContent='6 max!'; setTimeout(renderWatched,900); return; } cfg.perks[n]=1; }
+    if(cur===0){ if(trackedCount(cfg)>=6){ t.textContent='6 max!'; setTimeout(()=>renderKeepingAnchor(t.dataset.w),900); return; } cfg.perks[n]=1; }
     else if(cur===1) cfg.perks[n]=2;
     else delete cfg.perks[n];
-    save(); renderWatched();
+    save(); renderKeepingAnchor(t.dataset.w);
   }
   else if(t.dataset.st){ const cfg=WATCH[t.dataset.w]; cfg.stats=cfg.stats||[];
     cfg.stats=cfg.stats.includes(t.dataset.st)?cfg.stats.filter(s=>s!==t.dataset.st):[...cfg.stats,t.dataset.st];
-    save(); renderWatched();
+    save(); renderKeepingAnchor(t.dataset.w);
   }
 });
 document.body.addEventListener('change',e=>{
   const mw=e.target.closest('select[data-mw]');
-  if(mw){ WATCH[mw.dataset.mw].mw=mw.value; save(); renderWatched(); return; }
+  if(mw){ WATCH[mw.dataset.mw].mw=mw.value; save(); renderKeepingAnchor(mw.dataset.mw); return; }
   const tg=e.target.closest('select[data-tag]');
   if(tg){ TAGS[tg.dataset.tag]=tg.value; saveTags(); renderWatched(); return; }  // reflect tag styling + junk count now
   const cb=e.target.closest('input[data-sel]');
@@ -324,6 +378,7 @@ $('q').oninput=e=>{q=e.target.value;renderAdd();};
 $('refreshBtn').onclick=()=>load(true);
 $('wSort').onchange=e=>{wSort=e.target.value;renderWatched();};
 $('wOnlyHits').onchange=e=>{wOnlyHits=e.target.checked;renderWatched();};
+$('selModeBtn').onclick=()=>{selMode=!selMode; if(!selMode) sel.clear(); renderWatched();};
 $('expJunkBtn').onclick=()=>{
   const ids=DATA.weapons.filter(w=>tagOf(w)==='junk').map(w=>w.id);
   if(!ids.length){ const o=$('expJunkBtn').textContent; $('expJunkBtn').textContent='Nothing junked'; setTimeout(()=>$('expJunkBtn').textContent=o,1200); return; }

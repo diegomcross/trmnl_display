@@ -185,6 +185,30 @@ Core priorities, in his words:
     names in the header. Rule of thumb for this file: **don't reintroduce a wholesale
     `innerHTML` rebuild on every interaction** — target the list that changed and
     preserve scroll.
+  - **Copy-row layout (redesigned):** each copy is a 3-column CSS grid
+    (`.copy` = `82px | 1fr | auto`, stacks to 1 col under 520px): **left** = score +
+    `matched/selected` + direct tag chips; **center** = the roll (col3/col4 perks, stats);
+    **right** = location · power · MW · DIM tag, then Lock + one smart move button. This
+    replaced a left-packed flex row that wasted the right half of the card (Diego's
+    "everything cramped on one side"). Top bar shows a live **"showing X of Y"** count so
+    Sort / "only hits" visibly react even when a short watchlist makes them no-ops.
+  - **Direct tag chips:** each copy has keep/fav/junk chips (`data-ctag`) — tap to set,
+    tap the active one to clear (→ `none`). No checkbox needed to tag one copy. Batch
+    tagging/locking now lives behind a **"Select multiple"** toggle (`selMode`): only then
+    do per-copy checkboxes + the `.tools` batch row render.
+  - **Smart Equip/Vault button:** one context button per copy — `→ Vault` when it's on a
+    character, `Equip` when it's in the vault (never both). Same `/api/vault`+`/api/equip`
+    as before.
+  - **Scroll anchoring (`renderKeepingAnchor(hash)`):** selecting a perk/stat/MW changes a
+    weapon's best %, which re-sorts the list and moved the open card mid-tap (Diego: "the
+    window keeps changing"). Perk/stat/MW handlers now call `renderKeepingAnchor` — it
+    records the edited card's viewport top, re-renders, and `scrollBy`s the delta so the
+    card (and the perk under your finger) stays put. Verified 0px drift.
+  - **TESTING HAZARD (learned twice):** never click real perk/tag controls in a test tab —
+    they call the page's `const save()`/`saveTags()` and POST the whole shared config;
+    `window.save` stubs don't bind. Test write-triggering UI with a read-only simulation
+    (flip `wSort` to force the same reorder) and fix leaks by surgically deleting the one
+    bad key from the current file. See the memory note.
   - **Reissued weapons merged (server):** a weapon reissued across seasons keeps its
     name/type but gets a new item hash, so it showed as duplicate entries. `fetchWeapons`
     groups defs by name+type+ammo+damage, unions the perk pools, and repoints every owned
