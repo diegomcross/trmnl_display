@@ -156,17 +156,26 @@ Core priorities, in his words:
     (`CURATED_SRC` in vault-verdict.js — short names like "Vanguard Ops") first,
     manifest collectible `sourceString` (majority vote across the set's pieces,
     junk "cannot be reacquired" strings filtered) as fallback. **Do not remove.**
-  - **Weapon Watch (NEW — god-roll tracker foundation, `/weapons`):** `/api/weapons`
-    returns every vault/character weapon with its possible col-3/col-4 perk pools
-    (from `randomizedPlugSetHash` of the 3rd/4th sockets in socket category
-    4241085061), the actual roll's perk options (component **310** reusablePlugs —
-    multi-perk drops included), masterwork (plug pc `masterworks.stat.<stat>`),
-    live stats, and lock state. **Perks are matched by NAME, not hash** — enhanced
-    variants have different hashes. UI: watchlist per weapon with up to 6 tracked
-    perks (tap cycles track → ★ high priority → off), wanted masterwork, watched
-    stats; every copy gets a score (perk hit = its priority 1/2, masterwork +1).
-    Config persists server-side in `weapon-watch.json` via GET/POST `/api/watch`.
-    Detection/alerting of NEW drops is not built yet — see NEXT_PHASE.md.
+  - **Weapon Watch (NEW — god-roll tracker, `/weapons`):** `/api/weapons` returns
+    every vault/character weapon with its possible col-3/col-4 perk pools (from
+    `randomizedPlugSetHash` of the 3rd/4th sockets in socket category 4241085061),
+    the actual roll's perk options (component **310** reusablePlugs — multi-perk
+    drops included), masterwork (plug pc `masterworks.stat.<stat>`), live stats,
+    **statsMax** (highest possible per stat on that roll — live value + best
+    barrel/mag swap, from plug `investmentStats` slimmed as `wi`), and lock state.
+    **Perks are matched by NAME, not hash** — enhanced variants differ by hash.
+  - Weapon Watch UI: collapsible card per watched weapon (tap header). "Edit
+    tracking" holds the perk pools (tap: track → ★ high → off, 6 max), wanted
+    masterwork, watched stats. Copies sorted by score (perk hit = priority 1/2,
+    masterwork +1). Watched stats show the roll's max value, color-ranked across
+    dupes: **gold = highest, teal = 2nd, red = 3rd, white otherwise**. Per copy:
+    lock/unlock button (live Bungie `SetLockState` — the app HAS the write scope,
+    verified; profile lags a few seconds behind), tag select (local overlay in
+    `weapon-tags.json`, wins over the DIM tag which is also shown), checkbox for
+    batch: select all / tag selected / lock-unlock selected / **junk all
+    unselected**. Config: `weapon-watch.json` + `weapon-tags.json` (gitignored)
+    via GET/POST `/api/watch`, `/api/tags`, POST `/api/lock`.
+    New-drop detection/alerting is not built yet — see NEXT_PHASE.md.
   - **Build synergy (NEW):** legendary keepers get "Pairs with <exotic>" notes when
     their archetype stats match a tuned exotic's favorites (same slot excluded);
     keepers no tuned exotic favors demote to Review (`oSyn` rules toggle). Classes

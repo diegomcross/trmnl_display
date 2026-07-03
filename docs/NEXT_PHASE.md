@@ -23,11 +23,19 @@ Then fashion loadouts.
 
 ## 2. Weapon perk tracking / god-roll finder — PHASE 2 (detection + alerts)
 
-**Done (phase 1):** manifest slim3 with weapon trait plug sets; `/api/weapons`
-(pools, per-roll perks by NAME — enhanced variants share the name, not the
-hash; masterwork; stats; lock state); `/weapons` tagging UI with per-perk
-priority (tap: track → ★ high → off, 6 max), wanted masterwork, watched stats;
-score per copy = Σ perk priorities (+1 masterwork). Config: `weapon-watch.json`.
+**Done (phase 1 + Diego's UX feedback round):** manifest slim4 (trait plug sets,
+plug stat investments `wi`, barrel/mag indexes `bi`); `/api/weapons` (pools,
+per-roll perks by NAME — enhanced variants share the name, not the hash;
+masterwork; stats + statsMax; lock state); `/weapons` UI: collapsible cards,
+priority perks (track → ★ high → off, 6 max), wanted masterwork, watched stats
+with max-possible values color-ranked across dupes (gold/teal/red/white), lock
+buttons (live Bungie SetLockState — write scope confirmed working), local tag
+overlay (keep/favorite/junk/none, DIM tag shown alongside), batch select +
+tag/lock + junk-all-unselected. Config: `weapon-watch.json`, `weapon-tags.json`.
+
+**Note on tags:** the overlay is local-only; DIM can't see it. To push junk tags
+into DIM, use DIM's CSV import or an id: search query — a "copy DIM query from
+my junk tags" export button is an easy add if Diego wants it.
 
 **To build (phase 2):**
 - **New-drop detection:** poll the profile on an interval while the game runs

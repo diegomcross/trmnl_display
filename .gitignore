@@ -32,3 +32,4 @@ dim-data.json
 node_modules/
 npm-debug.log*
 weapon-watch.json
+weapon-tags.json

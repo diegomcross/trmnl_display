@@ -75,11 +75,24 @@ async function bungie(url, e, tok) {
   return j.Response;
 }
 
+async function bungiePost(url, body, e, tok) {
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'X-API-Key': e.BUNGIE_API_KEY, 'Content-Type': 'application/json', Authorization: `Bearer ${tok}` },
+    body: JSON.stringify(body),
+  });
+  const j = await res.json();
+  if (j.ErrorStatus && j.ErrorStatus !== 'Success') throw new Error(`Bungie: ${j.ErrorStatus} — ${j.Message}`);
+  return j.Response;
+}
+
 // ---------- manifest (slimmed + cached to disk) ----------
 // slim3 shape:
-//   items:    hash -> {n,b,c,tt,it,set,pc,inv,src, ty,ammo,dmg,tr,ti}  (armor it=2, weapons it=3, plugs)
+//   items:    hash -> {n,b,c,tt,it,set,pc,inv,src, ty,ammo,dmg,tr,ti,bi, wi}  (armor it=2, weapons it=3, plugs)
 //             weapons: ty=type name, ammo 1/2/3, dmg damage type, tr=[col3,col4 plugSet hashes],
-//             ti=[col3,col4 socketEntry indexes] (cols 3+4 = 3rd/4th index of the WEAPON_PERKS category)
+//             ti=[col3,col4 socketEntry indexes] (cols 3+4 = 3rd/4th index of the WEAPON_PERKS category),
+//             bi=[col1,col2 socketEntry indexes] (barrel + magazine — they carry stat bonuses)
+//             plugs: wi = raw investmentStats {statHash: value} so barrel/mag stat deltas can be computed
 //   sets:     hash -> {n,perks:[{count,n,d}]}         (set membership is setItems, reverse-mapped onto items)
 //   plugSets: hash -> [plugItemHash,...]              (only sets referenced by weapon trait columns)
 //   statNames: statHash -> display name
@@ -107,7 +120,7 @@ async function loadManifest(e) {
   const meta = await bungie(`${BASE}/Destiny2/Manifest/`, e);
   const version = meta.version;
   fs.mkdirSync(CACHE_DIR, { recursive: true });
-  const cacheFile = path.join(CACHE_DIR, `slim3-${version}.json`);
+  const cacheFile = path.join(CACHE_DIR, `slim4-${version}.json`);
   if (MANIFEST?.version === version) return MANIFEST;
   if (fs.existsSync(cacheFile)) {
     MANIFEST = JSON.parse(fs.readFileSync(cacheFile, 'utf8'));
@@ -148,10 +161,12 @@ async function loadManifest(e) {
   for (const [hash, d] of Object.entries(items)) {
     const isArmor = d.itemType === 2, isWeapon = d.itemType === 3, isPlug = !!d.plug;
     if (!isArmor && !isWeapon && !isPlug) continue;
-    const inv = {};
+    const inv = {}, wi = {};
     for (const st of d.investmentStats || []) {
+      if (st.isConditionallyActive) continue;
       const k = STAT[st.statTypeHash];
-      if (k && !st.isConditionallyActive) inv[k] = (inv[k] || 0) + st.value;
+      if (k) inv[k] = (inv[k] || 0) + st.value;
+      if (isPlug && st.value) wi[st.statTypeHash] = (wi[st.statTypeHash] || 0) + st.value;
     }
     const slim = {
       n: d.displayProperties?.name || '',
@@ -162,6 +177,7 @@ async function loadManifest(e) {
       set: setOfItem[hash] || 0,
       pc: d.plug?.plugCategoryIdentifier || '',
       inv: Object.keys(inv).length ? inv : undefined,
+      wi: Object.keys(wi).length ? wi : undefined,
       src: srcOfItem[hash] || undefined,
     };
     if (isWeapon) {
@@ -178,6 +194,7 @@ async function loadManifest(e) {
         if (ps) traitSets.add(ps);
       }
       if (tr[0] || tr[1]) { slim.tr = tr; slim.ti = ti; }
+      slim.bi = [idx[0] ?? -1, idx[1] ?? -1]; // barrel + magazine sockets (stat bonuses)
     }
     slimItems[hash] = slim;
   }
@@ -277,7 +294,21 @@ async function fetchProfile(e) {
     for (const it of inv.items || []) raw.push({ it, own: charName[cid] });
   for (const [cid, eq] of Object.entries(prof.characterEquipment?.data || {}))
     for (const it of eq.items || []) raw.push({ it, own: charName[cid] });
+  // remember one character for account-level item actions (SetLockState needs one)
+  const cids = Object.keys(prof.characters?.data || {});
+  if (cids.length) LOCK_CTX = { characterId: cids[0], membershipType: m.membershipType };
   return { prof, man, m, raw };
+}
+let LOCK_CTX = null;
+
+// Lock/unlock an item via the Bungie API. Needs the MoveEquipDestinyItems OAuth
+// scope on the app — if missing, Bungie returns an auth error we pass through.
+async function setLock(e, itemId, locked) {
+  const tok = await accessToken(e);
+  if (!LOCK_CTX) await fetchProfile(e);
+  await bungiePost(`${BASE}/Destiny2/Actions/Items/SetLockState/`, {
+    state: !!locked, itemId, characterId: LOCK_CTX.characterId, membershipType: LOCK_CTX.membershipType,
+  }, e, tok.access_token);
 }
 
 // ---------- profile -> armor items ----------
@@ -404,6 +435,27 @@ async function fetchWeapons(e) {
       if (nm) stats[nm] = sv.value;
     }
 
+    // highest possible value of each stat on THIS roll: live value + the best
+    // swap among this roll's barrel/magazine options (they carry stat bonuses)
+    const statsMax = { ...stats };
+    for (const si of def.bi || []) {
+      if (si < 0) continue;
+      const curWi = man.items[socks[si]?.plugHash]?.wi || {};
+      const opts = reuse[si]?.map((p) => p.plugItemHash) || (socks[si]?.plugHash ? [socks[si].plugHash] : []);
+      const bestDelta = {};
+      for (const h of opts) {
+        const wi = man.items[h]?.wi || {};
+        for (const sh of new Set([...Object.keys(wi), ...Object.keys(curWi)])) {
+          const d2 = (wi[sh] || 0) - (curWi[sh] || 0);
+          if (d2 > (bestDelta[sh] || 0)) bestDelta[sh] = d2;
+        }
+      }
+      for (const [sh, d2] of Object.entries(bestDelta)) {
+        const nm = man.statNames[sh];
+        if (nm && statsMax[nm] !== undefined) statsMax[nm] = statsMax[nm] + d2;
+      }
+    }
+
     if (!defsOut[it.itemHash]) {
       defsOut[it.itemHash] = {
         n: def.n, ty: def.ty, tt: def.tt, slot: WBUCKET[def.b],
@@ -414,18 +466,20 @@ async function fetchWeapons(e) {
     weapons.push({
       id, hash: it.itemHash, own, locked: !!(it.state & 1),
       tag: tags[id]?.tag || '', pwr: inst.primaryStat?.value || 0,
-      cols, mw, stats,
+      cols, mw, stats, statsMax,
     });
   }
   return { weapons, defs: defsOut, fetchedAt: new Date().toISOString(), account: `${m.membershipType}/${m.membershipId}` };
 }
 
-// ---------- god-roll watch config ----------
+// ---------- god-roll watch config + local tag overlay ----------
 const WATCH_FILE = path.join(__dirname, 'weapon-watch.json');
-function loadWatch() {
-  try { return JSON.parse(fs.readFileSync(WATCH_FILE, 'utf8')); } catch { return {}; }
-}
-function saveWatch(w) { fs.writeFileSync(WATCH_FILE, JSON.stringify(w, null, 2)); }
+const TAGS_FILE = path.join(__dirname, 'weapon-tags.json'); // instanceId -> keep|favorite|junk|none (overrides DIM tag in the UI)
+const loadJson = (f) => { try { return JSON.parse(fs.readFileSync(f, 'utf8')); } catch { return {}; } };
+const loadWatch = () => loadJson(WATCH_FILE);
+const saveWatch = (w) => fs.writeFileSync(WATCH_FILE, JSON.stringify(w, null, 2));
+const loadTags = () => loadJson(TAGS_FILE);
+const saveTags = (t) => fs.writeFileSync(TAGS_FILE, JSON.stringify(t, null, 2));
 
 // ---------- probe mode for debugging ----------
 async function probe(nameLike) {
@@ -465,6 +519,21 @@ async function main() {
           return json({ ok: true });
         }
         return json(loadWatch());
+      }
+      if (req.url.startsWith('/api/tags')) {
+        if (req.method === 'POST') {
+          const body = JSON.parse(await readBody(req) || '{}');
+          saveTags(body);
+          return json({ ok: true });
+        }
+        return json(loadTags());
+      }
+      if (req.url.startsWith('/api/lock') && req.method === 'POST') {
+        const { id, locked } = JSON.parse(await readBody(req) || '{}');
+        if (!id) return json({ error: 'missing id' });
+        await setLock(e, id, locked);
+        if (wcache) { const w = wcache.weapons.find((x) => x.id === id); if (w) w.locked = !!locked; }
+        return json({ ok: true, locked: !!locked });
       }
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
       if (req.url.startsWith('/weapons')) return res.end(fs.readFileSync(path.join(__dirname, 'weapon-watch.html')));
