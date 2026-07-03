@@ -120,7 +120,7 @@ async function loadManifest(e) {
   const meta = await bungie(`${BASE}/Destiny2/Manifest/`, e);
   const version = meta.version;
   fs.mkdirSync(CACHE_DIR, { recursive: true });
-  const cacheFile = path.join(CACHE_DIR, `slim4-${version}.json`);
+  const cacheFile = path.join(CACHE_DIR, `slim5-${version}.json`);
   if (MANIFEST?.version === version) return MANIFEST;
   if (fs.existsSync(cacheFile)) {
     MANIFEST = JSON.parse(fs.readFileSync(cacheFile, 'utf8'));
@@ -176,6 +176,7 @@ async function loadManifest(e) {
       it: d.itemType,
       set: setOfItem[hash] || 0,
       pc: d.plug?.plugCategoryIdentifier || '',
+      icon: d.displayProperties?.icon || undefined,   // bungie.net path; weapons + perk/MW plugs
       inv: Object.keys(inv).length ? inv : undefined,
       wi: Object.keys(wi).length ? wi : undefined,
       src: srcOfItem[hash] || undefined,
@@ -184,6 +185,7 @@ async function loadManifest(e) {
       slim.ty = d.itemTypeDisplayName || '';
       slim.ammo = d.equippingBlock?.ammoType || 0;
       slim.dmg = d.defaultDamageType || 0;
+      slim.shot = d.screenshot || undefined;          // full weapon art for the drops dashboard
       const cat = d.sockets?.socketCategories?.find((c) => c.socketCategoryHash === WEAPON_PERKS_CAT);
       const idx = cat?.socketIndexes || [];
       const tr = [], ti = [];
@@ -446,7 +448,8 @@ async function fetchWeapons(e) {
   const sockets = prof.itemComponents?.sockets?.data || {};
   const reusable = prof.itemComponents?.reusablePlugs?.data || {};
 
-  const weapons = [], defsOut = {};
+  const weapons = [], defsOut = {}, perkIcons = {}; // perkIcons: perk name -> bungie.net icon path
+  const px = (n, h) => { const ic = man.items[h]?.icon; if (ic && !perkIcons[n]) perkIcons[n] = ic; };
   for (const { it, own } of raw) {
     const def = man.items[it.itemHash];
     if (!def || def.it !== 3 || !it.itemInstanceId || !WBUCKET[def.b]) continue;
@@ -467,15 +470,16 @@ async function fetchWeapons(e) {
         const n = man.items[h]?.n || `#${h}`;
         if (!byName.has(n)) byName.set(n, { n, on: false });
         if (socks[si]?.plugHash === h) byName.get(n).on = true;
+        px(n, h);
       }
       cols[ci] = [...byName.values()];
     });
 
     // masterwork: plug category 'masterworks.stat.<stat>'
-    let mw = '';
+    let mw = '', mwIcon = '';
     for (const s of socks) {
       const mm = s.plugHash && man.items[s.plugHash]?.pc.match(/masterworks\.stat\.(\w+)/);
-      if (mm) { mw = mm[1]; break; }
+      if (mm) { mw = mm[1]; mwIcon = man.items[s.plugHash]?.icon || ''; break; }
     }
 
     const stats = {};
@@ -509,13 +513,18 @@ async function fetchWeapons(e) {
       defsOut[it.itemHash] = {
         n: def.n, ty: def.ty, tt: def.tt, slot: WBUCKET[def.b],
         ammo: AMMO[def.ammo] || '', dmg: DMG[def.dmg] || '', src: def.src || '',
-        pool: (def.tr || []).map((ps) => [...new Set((man.plugSets[ps] || []).map((h) => man.items[h]?.n || `#${h}`))]),
+        icon: def.icon || '', shot: def.shot || '',
+        pool: (def.tr || []).map((ps) => {
+          const names = new Set();
+          for (const h of (man.plugSets[ps] || [])) { const n = man.items[h]?.n || `#${h}`; names.add(n); px(n, h); }
+          return [...names];
+        }),
       };
     }
     weapons.push({
       id, hash: it.itemHash, rhash: it.itemHash, own, locked: !!(it.state & 1),
       tag: tags[id]?.tag || '', pwr: inst.primaryStat?.value || 0,
-      cols, mw, stats, statsMax,
+      cols, mw, mwIcon, stats, statsMax,
     });
   }
 
@@ -546,7 +555,7 @@ async function fetchWeapons(e) {
   }
   for (const w of weapons) w.hash = canonical[w.hash] || w.hash;
 
-  return { weapons, defs: mergedDefs, fetchedAt: new Date().toISOString(), account: `${m.membershipType}/${m.membershipId}` };
+  return { weapons, defs: mergedDefs, perkIcons, fetchedAt: new Date().toISOString(), account: `${m.membershipType}/${m.membershipId}` };
 }
 
 // ---------- god-roll watch config + local tag overlay ----------
