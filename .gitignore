@@ -24,6 +24,10 @@ orders-debug.json
 probe-result.json
 resolve.json
 
+# Vault Verdict: manifest cache + optional private DIM export
+vault-manifest-cache/
+dim-data.json
+
 # Node
 node_modules/
 npm-debug.log*
