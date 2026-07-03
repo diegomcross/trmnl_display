@@ -67,8 +67,8 @@ Core priorities, in his words:
 | File | Role |
 |---|---|
 | `auth-and-snapshot.js` | Interactive Bungie OAuth + writes `snapshot.json` (full profile dump). Run once / to re-auth. |
-| `render.js` | `buildModel(profile)` -> data model; page renderers (`renderSVG`=Orders, `renderQuestsSVG`, `renderTriumphsSVG`, `renderTitleSVG`) + `renderPage()` dispatcher. CLI run writes `screen.png` + prints a report. |
-| `server.js` | Always-on TRMNL BYOS HTTP server. Pulls a fresh profile each cycle, picks the current rotation page, renders, converts to 1-bit BMP, serves it. Hosts `/settings`, `/display`, `/screen.png`. |
+| `render.js` | `buildModel(profile)` -> data model; page renderers (`renderSVG`=Orders, `renderQuestsSVG`, `renderTriumphsSVG`, `renderTitleSVG`, `renderDropAlert`=god-roll drop) + `renderPage()` dispatcher. CLI run writes `screen.png` + prints a report. |
+| `server.js` | Always-on TRMNL BYOS HTTP server. Pulls a fresh profile each cycle, picks the current rotation page, renders, converts to 1-bit BMP, serves it. Interrupts the rotation for `drop-alert.json` god-roll alerts (`activeAlert`). Hosts `/settings`, `/display`, `/screen.png`. |
 | `start-display.ps1` | **Always-on launcher (current default).** Runs `node server.js` and keeps it alive (restart loop). `-Install` adds a hidden **Startup-folder login item** (Task Scheduler is blocked here) + starts it now; `-Uninstall` removes it. Logs to `server.log`. |
 | `watch-destiny.ps1` | Optional game-coupled alternative: watches for `destiny2.exe` and starts/stops the server with the game. `-Setup` tried to register a Task Scheduler task but that is **denied** on this PC. Logs to `watcher.log`. |
 | `config.json` | Settings written by the settings page (gitignored; per-machine). |
@@ -218,8 +218,18 @@ Core priorities, in his words:
     "god rolls only" filter. New-drop detection: `weapon-seen.json` (gitignored) seeds
     every current instance id on first fetch (nothing false-positive), then `fetchWeapons`
     flags any unseen copy `fresh:true`; `POST /api/drops/ack {ids?}` moves ids into seen
-    (empty ids = ack all current). This is the manual/visual half of phase-2; the live
-    poller + TRMNL alert is still to come (NEXT_PHASE.md).
+    (empty ids = ack all current).
+  - **Live god-roll alerts (phase-2, shipped):** `pollDrops` in vault-verdict.js runs
+    every 25s **while destiny2.exe is running**; for each `fresh`, unlocked copy of a
+    watched weapon it runs the server-side `scoreWeaponCopy` (same 75% god bar). On a
+    god-roll it: **auto-locks** the drop (SetLockState), **beeps the PC 3×**, and writes
+    `drop-alert.json` `{until, weapon, perks, mw, stats, pct}`. `server.js` reads that file
+    each tick (`activeAlert`): while live it renders `renderDropAlert` (render.js) instead
+    of the rotation, sets `refresh_rate`/tick to 10s, and — key fix — sets `state.alerting`
+    so that when the alert ends it **forces a normal redraw** (else the "no progress change"
+    guard would hold the stale drop image). Verified end-to-end on the real ESP32 panel.
+    **⚠ vault-verdict.js must be running while playing** for this to fire — see NEXT_PHASE
+    "operational gap" (not yet supervised like server.js).
   - **TESTING HAZARD (learned twice):** never click real perk/tag controls in a test tab —
     they call the page's `const save()`/`saveTags()` and POST the whole shared config;
     `window.save` stubs don't bind. Test write-triggering UI with a read-only simulation

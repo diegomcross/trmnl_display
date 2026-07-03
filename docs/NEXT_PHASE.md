@@ -104,27 +104,19 @@ toggles don't collapse or jump; collapsed cards list tracked perks in the header
 ammo-type filter tabs, sort, "only hits" toggle, god-roll 🎯 badge. See the audit
 at `.claude/plans/there-is-no-link-reactive-engelbart.md`.
 
-**SHIPPED (2026-07-03):** slim5 icons + the visual New Drops dashboard `/drops` +
-new-drop detection (`weapon-seen.json`, `fresh` flag, `/api/drops/ack`). See HANDOFF.
-What remains here is the *live alerting* half — the poller + TRMNL interrupt + sound
-+ auto-lock.
+**SHIPPED (2026-07-03) — the whole phase-2 is done:** slim5 icons; visual New Drops
+dashboard `/drops` + detection (`weapon-seen.json`, `fresh`, `/api/drops/ack`); AND
+the live alert pipeline — in-game poller (`pollDrops` in vault-verdict.js) →
+auto-lock (SetLockState) + 3× PC beep + `drop-alert.json` → `server.js` interrupts
+the panel with `renderDropAlert` for ~1 min (fast refresh, forced redraw on exit so
+it doesn't stick). Verified live on the real ESP32 panel. See HANDOFF.
 
-**To build (phase 2 live alerts — poller → TRMNL + sound + auto-lock):**
-- **Poller:** on an interval while destiny2.exe runs, call `fetchWeapons` (or the
-  `/api/weapons?fresh=1` path) and read the `fresh` copies of watched weapons that
-  are already computed server-side; score them (75% god-roll bar, reuse `scoreCopy`).
-  Do NOT auto-ack — let the dashboard/alert own acknowledgement.
-- **Pop threshold:** DECIDED — the **75% god-roll flag** (`GOD_MIN_*`). Only 🎯 drops alert.
-- **TRMNL interrupt:** on a hit, take over the panel for **1 minute** (weapon
-  name, tracked perks hit, masterwork, tracked stat numbers), then resume
-  rotation — needs a render page in `render.js` + an interrupt hook in
-  `server.js`'s refresh loop.
-- **Sound:** TRMNL has no speaker — play a sound on the PC while in-game
-  (e.g. PowerShell `[console]::beep` / media file from the watcher or server
-  when destiny2.exe is running).
-- **Auto-lock the drop** via Bungie `SetItemLockState` (needs
-  `MoveEquipDestinyItems` OAuth scope — check the app's scopes; may need a
-  re-auth). No auto-tag: Diego tags manually after reviewing.
+**⚠ OPERATIONAL GAP (do next):** the poller only runs while **vault-verdict.js is
+running**. `start-display.ps1` supervises `server.js` only. For alerts to actually
+fire during play, vault-verdict must be always-on too. TODO: add a supervised
+vault-verdict launch (extend start-display.ps1, or a sibling `start-vault.ps1`,
+`-Install` to the Startup folder like the display server). Until then Diego must
+`node vault-verdict.js` before playing.
 
 **Diego's words:** the app should pull which perks each weapon *can* roll
 (columns 3 and 4 — the trait columns), let him tag **up to 6 perks to track per
