@@ -39,9 +39,19 @@ steps for Diego); the only prerequisite is **DIM Sync enabled in his DIM setting
   `keep | favorite | junk | none`. Map favorite/keep/junk 1:1; our `none` = remove
   the annotation; leave DIM `infuse`/`archive` untouched (don't clobber them).
 
-**Direction (the blocked decision):** two-way (recommended — one source of truth,
-needs last-writer reconciliation), read-only DIM→app, or push-only app→DIM. Record
-Diego's answer verbatim here once given.
+**Direction — DECIDED 2026-07-03: Diego chose TWO-WAY** (read DIM tags into the app
+AND push app tags back to DIM; one source of truth).
+
+**CONSENT GATE (before any build):** DIM Sync works by sending Diego's **Bungie OAuth
+access token** to `api.destinyitemmanager.com` (register app + `/auth/token` exchange).
+There is no way around this — it's inherent to DIM Sync (DIM already does this in his
+browser every session). The sandbox correctly flags it as sending a credential to a
+third party. **Get Diego's explicit OK to transmit his Bungie token to DIM before
+running the probe / building this.** Then run `scratchpad/dim-probe.js` (read-only:
+register → auth → read tags) to confirm the flow, and only after that build the
+server integration + swap the tag chips to per-change writes (`POST /api/tag {id,tag}`
+→ writes DIM + local mirror, replacing the whole-object `saveTags` — also fixes the
+shared-file clobber hazard).
 
 **Files:** `vault-verdict.js` (DIM auth + read/write helpers, merge DIM tags into
 `fetchWeapons` / `dimOverlay`, wire the tag `<select>` POST to also push to DIM),
