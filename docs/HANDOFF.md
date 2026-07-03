@@ -151,8 +151,11 @@ Core priorities, in his words:
     exotics fall back to per-archetype niches and show under the **Pending**
     filter. Ratings + favorites persist (`vv-ratings` / `vv-exofavs`, localStorage
     + `window.storage` when present) and ride along in Export/Import ratings.
-  - **Next:** favorites should also steer which LEGENDARIES are kept (builds
-    revolve around an exotic) — see `docs/NEXT_PHASE.md`.
+  - **Build synergy (NEW):** legendary keepers get "Pairs with <exotic>" notes when
+    their archetype stats match a tuned exotic's favorites (same slot excluded);
+    keepers no tuned exotic favors demote to Review (`oSyn` rules toggle). Classes
+    with zero tuned exotics are skipped. Caveat: while ALL stats are favored by
+    some tuned exotic of a class (Warlock today), no demotion fires there.
   - DIM overlay: optional `dim-data.json` (tags + loadouts) merges into verdicts.
 
 ---

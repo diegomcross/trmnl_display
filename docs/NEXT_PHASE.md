@@ -5,36 +5,21 @@
 
 ## Where we are (2026-07-03)
 
-Just shipped (commit `8a9c218`): Vault Verdict set-bonus data fix (set membership
-comes from `DestinyEquipableItemSetDefinition.setItems`, not the item def) and the
-**exotic favorite-stat tuning panel** (per-exotic stat picks, seeded with Diego's
-synergy list, drives which exotic copies are kept). Next task order, per Diego:
+Just shipped: Vault Verdict set-bonus data fix (`setItems` reverse map), the
+**exotic favorite-stat tuning panel**, and **build synergy for legendaries**
+(Diego chose "drive verdicts": keepers pair-annotated with matching tuned
+exotics, same-slot excluded, off-build keepers demoted to Review, `oSyn`
+toggle in Rules, classes with no tuned exotics untouched).
 
-1. Exotic favorites → legendary keep logic (design pending, questions asked)
-2. Weapon perk tracking / god-roll finder (spec below, questions asked)
-3. Fashion loadouts (after weapons feature is complete)
+**Known limitation to revisit:** with 28 Warlock exotics tuned covering all six
+stats, "no exotic favors this" never fires for Warlock — demotion only bites on
+selectively-tuned classes. If Diego wants sharper pruning, the refinement is a
+per-exotic build-view filter (pick an exotic → see its best 4 legendary
+partners) or priority tiers on exotics.
 
----
-
-## 1. Exotic favorites should shape LEGENDARY verdicts
-
-**Diego's words:** "the exotic favorite stats is important so the app knows how to
-keep the other armor pieces. Build crafting always revolves around an exotic armor."
-
-Meaning: a build = 1 exotic + 4 legendaries that spike the stats the exotic wants.
-The favorite stats set in the exotics panel define, per class, which stat
-combinations the legendary pool actually needs to cover. Legendaries whose
-archetype (primary/secondary) + tertiary stats match a tuned exotic's favorite
-stats are build-relevant; niches no exotic wants are candidates for demotion.
-
-**Files:** `vault-verdict.html` only (verdict engine `compute()`, card rendering,
-possibly a per-exotic filter control).
-
-**Open questions (asked 2026-07-03, record answers here):**
-- How aggressive: demote non-matching legendary keepers vs only flag/annotate
-  matches vs an exotic-picker filter view?
-- Does the exotic's slot exclude that slot from matching (an exotic chest means
-  legendary chest pieces can't be in that build)?
+Task order, per Diego:
+1. Weapon perk tracking / god-roll finder (spec below — answers recorded)
+2. Fashion loadouts (only after weapons feature is complete)
 
 ## 2. Weapon perk tracking / god-roll finder
 
@@ -65,14 +50,24 @@ weapon name, tracked stat number, tracked perks, masterwork.
 `server.js` + `render.js` (TRMNL match-alert page), new gitignored state file
 for seen instance ids + watch config.
 
-**Open questions (asked 2026-07-03, record answers here):**
-- Watchlist scope: only weapons Diego picks, or auto-track every weapon name
-  seen in vault?
-- Match rule: does a drop "pop" when ANY tracked perk hits, or require e.g. a
-  col-3 AND col-4 hit? Is masterwork a hard requirement or a bonus?
-- 6 tracked perks: per weapon, correct? (vs a global perk list)
-- TRMNL behavior: interrupt the rotation with the alert page until dismissed,
-  or just add it as a rotating page showing recent matches?
+**Diego's answers (2026-07-03) — the agreed design:**
+- **Watchlist:** Diego picks specific weapons to track. Per weapon: up to 6
+  tracked perks (cols 3+4), a wanted masterwork, wanted stats.
+- **Match rule — priority-weighted scoring.** His example: "I'm tracking 2 perks
+  in col3 but one of them is a high priority, and 3 perks on col4 and two of
+  them are high priority, so this also affects the score." So each tracked perk
+  gets a **priority flag (normal / high)**; a drop's score is the weighted sum
+  of perk hits (+ masterwork + stat matches as bonus). UI must expose the
+  per-perk priority and presumably a pop threshold; confirm threshold defaults
+  with Diego during build.
+- **TRMNL alert:** on a match, **interrupt the rotation for 1 minute** and
+  **ring a sound notification while in-game** (TRMNL has no speaker — play the
+  sound from the PC, e.g. the server triggering a Windows sound while
+  destiny2.exe is running). After 1 minute, resume rotation.
+- **Auto-lock:** immediately **lock the matching drop via the Bungie API**
+  (`SetItemLockState`, needs MoveEquipDestinyItems OAuth scope — verify the
+  app's scopes, may need re-auth) so it can't be deleted. **No tag** — Diego
+  tags manually when he reviews it.
 
 ## 3. Fashion loadouts (LATER — only after weapons feature is complete)
 

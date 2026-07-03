@@ -133,6 +133,7 @@ details.panel[open] summary::after{content:" –"}
 
 <details class="panel">
   <summary>Rules — tune the verdict engine</summary>
+  <label class="tgl"><input type="checkbox" id="oSyn" checked> Build synergy: demote legendary keepers whose archetype stats no tuned exotic favors (builds revolve around an exotic)</label>
   <label class="tgl"><input type="checkbox" id="oHp" checked> Demote Health-primary keepers (Bulwark, Siegebreaker) to Review — Health is not a target stat</label>
   <label class="tgl"><input type="checkbox" id="oFav" checked> Never junk items tagged favorite (demote to Review)</label>
   <label class="tgl"><input type="checkbox" id="oLo" checked> Never junk items used in DIM loadouts (demote to Review)</label>
@@ -260,12 +261,38 @@ function compute(o){
       best.v='review'; best.why+=' <em>Health-primary archetype — off-target for your 180 builds.</em>';
     }
   }
+
+  // Build synergy: builds revolve around an exotic, so a legendary keeper earns its
+  // slot by spiking a stat some tuned exotic of its class favors. The exotic's own
+  // slot is excluded (an exotic chest can't share a build with a legendary chest).
+  // Classes with no tuned exotics are left alone until their exotics get tuned.
+  if(o.syn){
+    const TERK={Weapons:'w',Health:'h',Class:'c',Grenade:'g',Super:'s',Melee:'m'};
+    const demand={}, seen=new Set();
+    for(const it of ITEMS){
+      if(!it.x) continue;
+      const f=favOf(it.n); if(!f.length) continue;
+      const key=it.cls+'|'+it.n; if(seen.has(key)) continue; seen.add(key);
+      (demand[it.cls]=demand[it.cls]||[]).push({n:it.n,favs:f,slot:isClassItem(it.slot)?'Class Item':it.slot});
+    }
+    for(const it of ITEMS){
+      if(it.x||it.v!=='keep') continue;
+      const ds=demand[it.cls]; if(!ds||!ds.length) continue;
+      const slot=isClassItem(it.slot)?'Class Item':it.slot;
+      const[p,s]=ARCH[it.a]||[], tk=TERK[it.ter];
+      const hits=ds.filter(d=>d.slot!==slot && d.favs.some(k=>k===p||k===s));
+      if(hits.length) it.why+=` Pairs with <b>${hits.slice(0,3).map(h=>h.n).join('</b>, <b>')}</b>${hits.length>3?` +${hits.length-3} more`:''}.`;
+      else if(ds.some(d=>d.slot!==slot && tk && d.favs.includes(tk)))
+        it.why+=' <em>Weak pair — only its tertiary stat matches a tuned exotic.</em>';
+      else{ it.v='review'; it.why+=' <em>No tuned exotic favors this archetype’s stats — off-build.</em>'; }
+    }
+  }
 }
 
 // ---------- state ----------
 let F={cls:'',v:'',slot:'',set:'',q:'',a:'',ter:'',pend:false}, shown=60;
 const $=id=>document.getElementById(id);
-const opts=()=>({hp:$('oHp').checked,fav:$('oFav').checked,lo:$('oLo').checked});
+const opts=()=>({hp:$('oHp').checked,fav:$('oFav').checked,lo:$('oLo').checked,syn:$('oSyn').checked});
 
 function filtered(){
   const q=F.q.toLowerCase();
@@ -395,7 +422,7 @@ document.body.addEventListener('click',e=>{
 $('slotSel').onchange=e=>{F.slot=e.target.value;shown=60;render();};
 $('setSel').onchange=e=>{F.set=e.target.value;shown=60;render();};
 $('q').oninput=e=>{F.q=e.target.value;shown=60;render();};
-['oHp','oFav','oLo'].forEach(id=>$(id).onchange=()=>{shown=60;render();});
+['oSyn','oHp','oFav','oLo'].forEach(id=>$(id).onchange=()=>{shown=60;render();});
 $('more').onclick=()=>{shown+=60;render();};
 $('expBtn').onclick=()=>{ copyText(JSON.stringify({ratings,exoFavs}), $('expBtn'), 'Ratings copied ✓'); };
 $('impBtn').onclick=()=>{ const s=prompt('Paste exported ratings JSON:'); if(!s)return;
