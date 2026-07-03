@@ -90,6 +90,11 @@ details.panel[open] summary::after{content:" –"}
 .seg button.onI{background:rgba(255,106,82,.18);color:var(--junk);border-color:var(--junk)}
 .seg button.onU{background:rgba(169,127,214,.18);color:var(--und);border-color:var(--und)}
 .savenote{font-size:10.5px;color:var(--dim);margin-top:8px}
+/* exotic favorite-stat toggles */
+.xseg{display:flex;gap:4px;margin-top:6px;flex-wrap:wrap}
+.xseg button{background:var(--panel2);border:1px solid var(--line);color:var(--mut);padding:6px 9px;font-size:10.5px;cursor:pointer;text-transform:uppercase;letter-spacing:.05em;font-family:inherit;clip-path:polygon(6px 0,100% 0,100% calc(100% - 6px),calc(100% - 6px) 100%,0 100%,0 6px)}
+.xseg button.on{background:rgba(207,174,66,.2);color:var(--gold);border-color:var(--gold)}
+.st.fv{outline:1px solid var(--gold);outline-offset:-1px}
 :focus-visible{outline:2px solid var(--gold);outline-offset:2px}
 @media(prefers-reduced-motion:no-preference){.card{animation:in .18s ease both}@keyframes in{from{opacity:0;transform:translateY(4px)}to{opacity:1}}}
 @media(min-width:760px){body{max-width:880px;margin:0 auto}}
@@ -97,7 +102,7 @@ details.panel[open] summary::after{content:" –"}
 </head>
 <body>
 <h1 class="disp">Vault <span>Verdict</span></h1>
-<p class="sub">Armor 3.0 triage · live from Bungie · set ratings drive the verdicts</p>
+<p class="sub">Armor 3.0 triage · live from Bungie · set ratings + exotic favorites drive the verdicts</p>
 <div class="bar"><button class="btn" id="refreshBtn">Refresh from Bungie</button><span class="count" id="status" style="margin:0;align-self:center"></span></div>
 
 <div class="chips" id="chips"></div>
@@ -120,6 +125,12 @@ details.panel[open] summary::after{content:" –"}
   <div id="setList"></div>
 </details>
 
+<details class="panel" id="exoPanel">
+  <summary>Exotics — favorite stat tuning</summary>
+  <p class="savenote">Pick the stat(s) that synergize with each exotic's function. Copies are ranked by their favorite-stat total and only the best copy is kept. No favorite set: falls back to per-archetype niches and the exotic is flagged pending. Saves automatically.</p>
+  <div id="exoList"></div>
+</details>
+
 <details class="panel">
   <summary>Rules — tune the verdict engine</summary>
   <label class="tgl"><input type="checkbox" id="oHp" checked> Demote Health-primary keepers (Bulwark, Siegebreaker) to Review — Health is not a target stat</label>
@@ -139,7 +150,7 @@ details.panel[open] summary::after{content:" –"}
 <div class="export">
   <button class="btn" data-x="junk">Copy junk DIM query</button>
   <button class="btn" data-x="review">Copy review query</button>
-  <button class="btn" data-x="pending">Copy set-pending</button>
+  <button class="btn" data-x="pending">Copy pending</button>
   <button class="btn" data-x="filtered">Copy current view</button>
 </div>
 
@@ -157,28 +168,61 @@ const isClassItem = s => ['Bond','Cloak','Mark'].includes(s);
 const RLBL = {'4pc':'4-piece','2pc':'2-pc only','ignore':'Ignore','und':'Undecided'};
 
 // ---------- persistence ----------
-let ratings = {};
-async function loadRatings(){
-  try{ if(window.storage){ const r=await window.storage.get('vv-ratings'); if(r&&r.value){ratings=JSON.parse(r.value);return;} } }catch(e){}
-  try{ const s=localStorage.getItem('vv-ratings'); if(s)ratings=JSON.parse(s); }catch(e){}
+let ratings = {};   // set name -> 4pc|2pc|ignore|und
+let exoFavs = {};   // exotic name -> array of stat keys, e.g. ['s','c']
+async function loadStore(key){
+  try{ if(window.storage){ const r=await window.storage.get(key); if(r&&r.value) return JSON.parse(r.value); } }catch(e){}
+  try{ const s=localStorage.getItem(key); if(s) return JSON.parse(s); }catch(e){}
+  return null;
 }
-async function saveRatings(){
-  const s=JSON.stringify(ratings);
-  try{ if(window.storage){ await window.storage.set('vv-ratings',s); return; } }catch(e){}
-  try{ localStorage.setItem('vv-ratings',s); }catch(e){}
+async function saveStore(key,obj){
+  const s=JSON.stringify(obj);
+  try{ if(window.storage){ await window.storage.set(key,s); return; } }catch(e){}
+  try{ localStorage.setItem(key,s); }catch(e){}
 }
+const saveRatings=()=>saveStore('vv-ratings',ratings);
+const saveFavs=()=>saveStore('vv-exofavs',exoFavs);
 const rateOf = sb => sb ? (ratings[sb]||'und') : 'ignore';
+const favOf = n => exoFavs[n]||[];
+const favScore = i => favOf(i.n).reduce((a,k)=>a+(i.s[k]||0),0);
+
+// Diego's exotic synergy defaults — seeded once per exotic on first sight; the
+// panel is the source of truth after that.
+const DEFAULT_FAVS=[
+  [/mataiodox/i,['s']],   // in-game name is "Mataiodoxía" (accented í)
+  [/skull of dire/i,['s']],[/assembler/i,['s','c']],[/geomag/i,['s']],
+  [/stormdancer/i,['s']],[/sanguine/i,['c','w']],[/speaker/i,['g']],[/swarmer/i,['g']],
+  [/vesper/i,['c','w']],[/sacred dawn/i,['s','w']],[/winter's guile/i,['m']],[/battle harmony/i,['s','w']],
+  [/eunoia/i,['c']],[/osmiomancy/i,['g']],[/chromatic/i,['w']],[/another world/i,['w','h']],
+  [/karnstein/i,['m']],[/briarbind/i,['c']],[/starfire/i,['g']],[/necrotic/i,['m']],
+  [/apotheosis/i,['c','g','m']],[/contraverse/i,['g']],[/rime.?coat/i,['g']],[/dawn chorus/i,['s','m']],
+  [/nezarec's sin/i,['g']],[/cenotaph/i,['w']],[/crown of tempests/i,['s']],[/fallen sunstar/i,['w','s']],
+  [/deimos/i,['c','g']],
+];
+function seedFavs(){
+  let changed=false;
+  for(const n of new Set(ITEMS.filter(i=>i.x).map(i=>i.n))){
+    if(n in exoFavs) continue;
+    const hit=DEFAULT_FAVS.find(([re])=>re.test(n));
+    if(hit){ exoFavs[n]=hit[1].slice(); changed=true; }
+  }
+  if(changed) saveFavs();
+}
 
 // ---------- verdict engine ----------
 function compute(o){
   const groups = new Map();
   for(const it of ITEMS){
-    it.v=null; it.why=''; it.pend=false;
+    it.v=null; it.why=''; it.pend=false; it.fs=0;
     if(it.tag==='junk'){ it.v='junk'; it.why='You tagged it junk.'; continue; }
     if(it.t===0){ it.v='review'; it.why='Armor 2.0 legacy — keep only for raid mod slots or a stat combo no archetype can roll.'; continue; }
     const slot = isClassItem(it.slot)?'Class Item':it.slot;
     let key;
-    if(it.x){ key = `X|${it.cls}|${it.n}|${it.a}|${it.ter}`; }
+    if(it.x){
+      it.fs = favScore(it);
+      if(favOf(it.n).length){ key = `X|${it.cls}|${it.n}`; }               // favorite stat rules: one best copy
+      else{ key = `X|${it.cls}|${it.n}|${it.a}|${it.ter}`; it.pend=true; } // untuned: per-niche + pending
+    }
     else{
       const r = rateOf(it.sb);
       it.pend = (r==='und' && !!it.sb);
@@ -190,11 +234,15 @@ function compute(o){
     groups.get(key).push(it);
   }
   for(const arr of groups.values()){
-    arr.sort((a,b)=> b.t-a.t || b.tot-a.tot || b.mw-a.mw || (TAGRANK[b.tag]-TAGRANK[a.tag]) || b.lo-a.lo);
+    arr.sort((a,b)=> b.fs-a.fs || b.t-a.t || b.tot-a.tot || b.mw-a.mw || (TAGRANK[b.tag]-TAGRANK[a.tag]) || b.lo-a.lo);
     const best = arr[0];
     best.v='keep';
     const r = best.x?'':rateOf(best.sb);
-    best.why = (arr.length>1?`Best of ${arr.length} in this niche.`:'Only piece in this niche.');
+    const bf = best.x?favOf(best.n):[];
+    best.why = bf.length
+      ? (arr.length>1?`Best of ${arr.length} copies — `:'Only copy — ')+`favorite-stat (${bf.map(k=>STATN[k]).join('+')}) total <b>${best.fs}</b>.`
+      : (arr.length>1?`Best of ${arr.length} in this niche.`:'Only piece in this niche.');
+    if(best.x && !bf.length) best.why += ' <u>No favorite stat set — tune it in the exotics panel.</u>';
     if(r==='2pc') best.why += ' Held for the 2-piece bonus.';
     if(r==='ignore'&&best.sb) best.why += ' Set ignored — earning its slot on stats alone.';
     if(best.pend) best.why += ' <u>Set rating pending — decide in the set panel.</u>';
@@ -202,7 +250,9 @@ function compute(o){
     for(let i=1;i<arr.length;i++){
       const it=arr[i];
       it.v='junk';
-      it.why=`Outclassed by <b>${best.n}</b> (T${best.t}, ${best.tot} base).`;
+      it.why=bf.length
+        ? `Outclassed copy — favorite-stat total ${it.fs} vs <b>${best.fs}</b> on the keeper.`
+        : `Outclassed by <b>${best.n}</b> (T${best.t}, ${best.tot} base).`;
       if(o.fav && it.tag==='favorite'){ it.v='review'; it.why+=' <em>Kept from junk: tagged favorite.</em>'; }
       else if(o.lo && it.lo>0){ it.v='review'; it.why+=` <em>Kept from junk: in ${it.lo} loadout${it.lo>1?'s':''}.</em>`; }
     }
@@ -236,13 +286,13 @@ function render(){
     `<div class="chip k"><b>${c.keep}</b><small>keep</small></div>`+
     `<div class="chip r"><b>${c.review}</b><small>review</small></div>`+
     `<div class="chip j"><b>${c.junk}</b><small>junk · frees ${c.junk}</small></div>`+
-    `<div class="chip u"><b>${pend}</b><small>set pending</small></div>`;
+    `<div class="chip u"><b>${pend}</b><small>pending</small></div>`;
 
   $('clsTabs').innerHTML=['','Warlock','Hunter','Titan'].map(x=>
     `<button class="tab disp ${F.cls===x?'on':''}" data-cls="${x}">${x||'All classes'}</button>`).join('');
   $('vTabs').innerHTML=[['','All'],['keep','Keep'],['review','Review'],['junk','Junk']].map(([v,l])=>
     `<button class="tab disp ${F.v===v&&!F.pend?'on':''}" data-v="${v}">${l}</button>`).join('')+
-    `<button class="tab disp ${F.pend?'on':''}" data-pend="1">Set pending</button>`;
+    `<button class="tab disp ${F.pend?'on':''}" data-pend="1">Pending</button>`;
 
   const pool=ITEMS.filter(i=>(!F.cls||i.cls===F.cls)&&i.v==='keep'&&i.a!=='—');
   let h='<tr><th class="rowh"></th>'+TERS.map(t=>`<th>${t.slice(0,4)}</th>`).join('')+'</tr>';
@@ -259,6 +309,7 @@ function render(){
   $('mtx').innerHTML=h;
 
   renderSets();
+  renderExos();
 
   const rows=filtered();
   $('count').textContent=`${rows.length} shown${F.a?` · ${F.a} / ${F.ter} (tap cell again to clear)`:''}`;
@@ -286,12 +337,33 @@ function renderSets(){
   }).join('');
 }
 
+function renderExos(){
+  const byName={};
+  ITEMS.forEach(i=>{ if(i.x){ (byName[i.n]=byName[i.n]||{cls:i.cls,slot:i.slot,c:0}).c++; } });
+  const names=Object.keys(byName).sort((a,b)=>{
+    const ta=favOf(a).length?1:0, tb=favOf(b).length?1:0;
+    return ta-tb || byName[b].c-byName[a].c || a.localeCompare(b);   // untuned first, then most copies
+  });
+  $('exoList').innerHTML=names.map(nm=>{
+    const e=byName[nm], fav=favOf(nm);
+    return `<div class="srow">
+      <div class="sh"><span class="snm" style="color:var(--gold)">${nm} <span style="color:var(--dim);font-weight:400">· ${e.cls} ${e.slot} · ${e.c} cop${e.c>1?'ies':'y'}</span></span>
+      <span class="ssrc">${fav.length?fav.map(k=>STATN[k]).join(' + '):'⚠ no favorite set'}</span></div>
+      <div class="xseg" data-exo="${nm.replace(/"/g,'&quot;')}">
+        ${['w','h','c','g','s','m'].map(k=>`<button class="${fav.includes(k)?'on':''}" data-k="${k}">${STATN[k]}</button>`).join('')}
+      </div>
+    </div>`;
+  }).join('');
+}
+
 function card(i){
   const[p,s]=ARCH[i.a]||[];
   const pips='●'.repeat(i.t)+'<span class="off">'+'●'.repeat(Math.max(0,5-i.t))+'</span>';
+  const fav=i.x?favOf(i.n):[];
   const stats=['w','h','c','g','s','m'].map(k=>
-    `<span class="st ${i.s[k]>=20?'hi':''}">${STATN[k]} <b>${i.s[k]}</b></span>`).join('');
-  const rl = i.sb ? ` · <span class="flag">${i.sb}: ${RLBL[rateOf(i.sb)]}</span>` : '';
+    `<span class="st ${i.s[k]>=20?'hi':''} ${fav.includes(k)?'fv':''}">${STATN[k]} <b>${i.s[k]}</b></span>`).join('');
+  let rl = i.sb ? ` · <span class="flag">${i.sb}: ${RLBL[rateOf(i.sb)]}</span>` : '';
+  if(fav.length) rl += ` · <span class="flag">fav ${fav.map(k=>STATN[k]).join('+')}: ${i.fs}</span>`;
   return `<div class="card v${i.v}">
     <div class="top"><span class="nm ${i.x?'ex':''}">${i.n}</span><span class="vb v${i.v} disp">${i.v}</span></div>
     <div class="meta"><b>${i.cls}</b> · ${i.slot} · <b>${i.a}</b>${p?` (${STATN[p]}/${STATN[s]})`:''} · 3rd: <b>${i.ter}</b> · <span class="pips">${pips}</span> ${i.tot} base
@@ -305,6 +377,13 @@ function card(i){
 document.body.addEventListener('click',e=>{
   const seg=e.target.closest('.seg button');
   if(seg){ ratings[seg.parentElement.dataset.set]=seg.dataset.r; saveRatings(); const keep=$('setPanel').open; render(); $('setPanel').open=keep; return; }
+  const xb=e.target.closest('.xseg button');
+  if(xb){
+    const nm=xb.parentElement.dataset.exo, k=xb.dataset.k, cur=favOf(nm);
+    const next=cur.includes(k)?cur.filter(x=>x!==k):[...cur,k];
+    if(next.length) exoFavs[nm]=next; else delete exoFavs[nm];
+    saveFavs(); const keep=$('exoPanel').open; render(); $('exoPanel').open=keep; return;
+  }
   const t=e.target.closest('[data-cls],[data-v],[data-a],[data-pend],.btn[data-x]');
   if(!t)return;
   if(t.dataset.cls!==undefined){F.cls=t.dataset.cls;shown=60;render();}
@@ -318,9 +397,13 @@ $('setSel').onchange=e=>{F.set=e.target.value;shown=60;render();};
 $('q').oninput=e=>{F.q=e.target.value;shown=60;render();};
 ['oHp','oFav','oLo'].forEach(id=>$(id).onchange=()=>{shown=60;render();});
 $('more').onclick=()=>{shown+=60;render();};
-$('expBtn').onclick=()=>{ copyText(JSON.stringify(ratings), $('expBtn'), 'Ratings copied ✓'); };
+$('expBtn').onclick=()=>{ copyText(JSON.stringify({ratings,exoFavs}), $('expBtn'), 'Ratings copied ✓'); };
 $('impBtn').onclick=()=>{ const s=prompt('Paste exported ratings JSON:'); if(!s)return;
-  try{ ratings=JSON.parse(s); saveRatings(); render(); }catch(e){ alert('Invalid JSON'); } };
+  try{ const d=JSON.parse(s);
+    if(d.ratings||d.exoFavs){ ratings=d.ratings||ratings; exoFavs=d.exoFavs||exoFavs; }
+    else ratings=d;   // legacy export: plain set-ratings map
+    saveRatings(); saveFavs(); render();
+  }catch(e){ alert('Invalid JSON'); } };
 
 function exportQ(kind,btn){
   let src;
@@ -343,6 +426,7 @@ async function loadData(fresh){
     const d = await r.json();
     if(d.error) throw new Error(d.error);
     ITEMS = d.items; SETS = d.sets; FETCHED = d.fetchedAt;
+    seedFavs();
     $('slotSel').innerHTML='<option value="">All slots</option>'+[...new Set(ITEMS.map(i=>isClassItem(i.slot)?'Class Item':i.slot))].sort().map(s=>`<option>${s}</option>`).join('');
     $('setSel').innerHTML='<option value="">All bonus sets</option>'+[...new Set(ITEMS.filter(i=>i.sb).map(i=>i.sb))].sort().map(s=>`<option>${s}</option>`).join('');
     $('status').textContent = `${ITEMS.length} pieces · synced ${new Date(FETCHED).toLocaleTimeString()}`;
@@ -353,7 +437,8 @@ async function loadData(fresh){
 }
 $('refreshBtn').onclick=()=>loadData(true);
 (async function init(){
-  await loadRatings();
+  ratings = (await loadStore('vv-ratings')) || {};
+  exoFavs = (await loadStore('vv-exofavs')) || {};
   loadData(false);
 })();
 </script>

@@ -82,18 +82,36 @@ async function loadManifest(e) {
   const meta = await bungie(`${BASE}/Destiny2/Manifest/`, e);
   const version = meta.version;
   fs.mkdirSync(CACHE_DIR, { recursive: true });
-  const cacheFile = path.join(CACHE_DIR, `slim-${version}.json`);
+  // slim2: set membership comes from DestinyEquipableItemSetDefinition.setItems
+  // (set -> item hashes); item defs carry no set hash of their own.
+  const cacheFile = path.join(CACHE_DIR, `slim2-${version}.json`);
   if (MANIFEST?.version === version) return MANIFEST;
   if (fs.existsSync(cacheFile)) {
     MANIFEST = JSON.parse(fs.readFileSync(cacheFile, 'utf8'));
     console.log(`Manifest ${version} loaded from cache.`);
     return MANIFEST;
   }
-  console.log(`Downloading manifest ${version} (one-time, this is the big one — a few hundred MB)...`);
   const paths = meta.jsonWorldComponentContentPaths.en;
-  const items = await (await fetch(`https://www.bungie.net${paths.DestinyInventoryItemDefinition}`)).json();
   const setsRaw = paths.DestinyEquipableItemSetDefinition
     ? await (await fetch(`https://www.bungie.net${paths.DestinyEquipableItemSetDefinition}`)).json() : {};
+  const setOfItem = {};
+  for (const [hash, d] of Object.entries(setsRaw))
+    for (const ih of d.setItems || []) setOfItem[ih] = Number(hash);
+
+  // Cheap path: a slim(1) cache for this version only lacks item->set links; patch
+  // it with the reverse map instead of re-downloading the full item table.
+  const oldCache = path.join(CACHE_DIR, `slim-${version}.json`);
+  if (fs.existsSync(oldCache)) {
+    MANIFEST = JSON.parse(fs.readFileSync(oldCache, 'utf8'));
+    for (const [hash, it] of Object.entries(MANIFEST.items)) it.set = setOfItem[hash] || 0;
+    fs.writeFileSync(cacheFile, JSON.stringify(MANIFEST));
+    for (const f of fs.readdirSync(CACHE_DIR)) if (f !== path.basename(cacheFile)) fs.unlinkSync(path.join(CACHE_DIR, f));
+    console.log(`Manifest ${version}: patched set links into cache (${Object.keys(setOfItem).length} set items).`);
+    return MANIFEST;
+  }
+
+  console.log(`Downloading manifest ${version} (one-time, this is the big one — a few hundred MB)...`);
+  const items = await (await fetch(`https://www.bungie.net${paths.DestinyInventoryItemDefinition}`)).json();
   const perksRaw = await (await fetch(`https://www.bungie.net${paths.DestinySandboxPerkDefinition}`)).json();
 
   const slimItems = {};
@@ -112,7 +130,7 @@ async function loadManifest(e) {
       c: d.classType ?? 3,
       tt: d.inventory?.tierType || 0,          // 6 = Exotic, 5 = Legendary
       it: d.itemType,
-      set: d.setData?.equipableItemSetHash || 0,
+      set: setOfItem[hash] || 0,
       pc: d.plug?.plugCategoryIdentifier || '',
       inv: Object.keys(inv).length ? inv : undefined,
     };
@@ -130,7 +148,7 @@ async function loadManifest(e) {
   }
   MANIFEST = { version, items: slimItems, sets: slimSets };
   fs.writeFileSync(cacheFile, JSON.stringify(MANIFEST));
-  for (const f of fs.readdirSync(CACHE_DIR)) if (!f.includes(version)) fs.unlinkSync(path.join(CACHE_DIR, f));
+  for (const f of fs.readdirSync(CACHE_DIR)) if (f !== path.basename(cacheFile)) fs.unlinkSync(path.join(CACHE_DIR, f));
   console.log(`Manifest slimmed + cached (${Object.keys(slimItems).length} defs).`);
   return MANIFEST;
 }
