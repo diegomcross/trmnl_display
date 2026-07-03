@@ -5,14 +5,20 @@
 
 ## Where we are (2026-07-03, latest)
 
-Since the phase-1 wrap: god-roll flag threshold raised to **75%** (`GOD_MIN_PCT`,
-Diego's pick); **Equip / send-to-vault buttons** shipped per weapon copy (see
-HANDOFF — `/api/equip`, `/api/vault`, real-hash `rhash`, vault path tested live).
+Shipped since phase-1 (all in HANDOFF): 75% god-roll threshold; per-copy
+**Equip/Vault** buttons; **Weapon Watch UX overhaul** (full-width copy layout,
+direct tag chips, Select-multiple mode, no-jump perk selection); **manifest slim5
+icons**; **New Drops dashboard** (`/drops`) with new-drop detection + visual cards.
 
-Then Diego asked for **DIM tag sync** (tags currently local-only). Speccing below;
-**BLOCKED: awaiting Diego** on sync direction (asked; he stepped away — default to
-two-way). Do not start the DIM API calls until he confirms direction + that DIM
-Sync is enabled in his DIM settings.
+Remaining bundle (Diego: "bundle as many as possible"):
+1. **DIM two-way tag sync** — §0. Two-way DECIDED. Probe written (`dim-probe.js`);
+   **BLOCKED: Diego must run `! node dim-probe.js`** (sandbox refuses to let the
+   agent transmit his Bungie token to DIM; his own run is the consent). Once it
+   prints a tag count + `DIM_API_KEY=…`, build the server integration.
+2. **Phase-2 live alerts** — §2. Poll while in-game, detect fresh god-roll drops
+   (reuse the `fresh` flag + 75% score), then TRMNL 1-min interrupt + PC sound +
+   auto-lock. Touches `server.js` + `render.js`. NOT started.
+3. **Fashion loadouts** — §3. Needs a re-auth for cosmetic write scope (Diego action).
 
 ## 0. DIM tag sync (NEXT once Diego answers) — BLOCKED: awaiting Diego
 
@@ -98,23 +104,17 @@ toggles don't collapse or jump; collapsed cards list tracked perks in the header
 ammo-type filter tabs, sort, "only hits" toggle, god-roll 🎯 badge. See the audit
 at `.claude/plans/there-is-no-link-reactive-engelbart.md`.
 
-**NEXT — Visual "New Drops" dashboard (before fashion picker):**
-Verified feasible from the Bungie manifest directly — **no light.gg/DIM scraping**.
-- Weapon icon `displayProperties.icon` + full `screenshot`; each perk plug's
-  `displayProperties.icon`; masterwork stat icon. All `https://www.bungie.net`+path,
-  loaded as plain `<img>` (local server tab, not a CSP artifact — no proxy needed).
-- Needs a manifest slim bump (**slim5**): add `icon` to weapons + each pool perk +
-  masterwork icon (string fields; forces one re-download).
-- Dashboard = presentation layer over phase-2 new-drop detection: for each newly
-  dropped instance of a watched weapon, a visual card — weapon art, rolled perks
-  with icons per column, masterwork icon, tracked stat values.
+**SHIPPED (2026-07-03):** slim5 icons + the visual New Drops dashboard `/drops` +
+new-drop detection (`weapon-seen.json`, `fresh` flag, `/api/drops/ack`). See HANDOFF.
+What remains here is the *live alerting* half — the poller + TRMNL interrupt + sound
++ auto-lock.
 
-**To build (phase 2 detection, feeds the dashboard + TRMNL):**
-- **New-drop detection:** poll the profile on an interval while the game runs
-  (or piggyback server.js's existing cycle); diff instance ids against a
-  seen-ids file (gitignored); score new instances of watched weapons against
-  `weapon-watch.json`.
-- **Pop threshold:** score ≥ what? ASK DIEGO for the default when building.
+**To build (phase 2 live alerts — poller → TRMNL + sound + auto-lock):**
+- **Poller:** on an interval while destiny2.exe runs, call `fetchWeapons` (or the
+  `/api/weapons?fresh=1` path) and read the `fresh` copies of watched weapons that
+  are already computed server-side; score them (75% god-roll bar, reuse `scoreCopy`).
+  Do NOT auto-ack — let the dashboard/alert own acknowledgement.
+- **Pop threshold:** DECIDED — the **75% god-roll flag** (`GOD_MIN_*`). Only 🎯 drops alert.
 - **TRMNL interrupt:** on a hit, take over the panel for **1 minute** (weapon
   name, tracked perks hit, masterwork, tracked stat numbers), then resume
   rotation — needs a render page in `render.js` + an interrupt hook in

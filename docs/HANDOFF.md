@@ -75,7 +75,9 @@ Core priorities, in his words:
 | `manifest-cache.json` | Cached Bungie manifest defs (gitignored). `CACHE_SCHEMA` const invalidates it when the stored shape changes. |
 | `vault-verdict.js` | **Vault Verdict** server (port **8787**): live Armor 3.0 vault triage + weapons API. Reuses `.env` + `tokens.json`. Slims the manifest to `vault-manifest-cache/slim3-<version>.json` (armor + weapons + trait plug sets + drop sources). `node vault-verdict.js probe "name"` dumps one item for debugging. |
 | `vault-verdict.html` | Vault Verdict frontend (served at `/`): verdict engine, set-bonus 4pc/2pc rating panel with drop locations, exotic favorite-stat tuning panel (per-class filter, primary›secondary), DIM query export. |
-| `weapon-watch.html` | **Weapon Watch** god-roll tracker UI (served at `/weapons`): pick weapons, tag up to 6 perks (normal/★high priority), wanted masterwork + watched stats; scores every copy in the vault. Config saved server-side to `weapon-watch.json` (gitignored). |
+| `weapon-watch.html` | **Weapon Watch** god-roll tracker UI (served at `/weapons`): pick weapons, tag up to 6 perks (normal/★high priority), wanted masterwork + watched stats; scores every copy in the vault. Full-width copy rows, direct tag chips, Select-multiple batch mode, smart Vault/Equip, no-jump perk selection. Config → `weapon-watch.json`, tags → `weapon-tags.json` (gitignored). |
+| `weapon-drops.html` | **New Drops dashboard** (served at `/drops`): visual cards for *fresh* drops of watched weapons — weapon art, rolled perk icons, masterwork icon, stats, score/🎯. Backed by `weapon-seen.json` (gitignored) + `/api/drops/ack`. |
+| `dim-probe.js` | One-off DIM Sync API check (gitignored). Diego runs `node dim-probe.js` to confirm two-way DIM sync works before it's built. |
 | `CLAUDE.md` | Working rules for agents: never drop features, test before push, and **mandatory upkeep of this file + `docs/NEXT_PHASE.md`**. |
 | `docs/NEXT_PHASE.md` | The pickup point: specs + open questions for upcoming features. |
 
@@ -204,6 +206,20 @@ Core priorities, in his words:
     window keeps changing"). Perk/stat/MW handlers now call `renderKeepingAnchor` — it
     records the edited card's viewport top, re-renders, and `scrollBy`s the delta so the
     card (and the perk under your finger) stays put. Verified 0px drift.
+  - **Manifest slim5 (icons):** the slimmer now stores `icon` on every def (weapons +
+    perk/MW plugs) and `screenshot` (`shot`) on weapons. `fetchWeapons` returns a
+    `perkIcons` map (perk name → icon path) and a per-copy `mwIcon`. All paths are
+    `www.bungie.net`-relative; load as plain `<img src="https://www.bungie.net"+path>`
+    (local server tab, no CSP). Bumping slim4→slim5 forced one manifest re-download.
+  - **New Drops dashboard (`/drops`, weapon-drops.html):** visual cards for *fresh* drops
+    of watched weapons — weapon art background, rolled perk icons per column (wishlist
+    matches highlighted gold, `.on` roll perks emphasized), masterwork icon, live stats,
+    score/🎯 badge, and Lock / smart Vault-or-Equip / Seen actions + "Mark all seen" +
+    "god rolls only" filter. New-drop detection: `weapon-seen.json` (gitignored) seeds
+    every current instance id on first fetch (nothing false-positive), then `fetchWeapons`
+    flags any unseen copy `fresh:true`; `POST /api/drops/ack {ids?}` moves ids into seen
+    (empty ids = ack all current). This is the manual/visual half of phase-2; the live
+    poller + TRMNL alert is still to come (NEXT_PHASE.md).
   - **TESTING HAZARD (learned twice):** never click real perk/tag controls in a test tab —
     they call the page's `const save()`/`saveTags()` and POST the whole shared config;
     `window.save` stubs don't bind. Test write-triggering UI with a read-only simulation
