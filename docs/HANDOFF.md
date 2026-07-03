@@ -269,11 +269,18 @@ Core priorities, in his words:
     if in the vault, pull to the default character first, then equip. `LOCK_CTX` now also
     carries `byClass`/`clsById` maps (class↔characterId) to resolve source/target. Same
     write scope as Lock (MoveEquipDestinyItems — confirmed working).
-  - DIM overlay: optional `dim-data.json` (tags + loadouts) merges into verdicts. **Tag
-    sync is one-way/manual today** — the Weapon Watch keep/favorite/junk tags live only in
-    `weapon-tags.json` (local); DIM can't see them and we don't read DIM's cloud tags. The
-    "Copy junk DIM query" button exports junk ids as a DIM search string. Real two-way DIM
-    Sync (DIM API) is specced in NEXT_PHASE.md.
+  - DIM overlay (armor): optional `dim-data.json` (tags + loadouts) merges into verdicts.
+  - **DIM two-way tag sync (weapons, shipped):** Weapon Watch keep/favorite/junk tags are
+    synced live with DIM's cloud. `vault-verdict.js` holds a small DIM Sync API client:
+    `dimAuth` (exchanges the Bungie token for a ~30-day DIM token, cached in `.dim-token.json`;
+    app key in `.dim-app.json`), `dimReadTags`, `dimWriteTag`. `fetchWeapons` pulls live DIM
+    tags into each copy's `w.tag`; `GET /api/tags` serves them (source of truth); `POST
+    /api/tag {id,tag}` writes ONE tag to DIM (`none` → `tag:null` clears it). The chips/batch
+    UI call `/api/tag` per item — no whole-file overwrite (kills the old clobber hazard).
+    Falls back to the `weapon-tags.json` mirror if DIM is unreachable. **Bootstrap:** Diego
+    ran `node dim-probe.js` once to register the DIM app (agent's sandbox blocks sending the
+    Bungie token to a third party; the server process is not gated). Verified: 992 tags read,
+    reversible write. The "Copy junk DIM query" button remains as a manual export too.
 
 ---
 

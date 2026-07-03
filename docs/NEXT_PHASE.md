@@ -11,58 +11,35 @@ direct tag chips, Select-multiple mode, no-jump perk selection); **manifest slim
 icons**; **New Drops dashboard** (`/drops`) with new-drop detection + visual cards.
 
 Remaining bundle (Diego: "bundle as many as possible"):
-1. **DIM two-way tag sync** — §0. Two-way DECIDED. Probe written (`dim-probe.js`);
-   **BLOCKED: Diego must run `! node dim-probe.js`** (sandbox refuses to let the
-   agent transmit his Bungie token to DIM; his own run is the consent). Once it
-   prints a tag count + `DIM_API_KEY=…`, build the server integration.
-2. **Phase-2 live alerts** — §2. Poll while in-game, detect fresh god-roll drops
-   (reuse the `fresh` flag + 75% score), then TRMNL 1-min interrupt + PC sound +
-   auto-lock. Touches `server.js` + `render.js`. NOT started.
-3. **Fashion loadouts** — §3. Needs a re-auth for cosmetic write scope (Diego action).
+1. ✅ **DIM two-way tag sync — SHIPPED & verified** (see HANDOFF). Diego ran
+   `dim-probe.js`; app registered (`.dim-app.json`), 992 tags read. Server now reads
+   DIM tags as truth and writes each change back via `POST /api/tag`.
+2. ✅ **Phase-2 live alerts — SHIPPED & verified** on the real panel (see HANDOFF).
+3. **Fashion loadouts** — §3. Needs a re-auth for cosmetic write scope (Diego action). NOT started.
+4. **⚠ Make vault-verdict.js always-on** so the alert poller runs during play (below).
 
-## 0. DIM tag sync (NEXT once Diego answers) — BLOCKED: awaiting Diego
+## 0. DIM two-way tag sync — ✅ SHIPPED 2026-07-03 (details in HANDOFF)
 
-**Goal (Diego):** the app's keep/favorite/junk tags and DIM's should be in sync,
-not two disconnected systems.
+Two-way sync is live and verified. Notes worth keeping:
+- **App reg is NOT via `.env`** — it's a self-serve `POST /new_app` returning a
+  `dimApiKey` saved to `.dim-app.json` (gitignored). A freshly created app has a
+  **propagation delay** before `/auth/token` accepts its key (Diego's first
+  `/auth/token` 401'd `NoAppFound`, worked minutes later). `dim-probe.js` now
+  reuses the saved key + retries.
+- Auth token (~30-day JWT) cached in `.dim-token.json`; re-minted from the Bungie
+  token when stale. Tag vocab maps 1:1 (keep/favorite/junk); our `none` = `tag:null`
+  (removes it); DIM `infuse`/`archive` left untouched.
+- **Agent can't run the token exchange itself** (sandbox blocks sending the Bungie
+  token to a third party) — Diego ran `node dim-probe.js` once to bootstrap the app.
+  After that the *server process* does all DIM calls (not gated).
 
-**Feasibility:** DIM exposes a **Sync API** at `https://api.destinyitemmanager.com`.
-Everything can be done server-side with credentials we already hold (no browser
-steps for Diego); the only prerequisite is **DIM Sync enabled in his DIM settings**
-(default on — it stores tags in DIM's cloud keyed to his Bungie login).
+## 0b. Make vault-verdict.js always-on (NEXT small task)
 
-**Integration steps (researched, verify exact shapes when building):**
-- **Register a DIM API app once:** `POST /new_app` with `{ id, bungieApiKey (ours,
-  in .env), origin }` → returns a `dimApiKey`. Store it in `.env`
-  (`DIM_API_KEY=`). One-time; self-serve (confirm the endpoint isn't gated).
-- **Auth:** `POST /auth/token` header `X-API-Key: <dimApiKey>`, body
-  `{ bungieAccessToken (from tokens.json via accessToken()), membershipId (bungie.net
-  id), platformMembershipId (the Destiny membershipId we already use) }` → `{ accessToken }`.
-- **Read tags:** `GET /profile?platformMembershipId=<id>&destinyVersion=2&components=tags`
-  Bearer the accessToken → `{ tags:[{ id:<itemInstanceId>, tag, notes }] }`.
-- **Write tags:** `POST /profile` body `{ platformMembershipId, destinyVersion:2,
-  updates:[{ action:'tag', payload:{ id, tag } }] }`.
-- **Tag vocab mapping:** DIM = `favorite | keep | infuse | junk | archive`; ours =
-  `keep | favorite | junk | none`. Map favorite/keep/junk 1:1; our `none` = remove
-  the annotation; leave DIM `infuse`/`archive` untouched (don't clobber them).
-
-**Direction — DECIDED 2026-07-03: Diego chose TWO-WAY** (read DIM tags into the app
-AND push app tags back to DIM; one source of truth).
-
-**CONSENT GATE (before any build):** DIM Sync works by sending Diego's **Bungie OAuth
-access token** to `api.destinyitemmanager.com` (register app + `/auth/token` exchange).
-There is no way around this — it's inherent to DIM Sync (DIM already does this in his
-browser every session). The sandbox correctly flags it as sending a credential to a
-third party. **Get Diego's explicit OK to transmit his Bungie token to DIM before
-running the probe / building this.** Then run `scratchpad/dim-probe.js` (read-only:
-register → auth → read tags) to confirm the flow, and only after that build the
-server integration + swap the tag chips to per-change writes (`POST /api/tag {id,tag}`
-→ writes DIM + local mirror, replacing the whole-object `saveTags` — also fixes the
-shared-file clobber hazard).
-
-**Files:** `vault-verdict.js` (DIM auth + read/write helpers, merge DIM tags into
-`fetchWeapons` / `dimOverlay`, wire the tag `<select>` POST to also push to DIM),
-`.env` (`DIM_API_KEY`), maybe a small `dim-token.json` cache (gitignored) for the
-DIM accessToken. Frontend `weapon-watch.html`: show DIM tag as the live source.
+The god-roll poller AND live DIM sync only run while `vault-verdict.js` is running.
+`start-display.ps1` supervises `server.js` only. Add a supervised launch for
+vault-verdict (extend `start-display.ps1` to run both, or a sibling `start-vault.ps1`
+with `-Install` to the Startup folder like the display server). Until then Diego must
+`node vault-verdict.js` before playing.
 
 ## Where we are (2026-07-03, later)
 
