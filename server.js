@@ -20,7 +20,7 @@ import fs from 'node:fs';
 import { exec } from 'node:child_process';
 import { URL } from 'node:url';
 import { Resvg } from '@resvg/resvg-js';
-import { buildModel, renderPage } from './render.js';
+import { buildModel, renderPage, renderDropAlert } from './render.js';
 
 const PORT = Number(process.env.PORT || 3000);
 const REFRESH_SECONDS = Number(process.env.REFRESH_SECONDS || 60);
@@ -284,10 +284,39 @@ function pickPageIndex(cfg) {
   return Math.floor(Date.now() / 1000 / cfg.rotationSeconds) % ps.length;
 }
 
+// God-roll interrupt: the vault-verdict poller writes drop-alert.json when a watched
+// weapon drops matching the wishlist. While it's live (until its `until` epoch), the
+// panel shows the alert page instead of the rotation. One shared file, no coupling.
+const DROP_ALERT_FILE = './drop-alert.json';
+function activeAlert() {
+  try {
+    const a = JSON.parse(fs.readFileSync(DROP_ALERT_FILE, 'utf8'));
+    return (a && a.until && Date.now() < a.until) ? a : null;
+  } catch { return null; }
+}
+
 async function refresh(force = false) {
   const ts = new Date().toLocaleTimeString();
   try {
     const cfg = loadConfig();
+
+    // God-roll drop alert takes precedence over the normal rotation.
+    const alert = activeAlert();
+    if (alert) {
+      const svg = renderDropAlert(alert);
+      if (svg !== state.svg || !state.bmp) {
+        state.bmp = svgToBmp1bit(svg, cfg.invert); state.png = null; state.svg = svg;
+        state.filename = `drop-${Date.now()}.bmp`;
+        console.log(`[${ts}] GOD ROLL ALERT -> ${alert.weapon} (${alert.pct}%); panel interrupt`);
+      }
+      state.alerting = true;
+      state.updated = new Date(); state.error = null;
+      return;
+    }
+    // Alert just ended: force a normal redraw, otherwise the "no progress change"
+    // guard would hold the stale drop image on the panel.
+    if (state.alerting) { force = true; state.alerting = false; }
+
     const model = await getModel(cfg);
     const sig = modelSignature(model);
     const dataChanged = sig !== state.sig;
@@ -331,6 +360,8 @@ function imageUrl(req, name = 'screen.bmp') { const host = req.headers.host || `
 // it goes into deep standby (long interval => rare wakes => long battery life).
 function refreshRate(cfg) {
   const now = Date.now();
+  // God-roll drop alert live: poll fast so the panel shows it and returns to rotation promptly.
+  if (activeAlert()) return '10';
   // Just changed settings: quick updates for ~1 min so the change shows, then back to standby.
   if (now - lastConfigChangeAt < 60000) return '15';
   // In game: live-ish progress updates.
@@ -518,6 +549,7 @@ const server = http.createServer(async (req, res) => {
 });
 
 function tickInterval(cfg) {
+  if (activeAlert()) return 10; // poll fast so the alert shows and clears within the minute
   const rotating = cfg.rotationSeconds > 0 && enabledPages(cfg).length > 1;
   const base = rotating ? Math.min(cfg.refreshSeconds, cfg.rotationSeconds) : cfg.refreshSeconds;
   return Math.max(10, Math.min(1800, base));

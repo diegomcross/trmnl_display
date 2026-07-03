@@ -15,6 +15,7 @@
 import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
+import { exec } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -596,6 +597,33 @@ async function probe(nameLike) {
   if (hit) console.log('\nIf tier/archetype/base stats look wrong, paste this output back to Claude.');
 }
 
+// ---------- phase-2: live god-roll drop alerts ----------
+// A poller watches for fresh watched-weapon drops that clear the god-roll bar while
+// Destiny is running. On a hit it auto-locks the drop, beeps the PC, and writes
+// drop-alert.json — which the TRMNL server.js reads to interrupt the panel for a minute.
+const DROP_ALERT_FILE = path.join(__dirname, 'drop-alert.json');
+const GAME_PROCESS = process.env.GAME_PROCESS || 'destiny2.exe';
+let gameUp = false;
+function checkGame() {
+  exec(`tasklist /FI "IMAGENAME eq ${GAME_PROCESS}" /NH`, { windowsHide: true }, (err, stdout) => {
+    gameUp = !err && new RegExp(GAME_PROCESS.replace(/\./g, '\\.'), 'i').test(stdout || '');
+  });
+}
+function beep() { exec('powershell -NoProfile -c "1..3 | %{ [console]::beep(880,220); Start-Sleep -m 120 }"', { windowsHide: true }, () => {}); }
+
+// Server-side mirror of weapon-watch.html scoreCopy (same 75/3/4 god-roll gate).
+const GOD_MIN_PCT = 75, GOD_MIN_MATCHES = 3, GOD_MIN_SELECTED = 4;
+function scoreWeaponCopy(w, cfg, rankOf) {
+  const perks = cfg.perks || {}, roll = new Set([...(w.cols[0] || []), ...(w.cols[1] || [])].map((p) => p.n));
+  let selW = 0, matchW = 0, matched = 0, selN = 0; const hit = [];
+  for (const [n, pr] of Object.entries(perks)) { selW += pr; selN++; if (roll.has(n)) { matchW += pr; matched++; hit.push(n); } }
+  if (cfg.mw) { selW += 1; selN++; if (w.mw === cfg.mw) { matchW += 1; matched++; } }
+  for (const s of (cfg.stats || [])) { selW += 1; selN++; if (rankOf?.[s] && rankOf[s](w.statsMax[s] ?? -1) === 's1') { matchW += 1; matched++; } }
+  const pct = selW ? Math.round(100 * matchW / selW) : 0;
+  const god = selN >= GOD_MIN_SELECTED && matched >= GOD_MIN_MATCHES && pct >= GOD_MIN_PCT;
+  return { pct, god, hit };
+}
+
 // ---------- server ----------
 const readBody = (req) => new Promise((ok) => {
   let b = ''; req.on('data', (c) => b += c); req.on('end', () => ok(b));
@@ -676,6 +704,35 @@ async function main() {
   });
   server.listen(PORT, '0.0.0.0', () =>
     console.log(`\nVault Verdict live at  http://127.0.0.1:${PORT}\n(from your phone on the same Wi-Fi: http://<this-PC's-LAN-IP>:${PORT})\n`));
+
+  // Live god-roll drop watcher: only works while Destiny is running (saves API calls
+  // and only alerts when you could actually be getting drops). Auto-locks + alerts.
+  async function pollDrops() {
+    if (!gameUp) return;
+    const watch = loadWatch();
+    if (!Object.keys(watch).length) return;
+    try {
+      wcache = await fetchWeapons(e);
+      const copiesOf = {}; wcache.weapons.forEach((w) => { (copiesOf[w.hash] = copiesOf[w.hash] || []).push(w); });
+      for (const w of wcache.weapons) {
+        if (!w.fresh || w.locked) continue;             // only brand-new, still-unlocked drops
+        const cfg = watch[w.hash]; if (!cfg) continue;  // of a watched weapon
+        const raw = copiesOf[w.hash] || [];
+        const rankOf = {};
+        for (const s of (cfg.stats || [])) { const vals = [...new Set(raw.map((x) => x.statsMax[s] ?? -1))].sort((a, b) => b - a); rankOf[s] = (v) => { const i = vals.indexOf(v); return i === 0 ? 's1' : i === 1 ? 's2' : i === 2 ? 's3' : ''; }; }
+        const sc = scoreWeaponCopy(w, cfg, rankOf);
+        if (!sc.god) continue;
+        const d = wcache.defs[w.hash] || {};
+        try { await setLock(e, w.id, true); w.locked = true; } catch (err) { console.warn('auto-lock failed:', err.message); }
+        const stats = (cfg.stats || []).map((s) => ({ n: s, v: w.statsMax[s] ?? '—' }));
+        fs.writeFileSync(DROP_ALERT_FILE, JSON.stringify({ until: Date.now() + 60000, weapon: d.n, ty: d.ty, power: w.pwr, pct: sc.pct, perks: sc.hit, mw: w.mw, stats, locked: true }));
+        beep();
+        console.log(`[drop] GOD ROLL ${d.n} ${sc.pct}% — auto-locked + panel alerted`);
+      }
+    } catch (err) { console.warn('drop poll error:', err.message); }
+  }
+  checkGame(); setInterval(checkGame, 30000);
+  setInterval(pollDrops, 25000);
 }
 
 main().catch((err) => { console.error(err.message); process.exit(1); });

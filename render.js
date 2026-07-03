@@ -456,6 +456,30 @@ export function renderTitleSVG(model, page = {}) {
 }
 
 // Dispatch a page config to its layout.
+// Full-screen god-roll drop alert — takes over the panel for ~1 minute when a
+// watched weapon drops matching the wishlist (see server.js interrupt + the
+// vault-verdict poller that writes drop-alert.json).
+export function renderDropAlert(a = {}) {
+  const X = 16, BW = 768;
+  let s = '';
+  s += `<rect x="0" y="0" width="${W}" height="76" fill="#000"/>`;
+  s += txt(X + 6, 52, 40, 'GOD ROLL DROP', { weight: 800, fill: '#fff' });
+  if (a.pct != null) s += txt(X + BW, 50, 32, `${a.pct}%`, { anchor: 'end', weight: 800, fill: '#fff' });
+  s += txt(X, 134, 46, trunc(a.weapon || 'Weapon', 26), { weight: 800 });
+  s += txt(X, 166, 22, `${[a.ty, a.power && `${a.power} PWR`].filter(Boolean).join(' · ')}${a.locked ? ' · LOCKED ✓' : ''}`, { weight: 600 });
+  let y = 216;
+  if ((a.perks || []).length) {
+    s += txt(X, y, 20, 'MATCHED PERKS', { weight: 700 }); y += 32;
+    a.perks.slice(0, 6).forEach((p) => {
+      s += `<circle cx="${X + 7}" cy="${y - 7}" r="5" fill="#000"/>`;
+      s += txt(X + 22, y, 26, trunc(p, 40), { weight: 600 }); y += 34;
+    });
+  }
+  if (a.mw) { s += txt(X, y, 24, `Masterwork: ${a.mw}`, { weight: 700 }); y += 36; }
+  if ((a.stats || []).length) s += txt(X, y, 22, a.stats.map((st) => `${st.n} ${st.v}`).join('    '), { weight: 600 });
+  return frame(s);
+}
+
 export function renderPage(model, page = {}, opts = {}) {
   switch (page.type) {
     case 'quests':   return renderQuestsSVG(model, page, opts);
