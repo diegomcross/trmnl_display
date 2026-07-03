@@ -195,7 +195,7 @@ Core priorities, in his words:
     masterwork = 1, and each watched stat = 1 ("met" = this copy is the gold/highest for
     that stat among your copies). Shown as `NN% · matched/selected`. The **god-roll** flag
     (🎯) is deliberately NOT just 100% — it needs `GOD_MIN_SELECTED` (4) criteria tracked,
-    `GOD_MIN_MATCHES` (3) matched, and `GOD_MIN_PCT` (60%). So one lone perk that matches
+    `GOD_MIN_MATCHES` (3) matched, and `GOD_MIN_PCT` (75%, Diego's chosen bar). So one lone perk that matches
     reads 100% but never flags; a 6-perk+MW+stat wishlist hitting ~5/8 does. Those three
     constants (top of the script) are the tuning knobs and will drive the phase-2 TRMNL
     drop alert.
