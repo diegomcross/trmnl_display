@@ -214,6 +214,8 @@ function renderWatched(){
         <div class="body">
           <span class="score ${sc.god?'hot':''}" title="${sc.matched}/${sc.selN} criteria, weighted">${sc.pct}%${sc.selN?` · ${sc.matched}/${sc.selN}`:''}</span>${sc.god?'<span class="badge">🎯</span>':''}
           <button class="lockb ${w.locked?'on':''}" data-lock="${w.id}" data-to="${w.locked?0:1}" title="${w.locked?'Unlock':'Lock'}">${w.locked?'🔒':'🔓'}</button>
+          <button class="lockb" data-equip="${w.id}" data-rhash="${w.rhash}" data-own="${esc(w.own)}" title="Equip this weapon">Equip</button>
+          <button class="lockb" data-vault="${w.id}" data-rhash="${w.rhash}" data-own="${esc(w.own)}" title="Send to vault" ${w.own==='Vault'?'disabled':''}>Vault</button>
           <select class="sm" data-tag="${w.id}">${TAG_OPTS.map(t=>`<option ${t===tag?'selected':''}>${t}</option>`).join('')}</select>
           <span class="cp">${w.own!=='Vault'?'on '+w.own:'Vault'} · ${w.pwr} · MW <span class="${cfg.mw&&w.mw===cfg.mw?'hi':'cp'}">${w.mw||'—'}</span></span>
           ${w.tag?`<span class="tagv"> DIM: ${w.tag}</span>`:'<span class="tagv"> DIM: none</span>'}
@@ -268,18 +270,26 @@ async function setLock(id,to){
   const w=DATA.weapons.find(x=>x.id===id); if(w) w.locked=!!to;
   return true;
 }
+async function itemAction(url,id,rhash,own){
+  const r=await fetch(url,{method:'POST',body:JSON.stringify({id,hash:rhash,own})}).then(r=>r.json());
+  if(r.error){ $('status').textContent='Action failed: '+r.error; return false; }
+  const w=DATA.weapons.find(x=>x.id===id); if(w&&r.own) w.own=r.own;
+  return true;
+}
 const copyIds=hash=>DATA.weapons.filter(w=>w.hash===Number(hash)||String(w.hash)===hash).map(w=>w.id);
 
 document.body.addEventListener('click',async e=>{
   // native controls (tag/mw selects, checkboxes) are handled by the change listener
   if(e.target.closest('select,input[type=checkbox]')) return;
-  const t=e.target.closest('[data-open],[data-watch],[data-unwatch],[data-lock],[data-selall],[data-selnone],[data-btag],[data-block],[data-junkrest],[data-wammo],.pk');
+  const t=e.target.closest('[data-open],[data-watch],[data-unwatch],[data-lock],[data-equip],[data-vault],[data-selall],[data-selnone],[data-btag],[data-block],[data-junkrest],[data-wammo],.pk');
   if(!t) return;
   if(t.dataset.wammo!==undefined){ wAmmo=t.dataset.wammo; renderWatched(); }
   else if(t.dataset.open){ openCards.has(t.dataset.open)?openCards.delete(t.dataset.open):openCards.add(t.dataset.open); renderWatched(); }
   else if(t.dataset.watch){ const h=t.dataset.watch; WATCH[h]={name:DATA.defs[h].n,perks:{},mw:'',stats:[]}; openCards.add(h); save(); render(); }
   else if(t.dataset.unwatch){ if(confirm('Stop watching '+DATA.defs[t.dataset.unwatch].n+'?')){ delete WATCH[t.dataset.unwatch]; save(); render(); } }
   else if(t.dataset.lock){ t.disabled=true; if(await setLock(t.dataset.lock,+t.dataset.to)) renderWatched(); else t.disabled=false; }
+  else if(t.dataset.equip){ t.disabled=true; t.textContent='…'; if(await itemAction('/api/equip',t.dataset.equip,t.dataset.rhash,t.dataset.own)) renderWatched(); else { t.disabled=false; t.textContent='Equip'; } }
+  else if(t.dataset.vault){ t.disabled=true; t.textContent='…'; if(await itemAction('/api/vault',t.dataset.vault,t.dataset.rhash,t.dataset.own)) renderWatched(); else { t.disabled=false; t.textContent='Vault'; } }
   else if(t.dataset.selall){ copyIds(t.dataset.selall).forEach(id=>sel.add(id)); renderWatched(); }
   else if(t.dataset.selnone){ copyIds(t.dataset.selnone).forEach(id=>sel.delete(id)); renderWatched(); }
   else if(t.dataset.btag){ for(const id of copyIds(t.dataset.btag)) if(sel.has(id)) TAGS[id]=t.dataset.t; saveTags(); renderWatched(); }

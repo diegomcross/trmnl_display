@@ -208,7 +208,22 @@ Core priorities, in his words:
     keepers no tuned exotic favors demote to Review (`oSyn` rules toggle). Classes
     with zero tuned exotics are skipped. Caveat: while ALL stats are favored by
     some tuned exotic of a class (Warlock today), no demotion fires there.
-  - DIM overlay: optional `dim-data.json` (tags + loadouts) merges into verdicts.
+  - **Equip / send-to-vault buttons (NEW):** each weapon copy row has **Equip** and
+    **Vault** buttons next to Lock. Server endpoints `POST /api/equip` and `POST /api/vault`
+    (in vault-verdict.js) take `{id, hash, own}` where `hash` is the copy's REAL item hash
+    (`w.rhash`, preserved before the reissue merge overwrites `w.hash` with the canonical
+    one — Bungie's TransferItem validates `itemReferenceHash` against the instance, so the
+    canonical hash would fail). Vault = `TransferItem transferToVault:true` from the owning
+    character (no-op if already in vault; Bungie refuses to transfer an *equipped* item, so
+    it can't disturb the loadout). Equip: if the copy is on a character, `EquipItem` there;
+    if in the vault, pull to the default character first, then equip. `LOCK_CTX` now also
+    carries `byClass`/`clsById` maps (class↔characterId) to resolve source/target. Same
+    write scope as Lock (MoveEquipDestinyItems — confirmed working).
+  - DIM overlay: optional `dim-data.json` (tags + loadouts) merges into verdicts. **Tag
+    sync is one-way/manual today** — the Weapon Watch keep/favorite/junk tags live only in
+    `weapon-tags.json` (local); DIM can't see them and we don't read DIM's cloud tags. The
+    "Copy junk DIM query" button exports junk ids as a DIM search string. Real two-way DIM
+    Sync (DIM API) is specced in NEXT_PHASE.md.
 
 ---
 

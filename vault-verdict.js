@@ -294,9 +294,15 @@ async function fetchProfile(e) {
     for (const it of inv.items || []) raw.push({ it, own: charName[cid] });
   for (const [cid, eq] of Object.entries(prof.characterEquipment?.data || {}))
     for (const it of eq.items || []) raw.push({ it, own: charName[cid] });
-  // remember one character for account-level item actions (SetLockState needs one)
+  // remember character context for item actions (lock/transfer/equip). Keep a
+  // default character (lock/vault-pull need one) plus class<->id maps so we can
+  // resolve which character holds a copy and name the target after an equip.
   const cids = Object.keys(prof.characters?.data || {});
-  if (cids.length) LOCK_CTX = { characterId: cids[0], membershipType: m.membershipType };
+  if (cids.length) LOCK_CTX = {
+    characterId: cids[0], membershipType: m.membershipType,
+    byClass: Object.fromEntries(Object.entries(charName).map(([cid, cls]) => [cls, cid])),
+    clsById: charName,
+  };
   return { prof, man, m, raw };
 }
 let LOCK_CTX = null;
@@ -309,6 +315,49 @@ async function setLock(e, itemId, locked) {
   await bungiePost(`${BASE}/Destiny2/Actions/Items/SetLockState/`, {
     state: !!locked, itemId, characterId: LOCK_CTX.characterId, membershipType: LOCK_CTX.membershipType,
   }, e, tok.access_token);
+}
+
+// Move an item between a character and the vault. `characterId` is the character
+// the item moves FROM (toVault) or TO (from vault). Needs the same write scope as lock.
+async function transferItem(e, itemId, hash, characterId, toVault) {
+  const tok = await accessToken(e);
+  await bungiePost(`${BASE}/Destiny2/Actions/Items/TransferItem/`, {
+    itemReferenceHash: Number(hash), stackSize: 1, transferToVault: !!toVault,
+    itemId, characterId, membershipType: LOCK_CTX.membershipType,
+  }, e, tok.access_token);
+}
+
+async function equipItem(e, itemId, characterId) {
+  const tok = await accessToken(e);
+  await bungiePost(`${BASE}/Destiny2/Actions/Items/EquipItem/`, {
+    itemId, characterId, membershipType: LOCK_CTX.membershipType,
+  }, e, tok.access_token);
+}
+
+// Send a weapon copy to the vault. `ownClass` is where it currently lives
+// (a class name, or 'Vault' if already stored). Returns its new location.
+async function vaultWeapon(e, itemId, hash, ownClass) {
+  if (!LOCK_CTX) await fetchProfile(e);
+  if (ownClass === 'Vault') return { own: 'Vault' };
+  const src = LOCK_CTX.byClass[ownClass] || LOCK_CTX.characterId;
+  await transferItem(e, itemId, hash, src, true);
+  return { own: 'Vault' };
+}
+
+// Equip a weapon copy. If it's on a character, equip it there; if it's in the
+// vault, pull it to the default character first, then equip. A weapon can be
+// equipped by any class. Returns the character it ended up equipped on.
+async function equipWeapon(e, itemId, hash, ownClass) {
+  if (!LOCK_CTX) await fetchProfile(e);
+  let target;
+  if (ownClass && ownClass !== 'Vault') {
+    target = LOCK_CTX.byClass[ownClass] || LOCK_CTX.characterId;
+  } else {
+    target = LOCK_CTX.characterId;
+    await transferItem(e, itemId, hash, target, false);
+  }
+  await equipItem(e, itemId, target);
+  return { own: LOCK_CTX.clsById[target] || ownClass };
 }
 
 // ---------- profile -> armor items ----------
@@ -464,7 +513,7 @@ async function fetchWeapons(e) {
       };
     }
     weapons.push({
-      id, hash: it.itemHash, own, locked: !!(it.state & 1),
+      id, hash: it.itemHash, rhash: it.itemHash, own, locked: !!(it.state & 1),
       tag: tags[id]?.tag || '', pwr: inst.primaryStat?.value || 0,
       cols, mw, stats, statsMax,
     });
@@ -570,6 +619,20 @@ async function main() {
         await setLock(e, id, locked);
         if (wcache) { const w = wcache.weapons.find((x) => x.id === id); if (w) w.locked = !!locked; }
         return json({ ok: true, locked: !!locked });
+      }
+      if (req.url.startsWith('/api/vault') && req.method === 'POST') {
+        const { id, hash, own } = JSON.parse(await readBody(req) || '{}');
+        if (!id || !hash) return json({ error: 'missing id/hash' });
+        const r = await vaultWeapon(e, id, hash, own);
+        if (wcache) { const w = wcache.weapons.find((x) => x.id === id); if (w) w.own = r.own; }
+        return json({ ok: true, own: r.own });
+      }
+      if (req.url.startsWith('/api/equip') && req.method === 'POST') {
+        const { id, hash, own } = JSON.parse(await readBody(req) || '{}');
+        if (!id || !hash) return json({ error: 'missing id/hash' });
+        const r = await equipWeapon(e, id, hash, own);
+        if (wcache) { const w = wcache.weapons.find((x) => x.id === id); if (w) w.own = r.own; }
+        return json({ ok: true, own: r.own });
       }
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
       if (req.url.startsWith('/weapons')) return res.end(fs.readFileSync(path.join(__dirname, 'weapon-watch.html')));
