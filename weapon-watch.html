@@ -313,6 +313,12 @@ function renderAdd(){
 
 const save=()=>fetch('/api/watch',{method:'POST',body:JSON.stringify(WATCH)});
 const saveTags=()=>fetch('/api/tags',{method:'POST',body:JSON.stringify(TAGS)});
+// Two-way DIM sync: each tag change writes straight to DIM's cloud (one item at a
+// time — no whole-file overwrite). Local TAGS is updated optimistically first.
+async function writeTag(id,tag){
+  const r=await fetch('/api/tag',{method:'POST',body:JSON.stringify({id,tag})}).then(r=>r.json()).catch(()=>({error:'network'}));
+  if(r&&r.error) $('status').textContent='DIM tag failed: '+r.error;
+}
 async function setLock(id,to){
   const r=await fetch('/api/lock',{method:'POST',body:JSON.stringify({id,locked:!!to})}).then(r=>r.json());
   if(r.error){ $('status').textContent='Lock failed: '+r.error; return false; }
@@ -342,16 +348,16 @@ document.body.addEventListener('click',async e=>{
   else if(t.dataset.ctag){ // direct per-copy tag chip: tap to set, tap active to clear
     const id=t.dataset.ctag, w=DATA.weapons.find(x=>x.id===id);
     const cur=TAGS[id]!==undefined?TAGS[id]:((w&&w.tag)||'none');
-    TAGS[id]=(cur===t.dataset.t)?'none':t.dataset.t; saveTags(); renderWatched();
+    const nt=(cur===t.dataset.t)?'none':t.dataset.t; TAGS[id]=nt; writeTag(id,nt); renderWatched();
   }
   else if(t.dataset.selall){ copyIds(t.dataset.selall).forEach(id=>sel.add(id)); renderWatched(); }
   else if(t.dataset.selnone){ copyIds(t.dataset.selnone).forEach(id=>sel.delete(id)); renderWatched(); }
-  else if(t.dataset.btag){ for(const id of copyIds(t.dataset.btag)) if(sel.has(id)) TAGS[id]=t.dataset.t; saveTags(); renderWatched(); }
+  else if(t.dataset.btag){ for(const id of copyIds(t.dataset.btag)) if(sel.has(id)){ TAGS[id]=t.dataset.t; writeTag(id,t.dataset.t); } renderWatched(); }
   else if(t.dataset.block){ t.disabled=true; for(const id of copyIds(t.dataset.block)) if(sel.has(id)) await setLock(id,+t.dataset.to); renderWatched(); }
   else if(t.dataset.junkrest){
     const ids=copyIds(t.dataset.junkrest).filter(id=>!sel.has(id));
     if(!ids.length||!confirm(`Tag ${ids.length} unselected cop${ids.length===1?'y':'ies'} as junk?`)) return;
-    ids.forEach(id=>TAGS[id]='junk'); saveTags(); renderWatched();
+    ids.forEach(id=>{ TAGS[id]='junk'; writeTag(id,'junk'); }); renderWatched();
   }
   else if(t.dataset.p){ // perk cycle: off -> track -> high -> off
     const cfg=WATCH[t.dataset.w]; cfg.perks=cfg.perks||{};

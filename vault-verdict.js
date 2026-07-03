@@ -276,6 +276,75 @@ const CURATED_SRC = { 'AION Adapter': 'Kepler', "Apostate's Blade": 'Pit of Here
   'Wild Anthem': 'Rewards Pass', Wildwood: 'EDZ', 'Resonant Fury': 'Vow of the Disciple' };
 const curatedSrc = (name) => CURATED_SRC[name] || CURATED_SRC[name.replace(/\s+Set$/i, '')] || '';
 
+// ---------- DIM Sync API (two-way tag sync) ----------
+// DIM stores your keep/favorite/junk tags in its own cloud keyed to your Bungie
+// login. We register an app once (.dim-app.json), exchange the Bungie token for a
+// DIM token (.dim-token.json, ~30-day), then read/write tag annotations.
+const DIM_API = 'https://api.destinyitemmanager.com';
+const DIM_ORIGIN = 'https://localhost';
+const DIM_APP_FILE = path.join(__dirname, '.dim-app.json');
+const DIM_TOKEN_FILE = path.join(__dirname, '.dim-token.json');
+let DIM_TAGS = {};        // instanceId -> tag (DIM is the source of truth; cached)
+let DIM_TAGS_AT = 0;
+let DIM_OFF = false;      // set true if DIM has no app key so we stop trying
+const dimKey = () => { try { return JSON.parse(fs.readFileSync(DIM_APP_FILE, 'utf8')).dimApiKey; } catch { return null; } };
+
+async function dimAuth(e) {
+  const key = dimKey();
+  if (!key) { DIM_OFF = true; throw new Error('DIM not set up (.dim-app.json missing) — run dim-probe.js'); }
+  try { const t = JSON.parse(fs.readFileSync(DIM_TOKEN_FILE, 'utf8')); if (t.token && Date.now() < t.exp - 60000) return { key, token: t.token, pid: t.pid }; } catch {}
+  const tok = await accessToken(e);
+  const ms = await bungie(`${BASE}/User/GetMembershipsById/${tok.membership_id}/254/`, e, tok.access_token);
+  const m = (ms.destinyMemberships || []).find((x) => x.membershipId === ms.primaryMembershipId) || ms.destinyMemberships[0];
+  const pid = m.membershipId;
+  const res = await fetch(`${DIM_API}/auth/token`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', 'X-API-Key': key, Origin: DIM_ORIGIN },
+    body: JSON.stringify({ bungieAccessToken: tok.access_token, membershipId: tok.membership_id, platformMembershipId: pid }),
+  });
+  const j = await res.json().catch(() => ({}));
+  if (!j.accessToken) throw new Error(`DIM auth: ${j.error || res.status} ${j.message || ''}`);
+  const exp = Date.now() + (j.expiresInSeconds ? j.expiresInSeconds * 1000 : 29 * 864e5);
+  fs.writeFileSync(DIM_TOKEN_FILE, JSON.stringify({ token: j.accessToken, exp, pid }));
+  return { key, token: j.accessToken, pid };
+}
+
+async function dimReadTags(e) {
+  const { key, token, pid } = await dimAuth(e);
+  const res = await fetch(`${DIM_API}/profile?platformMembershipId=${pid}&destinyVersion=2&components=tags`, {
+    headers: { 'X-API-Key': key, Authorization: `Bearer ${token}`, Origin: DIM_ORIGIN },
+  });
+  const j = await res.json().catch(() => ({}));
+  if (!Array.isArray(j.tags)) throw new Error(`DIM read: ${j.error || res.status}`);
+  const out = {};
+  for (const t of j.tags) if (t.tag) out[t.id] = t.tag;
+  DIM_TAGS = out; DIM_TAGS_AT = Date.now();
+  saveJsonSafe(TAGS_FILE, out); // mirror to disk as an offline fallback
+  return out;
+}
+
+// Refresh the DIM tag cache if stale; fall back to the last disk mirror on failure.
+async function dimTagsFresh(e, maxAgeMs = 30000) {
+  if (DIM_OFF) return DIM_TAGS;
+  if (Date.now() - DIM_TAGS_AT > maxAgeMs) {
+    try { await dimReadTags(e); } catch (err) { console.warn('DIM read failed, using cached tags:', err.message); if (!Object.keys(DIM_TAGS).length) DIM_TAGS = loadTags(); }
+  }
+  return DIM_TAGS;
+}
+
+async function dimWriteTag(e, id, tag) {
+  const { key, token, pid } = await dimAuth(e);
+  const payload = { id, tag: (tag && tag !== 'none') ? tag : null };
+  const res = await fetch(`${DIM_API}/profile`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', 'X-API-Key': key, Authorization: `Bearer ${token}`, Origin: DIM_ORIGIN },
+    body: JSON.stringify({ platformMembershipId: pid, destinyVersion: 2, updates: [{ action: 'tag', payload }] }),
+  });
+  const j = await res.json().catch(() => ({}));
+  if (res.status !== 200) throw new Error(`DIM write ${res.status}: ${JSON.stringify(j).slice(0, 140)}`);
+  if (payload.tag) DIM_TAGS[id] = payload.tag; else delete DIM_TAGS[id];
+  saveJsonSafe(TAGS_FILE, DIM_TAGS);
+  return payload.tag || 'none';
+}
+
 // ---------- profile fetch (shared by armor + weapons) ----------
 async function fetchProfile(e) {
   const tok = await accessToken(e);
@@ -442,7 +511,7 @@ const DMG = { 1: 'Kinetic', 2: 'Arc', 3: 'Solar', 4: 'Void', 6: 'Stasis', 7: 'St
 
 async function fetchWeapons(e) {
   const { prof, man, m, raw } = await fetchProfile(e);
-  const { tags } = dimOverlay();
+  const tags = await dimTagsFresh(e);   // live DIM tags (id -> tag), source of truth
 
   const instances = prof.itemComponents?.instances?.data || {};
   const liveStats = prof.itemComponents?.stats?.data || {};
@@ -524,7 +593,7 @@ async function fetchWeapons(e) {
     }
     weapons.push({
       id, hash: it.itemHash, rhash: it.itemHash, own, locked: !!(it.state & 1),
-      tag: tags[id]?.tag || '', pwr: inst.primaryStat?.value || 0,
+      tag: tags[id] || '', pwr: inst.primaryStat?.value || 0,
       cols, mw, mwIcon, stats, statsMax,
     });
   }
@@ -655,12 +724,23 @@ async function main() {
         return json(loadWatch());
       }
       if (req.url.startsWith('/api/tags')) {
+        // GET returns DIM's tags (source of truth). Legacy POST kept as a local mirror
+        // write but the UI now uses the per-tag /api/tag endpoint below.
         if (req.method === 'POST') {
           const body = JSON.parse(await readBody(req) || '{}');
           saveTags(body);
           return json({ ok: true });
         }
-        return json(loadTags());
+        return json(await dimTagsFresh(e).catch(() => loadTags()));
+      }
+      if (req.url.startsWith('/api/tag') && req.method === 'POST') {
+        const { id, tag } = JSON.parse(await readBody(req) || '{}');
+        if (!id) return json({ error: 'missing id' });
+        try {
+          const applied = await dimWriteTag(e, id, tag);
+          if (wcache) { const w = wcache.weapons.find((x) => x.id === id); if (w) w.tag = applied === 'none' ? '' : applied; }
+          return json({ ok: true, tag: applied });
+        } catch (err) { return json({ error: err.message }); }
       }
       if (req.url.startsWith('/api/lock') && req.method === 'POST') {
         const { id, locked } = JSON.parse(await readBody(req) || '{}');
