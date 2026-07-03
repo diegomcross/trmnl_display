@@ -97,7 +97,7 @@ input[type=checkbox]{accent-color:var(--gold);width:15px;height:15px;flex-shrink
 <div class="bar"><button class="btn" id="refreshBtn">Refresh from Bungie</button><span class="count" id="status" style="margin:0"></span></div>
 
 <div class="bar" id="wBar">
-  <select id="wSort"><option value="score">Sort: best score</option><option value="name">Sort: name</option></select>
+  <select id="wSort"><option value="score">Sort: best match %</option><option value="name">Sort: name</option></select>
   <div class="bar" id="wAmmoTabs" style="margin:0"></div>
   <label class="tgl"><input type="checkbox" id="wOnlyHits"> Only show weapons with a hit</label>
   <button class="btn sm mut" id="expJunkBtn">Copy junk DIM query</button>
@@ -117,19 +117,32 @@ const openCards=new Set(), sel=new Set();
 const $=id=>document.getElementById(id);
 const esc=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
 
-// score: tracked perk anywhere on the roll counts its priority (normal 1, ★ high 2);
-// masterwork match +1. Perks are keyed by NAME so enhanced variants match too.
-function scoreCopy(w,cfg){
-  let sc=0;
-  const rollPerks=new Set([...w.cols[0],...w.cols[1]].map(p=>p.n));
-  for(const [n,pr] of Object.entries(cfg.perks||{})) if(rollPerks.has(n)) sc+=pr;
-  if(cfg.mw && w.mw===cfg.mw) sc+=1;
-  return sc;
+// God-roll gate (tunable). A drop is a "god roll" only when it clears ALL three:
+// enough of your wishlist by weight, enough criteria matched in absolute terms, and
+// a wishlist rich enough to be meaningful. This is what stops a 1-perk pick (1/1 =
+// 100%) from flagging every drop, while a 6-perk + stat + MW wishlist hitting 5–6/8
+// qualifies. These same thresholds will drive the future TRMNL drop alert.
+const GOD_MIN_PCT=60;       // matched weight must be ≥ this % of selected weight
+const GOD_MIN_MATCHES=3;    // and at least this many selected criteria must match
+const GOD_MIN_SELECTED=4;   // and you must be tracking at least this many criteria
+
+// Weighted %-match of everything you selected: perks (normal 1 / ★ high 2), the
+// wanted masterwork (1), and each watched stat (1, "met" = this copy is the best
+// among your copies for that stat — the gold rank). Perks match by NAME so enhanced
+// variants count. rankOf comes from the copies set (see renderWatched).
+function scoreCopy(w,cfg,rankOf){
+  const perks=cfg.perks||{}, roll=new Set([...w.cols[0],...w.cols[1]].map(p=>p.n));
+  let selW=0,matchW=0,matched=0,selN=0;
+  for(const [n,pr] of Object.entries(perks)){ selW+=pr; selN++; if(roll.has(n)){ matchW+=pr; matched++; } }
+  if(cfg.mw){ selW+=1; selN++; if(w.mw===cfg.mw){ matchW+=1; matched++; } }
+  for(const s of (cfg.stats||[])){ selW+=1; selN++; if(rankOf?.[s] && rankOf[s](w.statsMax[s]??-1)==='s1'){ matchW+=1; matched++; } }
+  const pct=selW?Math.round(100*matchW/selW):0;
+  const god=selN>=GOD_MIN_SELECTED && matched>=GOD_MIN_MATCHES && pct>=GOD_MIN_PCT;
+  return {pct,matchW,selW,matched,selN,god};
 }
 const trackedCount=cfg=>Object.keys(cfg.perks||{}).length;
+const selectedCount=cfg=>trackedCount(cfg)+(cfg.mw?1:0)+((cfg.stats||[]).length);
 const tagOf=w=>TAGS[w.id]!==undefined?TAGS[w.id]:(w.tag||'none');   // local overlay wins, then DIM, then none
-// god roll: a currently-equipped perk in BOTH col3 and col4 is one of the tracked perks
-const isGodRoll=(w,cfg)=>w.cols[0].some(p=>p.on&&(cfg.perks||{})[p.n]>0) && w.cols[1].some(p=>p.on&&(cfg.perks||{})[p.n]>0);
 function copyText(text,btn,msg){
   const done=()=>{const old=btn.textContent;btn.textContent=msg;setTimeout(()=>btn.textContent=old,1600);};
   const fb=()=>{const ta=document.createElement('textarea');ta.value=text;document.body.appendChild(ta);ta.select();document.execCommand('copy');ta.remove();done();};
@@ -154,26 +167,27 @@ function renderWatched(){
 
   let entries=Object.entries(WATCH).map(([hash,cfg])=>{
     const d=DATA.defs[hash];
-    const copies=(copiesOf[hash]||[]).map(w=>({w,sc:scoreCopy(w,cfg),god:isGodRoll(w,cfg)})).sort((a,b)=>b.sc-a.sc);
-    return {hash,cfg,d,copies,best:copies[0]?.sc??0,hasGod:copies.some(c=>c.god)};
+    const raw=copiesOf[hash]||[];
+    // rank each watched stat across this weapon's copies first (score needs it)
+    const rankOf={};
+    for(const s of (cfg.stats||[])){
+      const vals=[...new Set(raw.map(w=>w.statsMax[s]??-1))].sort((a,b)=>b-a);
+      rankOf[s]=v=>{const i=vals.indexOf(v);return i===0?'s1':i===1?'s2':i===2?'s3':'';};
+    }
+    const copies=raw.map(w=>({w,sc:scoreCopy(w,cfg,rankOf)})).sort((a,b)=>b.sc.pct-a.sc.pct||b.sc.matchW-a.sc.matchW);
+    return {hash,cfg,d,rankOf,copies,best:copies[0]?.sc.pct??0,hasGod:copies.some(c=>c.sc.god)};
   }).filter(en=>en.d && (!wAmmo||en.d.slot===wAmmo) && (!wOnlyHits||en.best>0));
   entries.sort((a,b)=> wSort==='score' ? (b.best-a.best || a.d.n.localeCompare(b.d.n)) : a.d.n.localeCompare(b.d.n));
 
-  $('watched').innerHTML=(entries.length?entries.map(({hash,cfg,d,copies,best,hasGod})=>{
+  $('watched').innerHTML=(entries.length?entries.map(({hash,cfg,d,rankOf,copies,best,hasGod})=>{
     const isOpen=openCards.has(hash);
     const tn=trackedNames(cfg);
     const hperks=tn.length?`<div class="hperks">${tn.map(p=>`<${p.hi?'b class="hp2"':'b'}>${p.hi?'★':''}${esc(p.n)}</b>`).join(' · ')}</div>`:'';
+    const vtag=d.versions>1?` <span style="color:var(--dim)">· ${d.versions} versions</span>`:'';
     const head=`<div class="whead" data-open="${hash}">
-      <span><span class="nm">${esc(d.n)}</span> <span class="sum">· ${esc(d.ty)} · ${copies.length} cop${copies.length===1?'y':'ies'} · best score ${best} · tracking ${trackedCount(cfg)}/6</span>${hasGod?'<span class="badge">🎯 GOD ROLL</span>':''}${isOpen?'':hperks}</span>
+      <span><span class="nm">${esc(d.n)}</span> <span class="sum">· ${esc(d.ty)} · ${copies.length} cop${copies.length===1?'y':'ies'} · best ${best}%${vtag} · tracking ${selectedCount(cfg)} criteria</span>${hasGod?'<span class="badge">🎯 GOD ROLL</span>':''}${isOpen?'':hperks}</span>
       <span class="sum">${isOpen?'▾':'▸'}</span></div>`;
     if(!isOpen) return `<div class="card">${head}</div>`;
-
-    // per-stat ranking across dupes: gold = highest possible, teal = 2nd, red = 3rd
-    const rankOf={};
-    for(const s of (cfg.stats||[])){
-      const vals=[...new Set(copies.map(c=>c.w.statsMax[s]??-1))].sort((a,b)=>b-a);
-      rankOf[s]=v=>{const i=vals.indexOf(v);return i===0?'s1':i===1?'s2':i===2?'s3':'';};
-    }
 
     const mwOpts=[...new Set([...MWS,...copies.map(c=>c.w.mw).filter(Boolean)])];
     const poolBtns=ci=>(d.pool[ci]||[]).map(n=>{
@@ -185,7 +199,7 @@ function renderWatched(){
       return `<button class="pk ${on?'t1':''}" data-w="${hash}" data-st="${esc(s)}">${esc(s)}</button>`;
     }).join('');
 
-    const copyRows=copies.map(({w,sc,god})=>{
+    const copyRows=copies.map(({w,sc})=>{
       const col=ci=>w.cols[ci].map(p=>{
         const pr=(cfg.perks||{})[p.n]||0;
         return `<span class="${pr===2?'hi':pr===1?'hit':'cp'} ${p.on?'act':''}">${esc(p.n)}</span>`;
@@ -198,7 +212,7 @@ function renderWatched(){
       return `<div class="copy">
         <input type="checkbox" data-sel="${w.id}" ${sel.has(w.id)?'checked':''}>
         <div class="body">
-          <span class="score ${sc>=3?'hot':''}">score ${sc}</span>${god?'<span class="badge">🎯</span>':''}
+          <span class="score ${sc.god?'hot':''}" title="${sc.matched}/${sc.selN} criteria, weighted">${sc.pct}%${sc.selN?` · ${sc.matched}/${sc.selN}`:''}</span>${sc.god?'<span class="badge">🎯</span>':''}
           <button class="lockb ${w.locked?'on':''}" data-lock="${w.id}" data-to="${w.locked?0:1}" title="${w.locked?'Unlock':'Lock'}">${w.locked?'🔒':'🔓'}</button>
           <select class="sm" data-tag="${w.id}">${TAG_OPTS.map(t=>`<option ${t===tag?'selected':''}>${t}</option>`).join('')}</select>
           <span class="cp">${w.own!=='Vault'?'on '+w.own:'Vault'} · ${w.pwr} · MW <span class="${cfg.mw&&w.mw===cfg.mw?'hi':'cp'}">${w.mw||'—'}</span></span>

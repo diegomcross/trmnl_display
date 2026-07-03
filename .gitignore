@@ -33,3 +33,5 @@ node_modules/
 npm-debug.log*
 weapon-watch.json
 weapon-tags.json
+weapon-watch.json.bak
+weapon-tags.json.bak

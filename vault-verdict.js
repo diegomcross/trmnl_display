@@ -469,17 +469,53 @@ async function fetchWeapons(e) {
       cols, mw, stats, statsMax,
     });
   }
-  return { weapons, defs: defsOut, fetchedAt: new Date().toISOString(), account: `${m.membershipType}/${m.membershipId}` };
+
+  // Merge reissued weapons: the same weapon reissued across seasons keeps its name
+  // (and type/ammo/damage) but gets a new item hash, so it showed up as duplicate
+  // entries. Collapse each such group to one canonical entry — union the perk pools
+  // (a reissue can add/drop a few perks) and repoint every owned copy to the canonical
+  // hash. Grouped by name+type+ammo+damage so a genuine name-collision across weapon
+  // types would stay separate.
+  const groups = {};
+  for (const [h, def] of Object.entries(defsOut)) {
+    const gk = `${def.n}|${def.ty}|${def.ammo}|${def.dmg}`;
+    (groups[gk] = groups[gk] || []).push(h);
+  }
+  const canonical = {}, mergedDefs = {};
+  for (const hashes of Object.values(groups)) {
+    const canon = hashes.slice().sort((a, b) => Number(a) - Number(b))[0];
+    const base = { ...defsOut[canon] };
+    const cols = [[], []];
+    for (const h of hashes) (defsOut[h].pool || []).forEach((col, ci) => {
+      for (const p of col) if (!cols[ci].includes(p)) cols[ci].push(p);
+    });
+    base.pool = cols;
+    base.versions = hashes.length;
+    if (!base.src) base.src = hashes.map((h) => defsOut[h].src).find(Boolean) || '';
+    mergedDefs[canon] = base;
+    for (const h of hashes) canonical[h] = canon;
+  }
+  for (const w of weapons) w.hash = canonical[w.hash] || w.hash;
+
+  return { weapons, defs: mergedDefs, fetchedAt: new Date().toISOString(), account: `${m.membershipType}/${m.membershipId}` };
 }
 
 // ---------- god-roll watch config + local tag overlay ----------
 const WATCH_FILE = path.join(__dirname, 'weapon-watch.json');
 const TAGS_FILE = path.join(__dirname, 'weapon-tags.json'); // instanceId -> keep|favorite|junk|none (overrides DIM tag in the UI)
 const loadJson = (f) => { try { return JSON.parse(fs.readFileSync(f, 'utf8')); } catch { return {}; } };
+// Write with a one-step backup: the previous file contents are copied to <file>.bak
+// before every overwrite, so an accidental wipe (empty POST, bad edit) is always
+// one restore away. Also refuse to blank a non-empty file to {} without the caller
+// meaning it — an empty body is almost always a mistake, so we keep the .bak either way.
+function saveJsonSafe(file, obj) {
+  try { if (fs.existsSync(file)) fs.copyFileSync(file, file + '.bak'); } catch {}
+  fs.writeFileSync(file, JSON.stringify(obj, null, 2));
+}
 const loadWatch = () => loadJson(WATCH_FILE);
-const saveWatch = (w) => fs.writeFileSync(WATCH_FILE, JSON.stringify(w, null, 2));
+const saveWatch = (w) => saveJsonSafe(WATCH_FILE, w);
 const loadTags = () => loadJson(TAGS_FILE);
-const saveTags = (t) => fs.writeFileSync(TAGS_FILE, JSON.stringify(t, null, 2));
+const saveTags = (t) => saveJsonSafe(TAGS_FILE, t);
 
 // ---------- probe mode for debugging ----------
 async function probe(nameLike) {

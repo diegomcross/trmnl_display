@@ -185,6 +185,24 @@ Core priorities, in his words:
     names in the header. Rule of thumb for this file: **don't reintroduce a wholesale
     `innerHTML` rebuild on every interaction** — target the list that changed and
     preserve scroll.
+  - **Reissued weapons merged (server):** a weapon reissued across seasons keeps its
+    name/type but gets a new item hash, so it showed as duplicate entries. `fetchWeapons`
+    groups defs by name+type+ammo+damage, unions the perk pools, and repoints every owned
+    copy to one canonical hash (`versions` field counts how many merged). One card per
+    weapon.
+  - **Score is a weighted %-match** (`scoreCopy` in weapon-watch.html): matched weight /
+    selected weight, where a normal tracked perk = 1, ★ high-priority = 2, wanted
+    masterwork = 1, and each watched stat = 1 ("met" = this copy is the gold/highest for
+    that stat among your copies). Shown as `NN% · matched/selected`. The **god-roll** flag
+    (🎯) is deliberately NOT just 100% — it needs `GOD_MIN_SELECTED` (4) criteria tracked,
+    `GOD_MIN_MATCHES` (3) matched, and `GOD_MIN_PCT` (60%). So one lone perk that matches
+    reads 100% but never flags; a 6-perk+MW+stat wishlist hitting ~5/8 does. Those three
+    constants (top of the script) are the tuning knobs and will drive the phase-2 TRMNL
+    drop alert.
+  - **Save safety:** `saveJsonSafe` copies `weapon-watch.json`/`weapon-tags.json` to
+    `<file>.bak` before every overwrite. These files are SHARED live state Diego edits
+    from his own browser — never blank the whole file to clean up; remove only specific
+    keys and write the rest back.
   - **Build synergy (NEW):** legendary keepers get "Pairs with <exotic>" notes when
     their archetype stats match a tuned exotic's favorites (same slot excluded);
     keepers no tuned exotic favors demote to Review (`oSyn` rules toggle). Classes
