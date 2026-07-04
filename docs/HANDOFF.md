@@ -310,6 +310,14 @@ Core priorities, in his words:
     by power, top 80. Combo tagged **ad-clear / pve / pvp / dps**. Verified live: Voltshot|Rolling
     Storm + Jolting Feedback → 5 full matches (Keening = Voltshot col3 / Jolting col4; Snipehunt
     rolled-now), Horror's Least correctly demoted to partial (both perks only in col4).
+  - **Perk Finder match modes — Inventory vs Farmable (2026-07-04):** a toggle on the matches
+    card. **Inventory** = the above (your owned copies). **Farmable** = which weapons in the
+    *whole game* can DROP the combo — matches each weapon's full trait pool (`poolMatch`, same
+    different-columns rule) from `GET /api/weapon-pools` (server `buildWeaponPools`: every manifest
+    weapon's col-3/col-4 `frames` perks, reissues merged by name+type+bucket, ~1272 weapons, 535KB,
+    lazy-loaded on first Farmable use). Owned weapons are badged "owned" and listed first; each row
+    shows the weapon's drop source (`src`). Verified: Voltshot|Rolling Storm + Jolting Feedback →
+    15 farmable weapons (owned Keening/Antedate/… first, then Arc Logic→The Moon etc.).
   - DIM overlay (armor): optional `dim-data.json` (tags + loadouts) merges into verdicts.
   - **DIM two-way tag sync (weapons, shipped):** Weapon Watch keep/favorite/junk tags are
     synced live with DIM's cloud. `vault-verdict.js` holds a small DIM Sync API client:

@@ -101,6 +101,10 @@ input:focus,select:focus{outline:none;border-color:var(--gold)}
 .score.full{color:var(--gold)}
 .score.half{color:var(--mut)}
 .pill{display:inline-block;font-family:Bahnschrift,sans-serif;font-size:9px;letter-spacing:.04em;text-transform:uppercase;padding:1px 5px;border:1px solid var(--keep);color:var(--keep);margin-top:2px}
+.mhead{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
+.modesw{display:flex;gap:4px}
+.owned{flex:0 0 auto;font-family:Bahnschrift,sans-serif;font-size:9px;letter-spacing:.04em;text-transform:uppercase;color:var(--keep);border:1px solid var(--keep);padding:1px 5px}
+.wsrc{font-size:10px;color:var(--dim)}
 .big{text-align:center;color:var(--mut);padding:26px 12px;font-size:13px}
 :focus-visible{outline:2px solid var(--gold);outline-offset:2px}
 @media(min-width:1200px){body{max-width:1180px;margin:0 auto}}
@@ -167,8 +171,15 @@ input:focus,select:focus{outline:none;border-color:var(--gold)}
     </div>
 
     <div class="card">
-      <h2 class="disp">Best matches in your vault <span id="matchcount" class="count"></span></h2>
-      <div id="matches"><div class="big">Select perks to score your weapons.</div></div>
+      <div class="mhead">
+        <h2 class="disp">Best matches <span id="matchcount" class="count"></span></h2>
+        <div class="modesw">
+          <button class="btn sm on" id="modeInv" data-mode="inv">Inventory</button>
+          <button class="btn sm mut" id="modeFarm" data-mode="farm">Farmable</button>
+        </div>
+      </div>
+      <p class="hint" id="modehint">Weapons you own whose current rolls can give this combo.</p>
+      <div id="matches"><div class="big">Add perks to a slot to score your weapons.</div></div>
     </div>
   </div>
 </div>
@@ -179,6 +190,7 @@ const esc=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'
 const BN='https://www.bungie.net';
 
 let LIB=[], PICONS={}, WEAPONS={weapons:[],defs:{},perkIcons:{}}, COMBOS=[], OWNED=new Set();
+let WPOOLS=null, OWNEDW=new Set(), matchMode='inv';   // farmable-pool cache, owned weapon names, match mode
 // SLOTS[0], SLOTS[1] = the two combo slots (each a Set of perk names, "any of these").
 let SLOTS=[new Set(),new Set()], activeSlot=0, ROLE='', sort='pop', colFilter='all', ownedOnly=false, popOnly=false, q='';
 
@@ -262,17 +274,29 @@ function scoreCopy(w){
   return null;
 }
 
-function renderMatches(){
+// Farmable: match a weapon's full trait POOL — can this weapon ever DROP the combo,
+// one perk from each slot in different columns? (no "equipped" concept here.)
+function poolMatch(wp){
+  const A=SLOTS[0], B=SLOTS[1], p0=wp.pool[0]||[], p1=wp.pool[1]||[];
+  const inA=col=>col.find(n=>A.has(n)), inB=col=>col.find(n=>B.has(n));
+  if(!B.size){ const a=inA(p0)||inA(p1); return a?{full:true,marks:[{slot:1,n:a}]}:null; }
+  const a0=inA(p0),b1=inB(p1),a1=inA(p1),b0=inB(p0), opt1=a0&&b1, opt2=a1&&b0;
+  if(opt1||opt2) return {full:true,marks:opt1?[{slot:1,n:a0},{slot:2,n:b1}]:[{slot:1,n:a1},{slot:2,n:b0}]};
+  const pa=inA(p0)||inA(p1), pb=inB(p0)||inB(p1);
+  if(pa||pb){ const m=[]; if(pa)m.push({slot:1,n:pa}); if(pb)m.push({slot:2,n:pb}); return {full:false,marks:m}; }
+  return null;
+}
+
+async function renderMatches(){
   if(!SLOTS[0].size && !SLOTS[1].size){ $('matches').innerHTML='<div class="big">Add perks to a slot to score your weapons.</div>'; $('matchcount').textContent=''; return; }
+  if(matchMode==='farm') return renderFarmable();
   const rows=[];
   for(const w of WEAPONS.weapons){ const sc=scoreCopy(w); if(sc){ rows.push({w,def:WEAPONS.defs[w.hash]||{},sc}); } }
-  // full+rolled first, then full (can roll), then partials; each by power
-  const rank=r=>(r.sc.full?(r.sc.rolled?0:1):2);
+  const rank=r=>(r.sc.full?(r.sc.rolled?0:1):2);  // rolled → can-roll → partial
   rows.sort((a,b)=>rank(a)-rank(b)||b.w.pwr-a.w.pwr);
   const full=rows.filter(r=>r.sc.full).length;
   $('matchcount').textContent=`(${full} match${full===1?'':'es'})`;
-  const top=rows.slice(0,80);
-  $('matches').innerHTML=top.length?top.map(r=>{
+  $('matches').innerHTML=rows.length?rows.slice(0,80).map(r=>{
     const d=r.def, exotic=d.tt===6;
     const tile=`<span class="wtile ${exotic?'exotic':''}">${d.icon?`<img src="${BN}${d.icon}" alt="" loading="lazy">`:''}</span>`;
     const hits=r.sc.marks.map(m=>`<span class="${m.on?'on':''}"><i class="mslot">S${m.slot}</i>${PICONS[m.n]?`<img src="${BN}${PICONS[m.n]}" alt="">`:''}${esc(m.n)}${m.on?' •':''}</span>`).join('');
@@ -284,7 +308,28 @@ function renderMatches(){
         <div class="wsub">${esc(d.ty||d.slot||'')}${r.w.pwr?' · '+r.w.pwr:''}${tag}</div>
         <div class="mhit">${hits}</div>${pill}</div>
       <div class="score ${r.sc.full?'full':'half'}">${label}</div></div>`;
-  }).join(''):'<div class="big">No weapon can roll this combo.</div>';
+  }).join(''):'<div class="big">None of your copies can roll this combo. Try Farmable →</div>';
+}
+
+async function renderFarmable(){
+  if(!WPOOLS){ $('matches').innerHTML='<div class="big">Loading every weapon that can roll this…</div>';
+    try{ WPOOLS=(await fetch('/api/weapon-pools').then(r=>r.json())).weapons||[]; }catch{ WPOOLS=[]; } }
+  const rows=[];
+  for(const wp of WPOOLS){ const sc=poolMatch(wp); if(sc&&sc.full){ rows.push({wp,sc,owned:OWNEDW.has(wp.n)}); } }
+  // owned frames first (you already have it — just chase the roll), then by name
+  rows.sort((a,b)=>(b.owned-a.owned)||a.wp.n.localeCompare(b.wp.n));
+  $('matchcount').textContent=`(${rows.length} weapon${rows.length===1?'':'s'})`;
+  $('matches').innerHTML=rows.length?rows.slice(0,80).map(r=>{
+    const wp=r.wp, exotic=wp.tt===6;
+    const tile=`<span class="wtile ${exotic?'exotic':''}">${wp.icon?`<img src="${BN}${wp.icon}" alt="" loading="lazy">`:''}</span>`;
+    const hits=r.sc.marks.map(m=>`<span><i class="mslot">S${m.slot}</i>${PICONS[m.n]?`<img src="${BN}${PICONS[m.n]}" alt="">`:''}${esc(m.n)}</span>`).join('');
+    const src=wp.src?`<div class="wsrc">${esc(wp.src)}</div>`:'';
+    return `<div class="match ${r.owned?'':'full'}">${tile}
+      <div class="mx"><div class="wn">${esc(wp.n)}</div>
+        <div class="wsub">${esc(wp.ty||wp.slot||'')}</div>
+        <div class="mhit">${hits}</div>${src}</div>
+      ${r.owned?'<span class="owned">owned</span>':'<span class="score full">✓</span>'}</div>`;
+  }).join(''):'<div class="big">No weapon in the game can roll this combo — the two perks may share a column.</div>';
 }
 
 function renderCombos(){
@@ -340,6 +385,15 @@ document.querySelectorAll('[data-sort]').forEach(b=>b.onclick=()=>{ sort=b.datas
 document.querySelectorAll('[data-col]').forEach(b=>b.onclick=()=>{ colFilter=b.dataset.col; document.querySelectorAll('[data-col]').forEach(x=>{x.classList.toggle('on',x===b);x.classList.toggle('mut',x!==b);}); renderLib(); });
 $('ownedOnly').onclick=()=>{ ownedOnly=!ownedOnly; $('ownedOnly').classList.toggle('on',ownedOnly); $('ownedOnly').classList.toggle('mut',!ownedOnly); renderLib(); };
 $('popOnly').onclick=()=>{ popOnly=!popOnly; $('popOnly').classList.toggle('on',popOnly); $('popOnly').classList.toggle('mut',!popOnly); renderLib(); };
+document.querySelectorAll('[data-mode]').forEach(b=>b.onclick=()=>{
+  matchMode=b.dataset.mode;
+  $('modeInv').classList.toggle('on',matchMode==='inv'); $('modeInv').classList.toggle('mut',matchMode!=='inv');
+  $('modeFarm').classList.toggle('on',matchMode==='farm'); $('modeFarm').classList.toggle('mut',matchMode!=='farm');
+  $('modehint').textContent = matchMode==='farm'
+    ? 'Every weapon whose perk pool can DROP this combo. Weapons you own are marked and listed first.'
+    : 'Weapons you own whose current rolls can give this combo.';
+  renderMatches();
+});
 
 async function load(){
   try{
@@ -353,8 +407,9 @@ async function load(){
     // weapons (for icons + inventory matching) — may be a beat slower
     const w=await fetch('/api/weapons').then(r=>r.json());
     WEAPONS=w; PICONS=w.perkIcons||{};
-    OWNED=new Set();
+    OWNED=new Set(); OWNEDW=new Set();
     for(const wp of w.weapons) for(const col of (wp.cols||[])) for(const pk of col) OWNED.add(pk.n);
+    for(const d of Object.values(w.defs||{})) if(d.n) OWNEDW.add(d.n);
     renderLib(); renderCombo();
   }catch(err){ $('plib').innerHTML=`<div class="big">Error: ${esc(err.message)}</div>`; }
 }

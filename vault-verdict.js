@@ -816,8 +816,36 @@ async function buildPerkLibrary(e, fresh = false) {
   return PERKLIB;
 }
 
+// Every weapon in the game with its full trait-perk POOL (what it CAN roll), for the
+// Perk Finder "Farmable" mode. Reissues (same name, new hash) are merged and their pools
+// unioned, mirroring fetchWeapons. Trait perks only (pc==='frames').
+let WPOOLS = null;
+async function buildWeaponPools(e) {
+  if (WPOOLS) return WPOOLS;
+  const man = await loadManifest(e);
+  const nameCol = (ps) => {
+    const s = new Set();
+    for (const h of (man.plugSets[ps] || [])) { const it = man.items[h]; if (it && it.n && it.pc === 'frames') s.add(it.n); }
+    return [...s];
+  };
+  const groups = {};
+  for (const [h, d] of Object.entries(man.items)) {
+    if (d.it !== 3 || !d.tr) continue;
+    const p0 = d.tr[0] ? nameCol(d.tr[0]) : [], p1 = d.tr[1] ? nameCol(d.tr[1]) : [];
+    if (!p0.length && !p1.length) continue;
+    const gk = `${d.n}|${d.ty}|${d.b}`;
+    const g = groups[gk] || (groups[gk] = { hash: Number(h), n: d.n, ty: d.ty || '', tt: d.tt, slot: WBUCKET[d.b] || '', icon: d.icon || '', src: d.src || '', pool: [new Set(), new Set()] });
+    p0.forEach((n) => g.pool[0].add(n)); p1.forEach((n) => g.pool[1].add(n));
+    if (!g.icon && d.icon) g.icon = d.icon;
+    if (!g.src && d.src) g.src = d.src;
+  }
+  const weapons = Object.values(groups).map((g) => ({ ...g, pool: [[...g.pool[0]], [...g.pool[1]]] }));
+  WPOOLS = { weapons, count: weapons.length };
+  return WPOOLS;
+}
+
 // Saved perk combos the user builds and role-tags (ad-clear / pve / pvp / dps).
-const COMBOS_FILE = path.join(__dirname, 'perk-combos.json'); // [{id,name,role,perks:[name,...]}]
+const COMBOS_FILE = path.join(__dirname, 'perk-combos.json'); // [{id,name,role,slots:[[name,...],[name,...]]}]
 const loadCombos = () => { const c = loadJson(COMBOS_FILE); return Array.isArray(c) ? c : []; };
 const saveCombos = (c) => saveJsonSafe(COMBOS_FILE, c);
 
@@ -944,6 +972,9 @@ async function main() {
       }
       if (req.url.startsWith('/api/perks')) {
         return json(await buildPerkLibrary(e, req.url.includes('fresh=1')));
+      }
+      if (req.url.startsWith('/api/weapon-pools')) {
+        return json(await buildWeaponPools(e));
       }
       if (req.url.startsWith('/api/combos')) {
         if (req.method === 'POST') { saveCombos(JSON.parse(await readBody(req) || '[]')); return json({ ok: true }); }

@@ -23,10 +23,12 @@ columns. User never picks the column. See HANDOFF for the match logic. Verified 
 **Possible Perk Finder follow-ups (not started, no commitment — surface to Diego):**
 - **AND toggle for the Artifacts page** filter (its chips are still OR). Separate from
   Perk Finder now that combos are slot-based.
-- **Chase mode:** match against each weapon's full *pool* (`defs[hash].pool`, what a
-  weapon CAN roll) not just owned copies' current perks, to surface grind targets.
+- ✅ **Chase / Farmable mode — SHIPPED 2026-07-04** (Inventory↔Farmable toggle; see HANDOFF).
 - **3rd slot / origin-trait or barrel-mag slot** if he ever wants combos beyond the
   two trait columns.
+- **Farmability polish:** `/api/weapon-pools` `src` strings are raw manifest sourceStrings
+  (some verbose, e.g. "Random Perks: cannot be reacquired"). Could clean/shorten or add a
+  "currently obtainable only" filter if the farmable list feels noisy.
 - **Role-weighted scoring:** weight a combo's match by its role's PvE/PvP lean using
   the wishlist split already stored per perk.
 - **Wire combos into Weapon Watch / alerts:** a saved combo could seed a watch config.
