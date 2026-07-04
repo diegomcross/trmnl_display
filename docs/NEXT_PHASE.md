@@ -30,9 +30,16 @@ Verdict tools.
   set, keep/review/junk) instead of BrayTech's power/currency rail. Reuse Vault Verdict's engine;
   present as a grid. Confirm with Diego whether the new grid becomes the primary "Armor Vault" (/)
   or sits alongside the existing detailed Vault Verdict page.
-- **Later polish:** click a Weapon Vault tile → could offer lock/tag/equip actions inline (the
-  `/api/tag`,`/api/lock`,`/api/equip`,`/api/vault` endpoints already exist); a right power/currency
-  rail if Diego still wants the BrayTech info panel too.
+- ✅ **Weapon Vault = inventory manager — SHIPPED 2026-07-04:** tile inspect has Equip / To Vault /
+  Lock / Keep / Fav / Junk (existing endpoints). Diego asked for DIM-like management from the grid.
+- ✅ **Smart exotic swap — SHIPPED 2026-07-04** (`smartEquipWeapon`, dry-run verified; see HANDOFF):
+  equipping an exotic while another exotic is equipped frees the old slot with a matching-ammo
+  legendary first. Diego's "fix what DIM can't do right."
+- **Diego still to test IN-GAME:** the real equip/vault/tag/lock writes (I only dry-ran the swap and
+  rendered the buttons — did NOT fire live writes on his account during testing). He confirms the
+  actual smart swap next time he plays.
+- **Later polish:** a right power/currency rail if Diego wants the BrayTech info panel too; show an
+  "equipped" marker on tiles (needs fetchWeapons to carry equipped state).
 
 ## Where we are (2026-07-04, latest)
 

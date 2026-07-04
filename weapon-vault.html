@@ -91,6 +91,11 @@ input:focus{outline:none;border-color:var(--gold)}
 .ispcol .ch{font-family:Bahnschrift,sans-serif;text-transform:uppercase;font-size:10px;color:var(--dim);letter-spacing:.06em;margin-bottom:4px}
 .pk{display:inline-flex;align-items:center;gap:5px;border:1px solid var(--line);padding:2px 7px 2px 3px;font-size:11px;margin:0 4px 4px 0}
 .pk.on{border-color:var(--keep);color:var(--keep)} .pk img{width:20px;height:20px}
+.ispacts{display:flex;flex-wrap:wrap;gap:5px;margin-top:12px;padding-top:10px;border-top:1px solid var(--line);align-items:center}
+.ispacts .sep{width:1px;height:18px;background:var(--line);margin:0 2px}
+.ispacts .btn.act-on{background:var(--gold);color:#000}
+.ispmsg{font-size:11px;color:var(--mut);margin-top:8px;min-height:14px}
+.ispmsg.warn{color:var(--junk)} .ispmsg.ok{color:var(--keep)}
 .big{text-align:center;color:var(--mut);padding:24px 12px;font-size:13px}
 :focus-visible{outline:2px solid var(--gold);outline-offset:2px}
 @media(min-width:1300px){body{max-width:1280px;margin:0 auto}}
@@ -221,23 +226,70 @@ function tile(w){
 const io=new IntersectionObserver((ents)=>{for(const en of ents){ if(en.isIntersecting){ const im=en.target; im.src=im.dataset.src; im.removeAttribute('data-src'); io.unobserve(im); } }},{rootMargin:'300px'});
 function observeImgs(){ document.querySelectorAll('.wt img[data-src]').forEach(im=>io.observe(im)); }
 
-// ---- inspect popover ----
+// ---- inspect popover + inventory-manager actions ----
+let curW=null;
 function inspect(id){
   const w=WEAPONS.weapons.find(x=>x.id===id); if(!w) return;
-  const d=WEAPONS.defs[w.hash]||{};
+  curW=w; const d=WEAPONS.defs[w.hash]||{};
   const col=(arr,label)=>`<div class="ispcol"><div class="ch">${label}</div>${(arr||[]).map(p=>`<span class="pk ${p.on?'on':''}">${PICONS[p.n]?`<img src="${BN}${PICONS[p.n]}">`:''}${esc(p.n)}${p.on?' •':''}</span>`).join('')||'<span class="slotempty">—</span>'}</div>`;
+  const tagBtn=(t,lbl)=>`<button class="btn sm ${w.tag===t?'act-on':'mut'}" data-act="tag" data-tag="${w.tag===t?'none':t}">${lbl}</button>`;
   $('ispcard').innerHTML=`<div class="ih"><span class="it ${d.tt===6?'exotic':''}">${d.icon?`<img src="${BN}${d.icon}">`:''}</span>
     <div><div class="disp" style="font-size:16px;color:#fff">${esc(d.n||'Weapon')}</div>
-    <div class="count">${esc(d.ty||d.slot||'')} · ✦${w.pwr||'—'}${w.tag?' · '+esc(w.tag):''}${w.locked?' · 🔒':''}${d.dmg?' · '+esc(d.dmg):''}</div></div></div>
+    <div class="count" id="ispsub">${esc(d.ty||d.slot||'')} · ✦${w.pwr||'—'} · ${esc(w.own||'')}${w.locked?' · 🔒':''}${d.dmg?' · '+esc(d.dmg):''}</div></div></div>
     ${col(w.cols?.[0],'Column 3')}${col(w.cols?.[1],'Column 4')}
     ${w.mw?`<div class="ispcol"><div class="ch">Masterwork</div><span class="pk">${w.mwIcon?`<img src="${BN}${w.mwIcon}">`:''}${esc(w.mw)}</span></div>`:''}
-    <div style="text-align:right;margin-top:10px"><button class="btn sm mut" onclick="document.getElementById('insp').classList.remove('open')">Close</button></div>`;
+    <div class="ispacts">
+      <button class="btn sm" data-act="equip">Equip</button>
+      ${w.own==='Vault'?'':'<button class="btn sm mut" data-act="vault">To Vault</button>'}
+      <button class="btn sm mut" data-act="lock">${w.locked?'Unlock':'Lock'}</button>
+      <span class="sep"></span>
+      ${tagBtn('keep','Keep')}${tagBtn('favorite','Fav')}${tagBtn('junk','Junk')}
+    </div>
+    <div class="ispmsg" id="ispmsg"></div>
+    <div style="text-align:right;margin-top:8px"><button class="btn sm mut" data-act="close">Close</button></div>`;
   $('insp').classList.add('open');
+}
+
+const msg=(t,cls)=>{ const m=$('ispmsg'); if(m){ m.textContent=t; m.className='ispmsg'+(cls?' '+cls:''); } };
+async function doAct(act,ds){
+  const w=curW; if(!w) return; const d=WEAPONS.defs[w.hash]||{};
+  const post=(ep,body)=>fetch('/api/'+ep,{method:'POST',body:JSON.stringify(body)}).then(r=>r.json()).catch(()=>({error:'network'}));
+  if(act==='equip'){
+    msg('Equipping…');
+    const r=await post('equip',{id:w.id,hash:w.rhash,own:w.own});
+    if(r.error){ msg(r.error,'warn'); return; }
+    w.own=r.own||w.own;
+    let t=`Equipped on ${esc(w.own)}`;
+    if(r.swap&&r.swap.added) t+=` — swapped ${esc(r.swap.removed)} → ${esc(r.swap.added)} to free the exotic slot`;
+    else if(r.swap&&!r.swap.added) t+=` — ⚠ ${esc(r.swap.note||'could not free the other exotic')}`;
+    msg(t,'ok'); refreshTile(w);
+  } else if(act==='vault'){
+    msg('Sending to vault…');
+    const r=await post('vault',{id:w.id,hash:w.rhash,own:w.own});
+    if(r.error){ msg(r.error,'warn'); return; }
+    w.own='Vault'; msg('Sent to vault','ok'); refreshTile(w); $('ispsub').textContent=`${esc(d.ty||'')} · ✦${w.pwr||'—'} · Vault`;
+  } else if(act==='lock'){
+    const nl=!w.locked; msg(nl?'Locking…':'Unlocking…');
+    const r=await post('lock',{id:w.id,locked:nl});
+    if(r.error){ msg(r.error,'warn'); return; }
+    w.locked=!!r.locked; msg(w.locked?'Locked':'Unlocked','ok'); refreshTile(w); inspect(w.id);
+  } else if(act==='tag'){
+    msg('Tagging…');
+    const r=await post('tag',{id:w.id,tag:ds.tag});
+    if(r.error){ msg(r.error,'warn'); return; }
+    w.tag=(r.tag&&r.tag!=='none')?r.tag:''; msg(w.tag?`Tagged ${w.tag}`:'Tag cleared','ok'); refreshTile(w); inspect(w.id);
+  }
+}
+function refreshTile(w){
+  const t=document.querySelector(`.wt[data-id="${w.id}"]`); if(!t) return;
+  t.classList.remove('tg-keep','tg-favorite','tg-junk'); if(w.tag) t.classList.add('tg-'+w.tag);
+  const lk=t.querySelector('.lk'); if(w.locked&&!lk){ const s=document.createElement('span'); s.className='lk'; s.textContent='🔒'; t.appendChild(s); } else if(!w.locked&&lk){ lk.remove(); }
 }
 
 // ---- wire ----
 $('grid').addEventListener('click',e=>{const t=e.target.closest('[data-id]');if(t) inspect(t.dataset.id);});
 $('insp').addEventListener('click',e=>{if(e.target.id==='insp')$('insp').classList.remove('open');});
+$('ispcard').addEventListener('click',e=>{const b=e.target.closest('[data-act]');if(!b)return;if(b.dataset.act==='close'){$('insp').classList.remove('open');return;}doAct(b.dataset.act,b.dataset);});
 $('q').addEventListener('input',e=>{q=e.target.value.toLowerCase().trim();render();});
 $('reset').onclick=()=>{fEl.clear();fAmmo.clear();fMisc.clear();fTag.clear();q='';$('q').value='';document.querySelectorAll('.fchip.on').forEach(c=>c.classList.remove('on'));render();};
 document.querySelectorAll('.slot').forEach(s=>s.addEventListener('click',e=>{

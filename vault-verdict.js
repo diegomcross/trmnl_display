@@ -452,6 +452,59 @@ async function equipWeapon(e, itemId, hash, ownClass) {
   return { own: LOCK_CTX.clsById[target] || ownClass };
 }
 
+// Find a legendary weapon to drop into a freed slot: same bucket (slot) as the exotic
+// being unequipped, preferring the same ammo type. Looks on the character first, then
+// the vault. Returns {id,hash,name,fromVault} or null.
+function findReplacementLegendary(prof, man, cid, bucket, ammo, exclude) {
+  const scan = (items, fromVault) => {
+    const out = [];
+    for (const it of items || []) {
+      if (!it.itemInstanceId || exclude.includes(it.itemInstanceId)) continue;
+      const d = man.items[it.itemHash];
+      if (!d || d.it !== 3 || d.b !== bucket || d.tt !== 5) continue; // legendary weapon, same slot
+      out.push({ id: it.itemInstanceId, hash: it.itemHash, name: d.n, ammo: d.ammo, fromVault });
+    }
+    return out;
+  };
+  let cand = scan(prof.characterInventories?.data?.[cid]?.items, false);
+  if (!cand.length) cand = scan(prof.profileInventory?.data?.items, true);
+  cand.sort((a, b) => (b.ammo === ammo) - (a.ammo === ammo)); // same-ammo first
+  return cand[0] || null;
+}
+
+// Equip a weapon, handling the exotic-swap Bungie won't do cleanly: if the target
+// weapon is exotic and a DIFFERENT-slot exotic is already equipped, first drop a
+// matching-ammo legendary into that slot (freeing the exotic restriction), then equip.
+// dryRun returns the plan without moving anything (used for safe testing).
+async function smartEquipWeapon(e, itemId, hash, ownClass, dryRun) {
+  const { prof, man } = await fetchProfile(e);
+  const target = (ownClass && ownClass !== 'Vault') ? (LOCK_CTX.byClass[ownClass] || LOCK_CTX.characterId) : LOCK_CTX.characterId;
+  const bDef = man.items[hash] || {};
+  let swap = null;
+  if (bDef.tt === 6 && bDef.it === 3) { // equipping an exotic weapon
+    const equipped = prof.characterEquipment?.data?.[target]?.items || [];
+    const a = equipped
+      .map((it) => ({ it, d: man.items[it.itemHash] }))
+      .find((x) => x.d && x.d.it === 3 && x.d.tt === 6 && x.d.b !== bDef.b && x.it.itemInstanceId !== itemId);
+    if (a) { // a conflicting exotic is equipped in another slot
+      const repl = findReplacementLegendary(prof, man, target, a.d.b, a.d.ammo, [itemId, a.it.itemInstanceId]);
+      if (repl) {
+        swap = { removed: a.d.n, added: repl.name, replId: repl.id };
+        if (!dryRun) {
+          if (repl.fromVault) await transferItem(e, repl.id, repl.hash, target, false);
+          await equipItem(e, repl.id, target); // frees the old exotic's slot
+        }
+      } else {
+        swap = { removed: a.d.n, added: null, note: 'no matching legendary found to free the slot' };
+      }
+    }
+  }
+  if (dryRun) return { own: LOCK_CTX.clsById[target] || ownClass, swap, dryRun: true, target: LOCK_CTX.clsById[target] };
+  if (!ownClass || ownClass === 'Vault') await transferItem(e, itemId, hash, target, false);
+  await equipItem(e, itemId, target);
+  return { own: LOCK_CTX.clsById[target] || ownClass, swap };
+}
+
 // ---------- fashion (armor ornaments + shaders) ----------
 // Cosmetic sockets on equipped armor: the shader plug has plugCategory 'shader';
 // the ornament plug's category starts with 'armor_skins_' (e.g. armor_skins_warlock_head).
@@ -969,11 +1022,13 @@ async function main() {
         return json({ ok: true, own: r.own });
       }
       if (req.url.startsWith('/api/equip') && req.method === 'POST') {
-        const { id, hash, own } = JSON.parse(await readBody(req) || '{}');
+        const { id, hash, own, dryRun } = JSON.parse(await readBody(req) || '{}');
         if (!id || !hash) return json({ error: 'missing id/hash' });
-        const r = await equipWeapon(e, id, hash, own);
-        if (wcache) { const w = wcache.weapons.find((x) => x.id === id); if (w) w.own = r.own; }
-        return json({ ok: true, own: r.own });
+        try {
+          const r = await smartEquipWeapon(e, id, hash, own, !!dryRun);
+          if (!dryRun && wcache) { const w = wcache.weapons.find((x) => x.id === id); if (w) w.own = r.own; }
+          return json({ ok: true, own: r.own, swap: r.swap, dryRun: r.dryRun });
+        } catch (err) { return json({ error: err.message }); }
       }
       if (req.url.startsWith('/api/drops/ack') && req.method === 'POST') {
         const { ids } = JSON.parse(await readBody(req) || '{}');
