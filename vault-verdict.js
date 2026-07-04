@@ -852,6 +852,14 @@ async function main() {
         res.writeHead(200, { 'Content-Type': 'text/css; charset=utf-8' });
         return res.end(fs.readFileSync(path.join(__dirname, 'theme.css')));
       }
+      if (req.url.startsWith('/fonts/')) {
+        const f = path.basename(req.url.split('?')[0]);              // no path traversal
+        if (/^arimo-\d+\.woff2$/.test(f) && fs.existsSync(path.join(__dirname, 'fonts', f))) {
+          res.writeHead(200, { 'Content-Type': 'font/woff2', 'Cache-Control': 'max-age=604800' });
+          return res.end(fs.readFileSync(path.join(__dirname, 'fonts', f)));
+        }
+        res.writeHead(404); return res.end('not found');
+      }
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
       if (req.url.startsWith('/weapons')) return res.end(fs.readFileSync(path.join(__dirname, 'weapon-watch.html')));
       if (req.url.startsWith('/drops')) return res.end(fs.readFileSync(path.join(__dirname, 'weapon-drops.html')));

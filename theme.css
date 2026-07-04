@@ -11,6 +11,13 @@
    stays in each page; this file owns the visual identity. Edit here once.
    ============================================================================ */
 
+/* Self-hosted Arimo — metric-compatible with Helvetica/Arial (the family BrayTech
+   and Destiny use). Bundled so the look is identical on every device, incl. Android
+   phones where "Helvetica Neue"/"Arial" would otherwise fall back to Roboto. */
+@font-face{ font-family:'Arimo'; font-style:normal; font-weight:400; font-display:swap; src:url('/fonts/arimo-400.woff2') format('woff2'); }
+@font-face{ font-family:'Arimo'; font-style:normal; font-weight:500; font-display:swap; src:url('/fonts/arimo-500.woff2') format('woff2'); }
+@font-face{ font-family:'Arimo'; font-style:normal; font-weight:700; font-display:swap; src:url('/fonts/arimo-700.woff2') format('woff2'); }
+
 :root{
   --bg:#101312;            /* braytech ground (faint cool near-black) */
   --panel:#15181a;
@@ -33,8 +40,8 @@
   --solar:#f1631d;
 
   --clip:none;             /* square everything that used the chamfer polygon */
-  --disp:"Neue Haas Grotesk Display","Helvetica Neue",Helvetica,Arial,sans-serif;
-  --text:"Neue Haas Grotesk Text","Helvetica Neue",Helvetica,Arial,sans-serif;
+  --disp:'Arimo',"Helvetica Neue",Helvetica,Arial,sans-serif;
+  --text:'Arimo',"Helvetica Neue",Helvetica,Arial,sans-serif;
 }
 
 /* ---------- base ---------- */
