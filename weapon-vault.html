@@ -37,11 +37,15 @@ input:focus{outline:none;border-color:var(--gold)}
 @media(max-width:720px){.slotrow{grid-template-columns:1fr;gap:12px}}
 .subcol{min-width:0}
 .sublbl{font-family:Bahnschrift,sans-serif;text-transform:uppercase;letter-spacing:.08em;font-size:10px;color:var(--dim);margin-bottom:6px}
+.charside{display:flex;flex-direction:column;gap:11px}
 .vaultcol{border-left:1px solid var(--line);padding-left:16px}
 @media(max-width:720px){.vaultcol{border-left:0;padding-left:0;border-top:1px solid var(--line);padding-top:10px}}
 .wgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(74px,1fr));gap:7px}
-.charcol .wgrid{grid-template-columns:repeat(5,64px)}
-@media(max-width:720px){.charcol .wgrid{grid-template-columns:repeat(auto-fill,minmax(64px,74px))}}
+.charside .wgrid{grid-template-columns:repeat(5,64px)}
+@media(max-width:720px){.charside .wgrid{grid-template-columns:repeat(auto-fill,minmax(64px,74px))}}
+.wt.rowcap{display:none}
+.showall{margin-top:8px;font-family:Bahnschrift,sans-serif;font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--keep);background:none;border:1px solid var(--line);padding:4px 10px;cursor:pointer}
+.showall:hover{border-color:var(--keep)}
 .wt{position:relative;aspect-ratio:1;border:1px solid var(--line-strong);background:var(--legendary);cursor:pointer;overflow:hidden}
 .wt.exotic{background:var(--exotic)}
 .wt:hover{border-color:#fff}
@@ -228,8 +232,8 @@ function passQuick(w,d){
 function render(){
   const combo=(SLOTS[0].size||SLOTS[1].size);
   let shown=0, matched=0;
-  // per slot: this character's weapons (equipped + inventory) vs the shared vault
-  const bySlot={Kinetic:{ch:[],vault:[]},Energy:{ch:[],vault:[]},Power:{ch:[],vault:[]}};
+  // per slot: equipped (selected char) / that char's inventory / the shared vault
+  const bySlot={Kinetic:{eq:[],inv:[],vault:[]},Energy:{eq:[],inv:[],vault:[]},Power:{eq:[],inv:[],vault:[]}};
   for(const w of WEAPONS.weapons){
     const d=WEAPONS.defs[w.hash]||{}; w._d=d;
     if(!passQuick(w,d)){ w._st='hide'; continue; }
@@ -238,26 +242,28 @@ function render(){
     if(st==='hide'){ w._st='hide'; continue; }
     const b=bySlot[d.slot]; if(!b){ w._st='hide'; continue; }
     if(w.loc==='vault'){ b.vault.push(w); w._st=st; shown++; }
-    else if(w.ownCid===selCid){ b.ch.push(w); w._st=st; shown++; }   // only the selected character
+    else if(w.ownCid===selCid){ (w.loc==='equipped'?b.eq:b.inv).push(w); w._st=st; shown++; }
     else { w._st='hide'; }                                            // other characters hidden
   }
   const g=$('grid'); g.innerHTML='';
   const grid=arr=>`<div class="wgrid">${arr.map(tile).join('')||'<div class="slotempty" style="grid-column:1/-1;color:var(--dim);font-size:11px;padding:4px">—</div>'}</div>`;
   for(const slot of SLOTORD){
-    const {ch,vault}=bySlot[slot];
-    if(!ch.length && !vault.length) continue;
-    ch.sort((a,b)=> (b.loc==='equipped')-(a.loc==='equipped') || cmp(a,b)); // equipped first
-    vault.sort(cmp);
+    const {eq,inv,vault}=bySlot[slot];
+    if(!eq.length && !inv.length && !vault.length) continue;
+    eq.sort(cmp); inv.sort(cmp); vault.sort(cmp);
     const s=document.createElement('div'); s.className='slotsec';
-    s.innerHTML=`<div class="slothd"><span>${slot} Weapons</span><span>${ch.length+vault.length}</span></div>
+    s.innerHTML=`<div class="slothd"><span>${slot} Weapons</span><span>${eq.length+inv.length+vault.length}</span></div>
       <div class="slotrow">
-        <div class="subcol charcol"><div class="sublbl">${esc(selCls||'Character')} · ${ch.length}</div>${grid(ch)}</div>
+        <div class="charside">
+          <div class="subcol"><div class="sublbl">Equipped</div>${grid(eq)}</div>
+          <div class="subcol"><div class="sublbl">${esc(selCls||'Character')} · ${inv.length}</div>${grid(inv)}</div>
+        </div>
         <div class="subcol vaultcol"><div class="sublbl">Vault · ${vault.length}</div>${grid(vault)}</div>
       </div>`;
     g.appendChild(s);
   }
   if(!shown) g.innerHTML='<div class="big">No weapons match these filters.</div>';
-  observeImgs();
+  capVaultRows(); observeImgs();
   $('cnt').textContent=`${shown} shown of ${WEAPONS.weapons.length}`;
   $('matchcnt').textContent=combo?`${matched} weapon${matched===1?'':'s'} can roll this combo`:'';
 }
@@ -274,6 +280,22 @@ function tile(w){
 // hundreds of weapons and loading every icon at once floods the network.
 const io=new IntersectionObserver((ents)=>{for(const en of ents){ if(en.isIntersecting){ const im=en.target; im.src=im.dataset.src; im.removeAttribute('data-src'); io.unobserve(im); } }},{rootMargin:'300px'});
 function observeImgs(){ document.querySelectorAll('.wt img[data-src]').forEach(im=>io.observe(im)); }
+// Keep each slot's vault to 3 rows; a "Show all" button reveals the rest.
+function capVaultRows(){
+  document.querySelectorAll('.vaultcol .wgrid').forEach(gr=>{
+    const tiles=[...gr.querySelectorAll('.wt')];
+    const cols=(getComputedStyle(gr).gridTemplateColumns.match(/px|fr|%|auto/gi)||[]).length || 1;
+    const cap=cols*3;
+    tiles.forEach((t,i)=>t.classList.toggle('rowcap', i>=cap));
+    const old=gr.parentElement.querySelector('.showall'); if(old) old.remove();
+    if(tiles.length>cap){
+      const btn=document.createElement('button'); btn.className='showall';
+      btn.textContent=`Show all ${tiles.length}`;
+      btn.onclick=()=>{ tiles.forEach(t=>t.classList.remove('rowcap')); btn.remove(); observeImgs(); };
+      gr.parentElement.appendChild(btn);
+    }
+  });
+}
 
 // ---- inspect popover + inventory-manager actions ----
 let curW=null;

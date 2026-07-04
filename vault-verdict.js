@@ -881,7 +881,7 @@ async function buildPerkLibrary(e, fresh = false) {
   const wl = await loadWishlist(man, fresh);
   const byName = new Map();
   for (const d of Object.values(man.items)) {
-    if (d.it !== 3 || !d.tr) continue;
+    if (d.it !== 3 || !d.tr || d.tt === 6) continue; // skip exotics — fixed perks, not random rolls
     [0, 1].forEach((ci) => {
       const ps = d.tr[ci]; if (!ps) return;
       for (const h of (man.plugSets[ps] || [])) {
