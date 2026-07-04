@@ -938,6 +938,12 @@ const COMBOS_FILE = path.join(__dirname, 'perk-combos.json'); // [{id,name,role,
 const loadCombos = () => { const c = loadJson(COMBOS_FILE); return Array.isArray(c) ? c : []; };
 const saveCombos = (c) => saveJsonSafe(COMBOS_FILE, c);
 
+// Diego's persistent FAVORITE perks — a curated list (starred in Perk Finder) used to
+// score every weapon in the vault, independent of the watch list.
+const FAV_FILE = path.join(__dirname, 'perk-favorites.json'); // [perkName, ...]
+const loadFav = () => { const f = loadJson(FAV_FILE); return Array.isArray(f) ? f : []; };
+const saveFav = (f) => saveJsonSafe(FAV_FILE, [...new Set(f)]);
+
 // ---------- probe mode for debugging ----------
 async function probe(nameLike) {
   const e = env();
@@ -1081,6 +1087,10 @@ async function main() {
       if (req.url.startsWith('/api/combos')) {
         if (req.method === 'POST') { saveCombos(JSON.parse(await readBody(req) || '[]')); return json({ ok: true }); }
         return json(loadCombos());
+      }
+      if (req.url.startsWith('/api/favorites')) {
+        if (req.method === 'POST') { saveFav(JSON.parse(await readBody(req) || '[]')); return json({ ok: true }); }
+        return json(loadFav());
       }
       if (req.url.startsWith('/api/fashion')) return json(await fetchFashion(e));
       if (req.url.startsWith('/api/looks')) {
