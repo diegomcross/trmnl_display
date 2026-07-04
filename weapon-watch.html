@@ -282,8 +282,10 @@ function renderWatched(){
         <button class="btn sm red" style="float:right" data-unwatch="${hash}">Unwatch</button></div>
       <div class="trk">
         <div class="thd">Track perks — tap: track → ★ high → off (${trackedCount(cfg)}/6)</div>
-        <div class="colh">Column 3</div><div class="pool">${poolBtns(0)}</div>
-        <div class="colh">Column 4</div><div class="pool">${poolBtns(1)}</div>
+        <div class="cols2">
+          <div class="pcol"><div class="colh">Column 3</div><div class="pool vert">${poolBtns(0)}</div></div>
+          <div class="pcol"><div class="colh">Column 4</div><div class="pool vert">${poolBtns(1)}</div></div>
+        </div>
         <div class="colh">Wanted masterwork</div>
         <select data-mw="${hash}"><option value="">any</option>${mwOpts.map(s=>`<option ${cfg.mw===s?'selected':''}>${s}</option>`).join('')}</select>
         <div class="colh">Watched stats — highest possible on each roll (barrel/mag included)</div><div class="pool">${statBtns}</div>
