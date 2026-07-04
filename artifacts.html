@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Artifacts — Perk Mods</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{padding:12px;padding-bottom:60px}
+  .pagehead{padding:18px 0 6px}
+  .filters{border:1px solid var(--line);background:var(--panel);padding:12px;margin-bottom:14px}
+  .frow{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:8px}
+  .frow:last-child{margin-bottom:0}
+  .flabel{font-family:var(--disp);text-transform:uppercase;letter-spacing:.12em;font-size:10px;color:var(--dim);width:74px;flex:0 0 auto}
+  .fchip{font-family:var(--disp);text-transform:uppercase;letter-spacing:.06em;font-size:10.5px;padding:5px 10px;border:1px solid var(--line);color:var(--mut);background:transparent;cursor:pointer}
+  .fchip:hover{border-color:var(--line-strong);color:var(--ink)}
+  .fchip.on{color:#0b0c0d;font-weight:700}
+  .fchip[data-el=Solar].on{background:var(--solar);border-color:var(--solar)}
+  .fchip[data-el=Arc].on{background:var(--keep);border-color:var(--keep)}
+  .fchip[data-el=Void].on{background:var(--void);border-color:var(--void)}
+  .fchip[data-el=Stasis].on{background:#427cff;border-color:#427cff}
+  .fchip[data-el=Strand].on{background:#38e266;border-color:#38e266}
+  .fchip[data-el=Prismatic].on{background:#c17ad0;border-color:#c17ad0}
+  .fchip[data-el=Key].on{background:var(--gold);border-color:var(--gold)}
+  #q{flex:1;min-width:160px;padding:7px 10px;font-size:13px}
+  .fmeta{color:var(--mut);font-size:12px;margin-left:auto}
+
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,540px),1fr));gap:12px}
+  .art{border:1px solid var(--line);border-left:2px solid var(--gold);background:var(--panel)}
+  .art .ah{display:flex;justify-content:space-between;align-items:baseline;gap:10px;padding:11px 13px;border-bottom:1px solid var(--line)}
+  .art .an{font-family:var(--disp);color:var(--white);font-weight:500;letter-spacing:.03em;font-size:16px}
+  .art .ao{font-size:10.5px;text-transform:uppercase;letter-spacing:.1em;color:var(--mut)}
+  .cols{display:grid;grid-template-columns:1fr 1fr 1fr;gap:0}
+  .col{padding:10px;border-right:1px solid var(--line)}
+  .col:last-child{border-right:0}
+  .ch{font-family:var(--disp);text-transform:uppercase;letter-spacing:.1em;font-size:9.5px;color:var(--dim);margin-bottom:7px}
+  .mod{padding:7px 0;border-top:1px solid rgba(255,255,255,.05)}
+  .mod:first-of-type{border-top:0}
+  .mod .mn{font-weight:600;font-size:12px;color:var(--ink)}
+  .mod .md{font-size:11px;color:var(--mut);line-height:1.45;margin-top:2px}
+  .mod.hit .mn{color:var(--gold)}
+  .mod.dim{opacity:.22}
+  .mod mark{background:rgba(207,174,66,.28);color:var(--white);padding:0 1px}
+  .big{text-align:center;color:var(--mut);padding:30px 12px}
+  @media(max-width:620px){ .cols{grid-template-columns:1fr} .col{border-right:0;border-top:1px solid var(--line)} .col:first-child{border-top:0} }
+</style>
+<link rel="stylesheet" href="/theme.css">
+</head>
+<body>
+<h1 class="disp">Artifact <span>Mods</span></h1>
+<nav class="nav"><a href="/">Vault Verdict</a><a href="/weapons">Weapon Watch</a><a href="/drops">New Drops</a><a href="/fashion">Fashion</a><a href="/artifacts" class="on">Artifacts</a></nav>
+<p class="sub">All 7 Monument of Triumph artifacts. Filter mods by subclass verb or keyword to find build synergies.</p>
+
+<div class="filters" id="filters"></div>
+<div id="grid" class="grid"></div>
+
+<script>
+const $=id=>document.getElementById(id);
+const esc=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
+
+// ---- data: 7 artifacts x 3 columns x 7 mods (from the Monument of Triumph guide) ----
+const ARTIFACTS=[
+ {name:'NPA Repulsion Regulator',origin:'Season of the Deep',cols:[
+  [['Improved Unraveling','Forces your unraveling effects to chunk targets for extra damage.'],['Volatile Flow','Grabbing any Orb of Power instantly loads volatile rounds into your Void arsenal.'],['Unto the Breach','Putting down a void-debuffed enemy spawns a Void Breach if you are rocking a Void or Prismatic build.'],['Amped Up','Drastically extends your amplified timer on Arc or Prismatic subclasses.'],['Thunderous Retort','Casting an Arc Super while amplified or near death gives you a flat damage buff for the entire animation.'],['Sustained Fire','Holding the trigger on an Auto Rifle to deal damage or heal allies grants raw damage resistance.'],['Shatter Orbs','Matching elements to break an enemy shield pops out a fresh Orb of Power.']],
+  [['Strand Soldier','Gaining Woven Mail instantly feeds Unraveling Rounds to your Strand weapons.'],['Suppressing Glaive','Stabbing enemies with a Glaive suppresses their ability usage.'],['Protective Breach','Walking over a Void Breach grants a fresh overshield or resets your current one.'],['Counter Charge','Stunning any Champion hands you a free stack of Armor Charge.'],['Bricks From Beyond','Killing elite enemies with Void guns helps generate Heavy ammo for your entire squad.'],['Overload Grenades','Void grenades completely shut down Overload Champions and suppress enemy abilities.'],['Targeting Autoloader','Getting kills with an Auto Rifle auto reloads the magazine and bumps damage output.']],
+  [['Conductive Cosmic Needle','Strand debuffed enemies take way more punishment from your Arc and Void abilities.'],['Shock and Awe','Arc kills scored while amplified call down jolting lightning strikes.'],['Supernova','Eating a Void Breach turns your next Void attack into a massive weakening explosion.'],['Squad Goals','Hitting a finisher passes your active Amplified, Woven Mail, or Devour buffs to your teammates.'],['Lightning Strikes Twice','Tossing an Arc grenade turbocharges your recharge rate. Getting more Arc kills extends the timer.'],['Passive Aggressive Guard','Holding a Glaive reduces all incoming close quarters damage.'],['Void Weapon Channeling','Killing targets with Void weapons while holding a fully charged Void ability buffs your gun damage.']]
+ ]},
+ {name:'Queensfoil Censer',origin:'Season of the Wish',cols:[
+  [['Fever and Chill','Landing precision shots feeds you Radiant on Solar guns and Frost Armor on Stasis guns.'],['Torch','Having the Radiant buff lets you deal heavier damage to Strand or Stasis debuffed enemies.'],['Heart of the Flame','Popping a Solar Super makes your squad Radiant and boosts your own Super damage output.'],['Armorsmith','Popping an enemy shield boosts your melee power and gives you damage resistance.'],['Wished Into Being','Ability kills drop Orbs of Power when your Super is almost fully charged.'],['Kindling Trigger','Solar weapons scorch targets automatically while you are Radiant.'],['Blast Radius','Getting quick kills with Rocket or Grenade Launchers instantly feeds you Armor Charge.']],
+  [['Unraveling Orbs','Picking up an Orb or Tangle loads Unraveling Rounds into your Strand guns.'],['Pillar of Ice','Killing frozen targets leaves Stasis crystals behind.'],['Revitalizing Blast','Stunning a Champion wipes your own shield stun and causes them to violently ignite.'],['Anti-Champion Nosecone','Rocket Launchers shred Champions for bonus damage.'],['Dragon’s Bite','Popping a shield with Strand or Stasis can randomly suspend or freeze the enemy.'],['Creeping Chill','Killing slowed targets with Stasis releases a freezing burst that gives nearby friends Frost Armor.'],['Perpetual Destruction','Chain kills with standard Rocket Launchers to reload faster and refund heavy ammo.']],
+  [['Horde Shuttle','Shooting unraveled targets spawns Threadlings that sever whatever they bite.'],['Hail the Storm','Shattering Stasis crystals sends out dangerous ice shrapnel and deals extra burst damage.'],['Rays of Precision','Landing Solar headshot kills while Radiant causes the victim to explode.'],['Solo Operative','Playing without a fireteam gives you a flat damage buff after scoring precision kills.'],['Argent Ordnance','Eating an Armor Charge buffs your Rocket Launcher damage and reload speeds until you stow it.'],['Frigid Glare','Stasis headshot kills trigger a freezing pulse while you have Frost Armor active.'],['To Shreds','Shooting severed enemies unravels them entirely. Killing them drops a Woven Mail aura for your team.']]
+ ]},
+ {name:'Hunter’s Journal',origin:'Episode Echoes',cols:[
+  [['Elemental Siphon','Chain kills with Kinetics or guns matching your Super to spawn elemental pickups.'],['Energy Diffusion Substrate','Adds a flat damage resistance buff against everything the game throws at you.'],['Creeping Chill','Killing chilled enemies triggers an icy blast that gives nearby allies Frost Armor.'],['Press the Advantage','Shattering a shield buffs your weapon handling and beefs up your Sword guard.'],['Threaded Blast','Shooting a Tangle with Strand damage causes a massive, high damage detonation.'],['Incendiary Rifle Rounds','Landing Solar Sniper headshots immediately scorches the target.'],['Sustained Fire','Continuously firing an Auto Rifle at enemies or allies grants damage reduction.']],
+  [['Counter Energy','Whenever anyone in your group stuns a Champion, you get free ability energy.'],['Blade Stamina','Chopping down mobs with a Sword refunds your heavy ammo.'],['Void Hegemony','Putting down weakened enemies feeds you Void Overshields on Void or Prismatic builds.'],['Radiant Orbs','Touching an Orb of Power makes you Radiant while running Solar or Prismatic setups.'],['Bad Amplitude','Hitting a Champion with any Arc ability instantly jolts them.'],['Solar Fulmination','Increases the blast radius and pure damage of your Solar ignitions.'],['Targeting Autoloader','Auto Rifle kills bypass reloads and temporarily buff your damage output.']],
+  [['Prismatic Transfer','Popping your Super gives a massive weapon buff to allies running different elemental classes.'],['Argent Blade','Burns an Armor Charge to drastically enhance your Sword damage and energy regeneration.'],['Expanding Abyss','Your Void attacks hit much harder against already weakened targets.'],['Shieldcrush','Having defensive buffs buffs your melee speed and damage, while offensive buffs enhance your grenades.'],['Transference','Buffs ability damage during Transcendence and refunds energy when the state drops.'],['Sniper’s Meditation','Landing sniper shots builds a massive stacking buff to handling, reload, and damage.'],['Shock and Awe','Arc kills while amplified summon chaotic lightning strikes against surrounding enemies.']]
+ ]},
+ {name:'Slayer Baron Apothecary Satchel',origin:'Episode Revenant',cols:[
+  [['Wind Chill','Fast Stasis hits build Frost Armor, and hitting frozen targets dumps Stasis Shards on the floor.'],['Crystalline Converter','Turns collected Shards into explosive Stasis crystals on your next powered melee attack.'],['Total Carnage','Hitting a finisher on an elite heals you and hardens your defenses.'],['Power from Pain','Wiping out weakened enemies triggers Devour and leaves a Void Breach behind.'],['Trace Evidence','Killing blind or jolted enemies drops Ionic Traces that automatically feed you Armor Charges.'],['The Thick of It','Securing kills while surrounded hands you free Armor Charges and buffs Sword handling.'],['Killing Breeze','Rapidly killing enemies gives you a noticeable mobility bump.']],
+  [['Frost Renewal','Taking heavy damage while armored triggers a freeze burst and shields your allies.'],['Hail the Storm','Shattering Stasis crystals causes them to explode into highly damaging shrapnel.'],['Debilitating Wave','Finishers emit a massive shockwave matching your equipped Super element to blind or slow enemies.'],['Weakened Clear','Hitting a boss with a Grenade Launcher automatically reloads your other guns and weakens the target.'],['Retinal Burn','Burns an Armor Charge to make your Arc precision hits blind anything nearby.'],['Curative Orbs','Breaking an enemy shield drops an Orb of Power, and grabbing pickups heals you.'],['Void Renewal','Void kills spawn Breaches while Devour is running, and grabbing them reloads your heavy weapons.']],
+  [['Brain Freeze','Frozen targets project a massive fog aura that actively slows nearby enemies.'],['Supernova','Picking up a Void Breach turns your next Void attack into a massive weakening pulse.'],['Conductive Cosmic Crystal','Arc and Void abilities deal completely unbalanced damage to Stasis-debuffed mobs.'],['Served Cold','Stasis Shards refund class energy, while Void Breaches instantly refund melee energy.'],['Kinetic Impacts','Spamming a Grenade Launcher creates shockwaves that easily stun Unstoppable Champions.'],['Arc Compounding','Arc weapons absolutely shred any target suffering from the Blind debuff.'],['Old God’s Rite','Shooting a Void gun after grabbing a Breach unleashes a swarm of tracking projectiles.']]
+ ]},
+ {name:'Tablet of Ruin',origin:'Episode Heresy',cols:[
+  [['Hold the Line','Reloads Machine Guns and Glaives instantly when surrounded and heals you on kills.'],['Dielectric','Killing Arc-debuffed enemies builds Bolt Charge and spits out free Orbs of Power.'],['Volatile Marksman','Landing Void headshots feeds you Volatile Rounds and refunds class ability energy.'],['Unraveling Orbs','Touching an Orb or a Tangle loads Unraveling Rounds directly into your Strand weapons.'],['Photonic Flare','Hitting severed or exhausted targets with Arc completely blinds them.'],['Elemental Siphon','Matches your kinetic kills to your Super element to drop fast elemental pickups.'],['Perpetual Destruction','Chain non-Exotic rocket kills to magically refund your heavy ammo reserves.']],
+  [['Vile Weave','Throwing a Tangle severs the target, and picking them up slashes your cooldown timer.'],['Maligned Harvest','Applying Volatile heavily weakens your target, giving you a free overshield in the process.'],['Flashover','Maxing out your Bolt Charge buffs your lightning strikes and triggers Amplified automatically.'],['Horde Shuttle','Shooting unraveled targets spawns aggressive Threadlings that sever on contact.'],['No Bell','Glaive melee kills reward you with Special ammo, and blocking buffs your stabbing damage.'],['Harsh Refraction','Trace Rifles deal massive bonus damage to targets suffering from matching elemental debuffs.'],['Gold From Lead','Walking over Special ammo boxes gives you a decent chance to find free Heavy ammo.']],
+  [['Particle Reconstruction','Melting bosses with Fusion Rifles refills your magazine directly from reserves and buffs damage.'],['Elemental Supercharger','Wiping out severed enemies with Super-matching weapons juices your Super regeneration rate.'],['Heavy Ordnance Regeneration','Firing Rockets or Machine Guns grants damage resistance and fast grenade cooldowns.'],['Defibrillating Blast','Stunning a Champion maxes out your Bolt Charge, instantly jolting targets and healing your character.'],['Void Flux','Killing weakened targets spreads Volatile to everything nearby in a massive explosion.'],['Limit Break','Popping your Super while matching its element or while near death spikes your output damage.'],['To Shreds','Unravels severed targets, and killing them drops a Woven Mail aura on the floor for your team.']]
+ ]},
+ {name:'Implement of Curiosity',origin:'Reclamation',cols:[
+  [['Fever and Chill','Fast headshots hand you Radiant for Solar weapons and Frost Armor for Stasis weapons.'],['Elemental Benevolence','Giving your fireteam an elemental buff secretly restores your own class ability energy.'],['Frost Renewal','Taking headshot damage while armored emits a freezing pulse to protect you.'],['Horde Shuttle','Shooting unraveled targets spawns aggressive Threadlings that sever on contact.'],['Refresh Threads','Touching Tangles or pickups refunds your weakest ability cooldown while using a Strand Super.'],['Pack Tactics','Threadling damage ramps up massively over time, eventually stunning Unstoppable Champions.'],['Semi-Auto Striker','Headshots with Bows, Snipers, or Scouts feed you Armor Charge if you are running low.']],
+  [['Threaded Blast','Shooting Tangles with a Strand weapon turns them into high damage nukes.'],['Cauterized Darkness','Stasis or Strand debuffed enemies take vastly increased Solar damage.'],['Elemental Daze','Stunning Champions forces them to explode and apply massive elemental debuffs around them.'],['Shoulder to Shoulder','Standing near teammates while landing precision damage gives you raw damage resistance.'],['Elemental Coalescence','Kills drop pickups perfectly matched to your equipped Super.'],['That Fresh Bullets Smell','Grabbing ammo off the floor temporarily buffs all Kinetic weapon damage.'],['Energy Acceleration','Hitting enemies with micro-missiles triggers heavy shockwaves that stun Unstoppable Champions.']],
+  [['Radiant Shrapnel','Shooting enemies while Radiant causes them to erupt into scorching Solar projectiles.'],['Shieldcrush','Having defensive buffs empowers your melee, while having offensive buffs empowers your grenades.'],['Elemental Overdrive','Walking over a Tangle or elemental pickup buffs all guns that share that element.'],['Tangled Web','Killing Strand debuffed targets generates Tangles that suspend everything in the room.'],['Frigid Glare','Stasis headshot kills trigger a freezing pulse while you have Frost Armor active.'],['Iron Lord’s Vigor','Holding a Sword lowers incoming damage and refunds ammo on rapid kills.'],['Argent Quiver','Burns Armor Charge to drastically enhance your Bow’s draw speed and damage profile.']]
+ ]},
+ {name:'Encrypted Data Disk',origin:'Lawless',cols:[
+  [['Press the Advantage','Popping enemy shields grants weapon stability and buffs Sword guarding.'],['Kinetic Synthesis','Killing enemies with Kinetics drops custom bricks that magically refill your Special and Heavy reserves.'],['Reload at Range','Chain Sniper or Bow headshots to stack a massive reload speed buff.'],['Riposte','Attacking immediately after a Sword guard stuns enemies and Unstoppable Champions.'],['Power from Pain','Killing weakened mobs instantly grants the Devour buff.'],['Fierce Proxemics','Executing enemies with a finisher fully refunds your grenade and melee energy.'],['Rapid Remedy','Mowing down mobs with a Machine Gun literally heals you on the spot.']],
+  [['Dielectric','Killing Arc-debuffed enemies builds Bolt Charge and spits out free Orbs of Power.'],['Armorsmith','Popping an enemy shield boosts your melee damage and grants damage resistance.'],['Counter Energy','Whenever your fireteam stuns a Champion, your lowest cooldown automatically regenerates.'],['Combination Argent Blade','Timing your Sword strikes carefully empowers the blade with nasty bonus damage.'],['Singularity Blade','Swords and melees weaken targets while you have a Void buff, and kills trigger weakening bursts.'],['Blinding Jolts','Taking down a jolted target automatically blinds the rest of the room.'],['Precision Equity','Headshots charge up a massive custom Orb of Power that grants bonus gun damage when picked up.']],
+  [['Elemental Orbs: Arc','Arc kills spawn elemental spheres that you can throw to violently jolt enemies.'],['Kinetic Rupture','Pumping Kinetic rounds into bosses creates explosive ruptures that stun Unstoppable Champions.'],['Sniper’s Meditation','Landing sniper shots builds a massive stacking buff to handling, reload, and damage.'],['Sword Storm Combo','Nailing a proper light-to-heavy combo summons floating penumbral blades that shred targets.'],['Void Infestation','Dropping a weakened target fires a tracking missile that infects the next enemy in line.'],['Tazer Tag','Punching enemies with Arc energy instantly jolts them and melts their health bar.'],['Sticker Shock','Arc sticky grenades get a huge damage buff and shatter into homing micro-missiles on kills.']]
+ ]}
+];
+
+// ---- filter taxonomy: subclass verbs (by element) + keywords ----
+const VERBS={
+ Solar:[['Radiant',/radiant/i],['Scorch',/scorch/i],['Ignite',/ignit/i],['Restoration',/restoration|cure/i]],
+ Arc:[['Amplified',/amplif/i],['Jolt',/jolt/i],['Blind',/blind/i],['Bolt Charge',/bolt charge/i],['Ionic Trace',/ionic trace/i]],
+ Void:[['Volatile',/volatile/i],['Weaken',/weaken/i],['Suppress',/suppress/i],['Overshield',/overshield/i],['Devour',/devour/i],['Void Breach',/breach/i],['Invisible',/invisib/i]],
+ Stasis:[['Freeze',/freez|frozen/i],['Slow',/slow/i],['Shatter',/shatter/i],['Frost Armor',/frost armor/i],['Stasis Crystal',/crystal/i],['Stasis Shard',/shard/i]],
+ Strand:[['Unravel',/unravel/i],['Sever',/sever/i],['Suspend',/suspend/i],['Woven Mail',/woven mail/i],['Threadling',/threadling/i],['Tangle',/tangle/i]],
+ Prismatic:[['Transcendence',/transcend/i],['Prismatic',/prismatic/i]]
+};
+const KEYS=[
+ ['Overload',/overload/i],['Unstoppable',/unstoppable/i],['Barrier',/barrier/i],['Champion',/champion/i],
+ ['Grenade',/grenade(?! launcher)/i],['Melee',/melee/i],['Super',/super/i],['Finisher',/finisher/i],['Class ability',/class (ability|energy)/i],
+ ['Orb of Power',/orb of power|orbs of power/i],['Armor Charge',/armor charge/i],['Heavy ammo',/heavy( ammo| weapon)/i],['Special ammo',/special ammo/i],
+ ['Sword',/sword/i],['Rocket',/rocket/i],['Grenade Launcher',/grenade launcher/i],['Sniper',/sniper/i],['Bow',/bow/i],['Auto Rifle',/auto rifle/i],['Machine Gun',/machine gun/i],['Glaive',/glaive/i],['Fusion',/fusion/i],['Trace Rifle',/trace rifle/i],['Kinetic',/kinetic/i]
+];
+
+const active=new Set();   // active filter regexes (as their label)
+const regexByLabel={};
+Object.values(VERBS).flat().concat(KEYS).forEach(([lbl,rx])=>regexByLabel[lbl]=rx);
+let q='';
+
+function modText(m){return m[0]+' '+m[1];}
+function matchesActive(m){ if(!active.size) return true; const t=modText(m); for(const lbl of active){ if(regexByLabel[lbl].test(t)) return true; } return false; }
+function matchesSearch(m){ return !q || modText(m).toLowerCase().includes(q); }
+
+function hl(text){ // highlight active-filter terms + search term
+  let out=esc(text);
+  const terms=[...active].map(l=>regexByLabel[l]);
+  if(q) terms.push(new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'),'ig'));
+  for(const rx of terms){ out=out.replace(new RegExp(rx.source,'ig'),m=>`<mark>${m}</mark>`); }
+  return out;
+}
+
+function renderFilters(){
+  const chip=(lbl,el)=>`<button class="fchip ${active.has(lbl)?'on':''}" data-el="${el}" data-lbl="${esc(lbl)}">${esc(lbl)}</button>`;
+  let h='';
+  for(const [el,list] of Object.entries(VERBS)){
+    h+=`<div class="frow"><span class="flabel">${el}</span>${list.map(([l])=>chip(l,el)).join('')}</div>`;
+  }
+  h+=`<div class="frow"><span class="flabel">Keywords</span>${KEYS.map(([l])=>chip(l,'Key')).join('')}</div>`;
+  h+=`<div class="frow"><span class="flabel">Search</span><input type="search" id="q" placeholder="any word in a mod name or description…" value="${esc(q)}">
+      <button class="btn sm mut" id="clearBtn">Clear all</button><span class="fmeta" id="fmeta"></span></div>`;
+  $('filters').innerHTML=h;
+  $('q').oninput=e=>{q=e.target.value.trim().toLowerCase();render();};
+  $('clearBtn').onclick=()=>{active.clear();q='';render();};
+}
+
+function render(){
+  // re-sync chip states without losing focus on search box
+  document.querySelectorAll('.fchip').forEach(c=>c.classList.toggle('on',active.has(c.dataset.lbl)));
+  let shown=0, total=0;
+  const filtering=active.size||q;
+  $('grid').innerHTML=ARTIFACTS.map(a=>{
+    let artHas=0;
+    const cols=a.cols.map((col,ci)=>{
+      const mods=col.map(m=>{
+        total++;
+        const hit=matchesActive(m)&&matchesSearch(m);
+        if(hit){shown++;artHas++;}
+        if(filtering&&!hit) return `<div class="mod dim"><div class="mn">${esc(m[0])}</div></div>`;
+        return `<div class="mod ${filtering?'hit':''}"><div class="mn">${hit&&filtering?hl(m[0]):esc(m[0])}</div><div class="md">${hit&&filtering?hl(m[1]):esc(m[1])}</div></div>`;
+      }).join('');
+      return `<div class="col"><div class="ch">Col ${ci+1}</div>${mods}</div>`;
+    }).join('');
+    if(filtering&&!artHas) return '';
+    return `<div class="art"><div class="ah"><span class="an">${esc(a.name)}</span><span class="ao">${esc(a.origin)}${filtering?` · ${artHas} match${artHas===1?'':'es'}`:''}</span></div><div class="cols">${cols}</div></div>`;
+  }).join('')||'<div class="big">No mods match those filters.</div>';
+  $('fmeta').textContent=filtering?`${shown} of ${total} mods`:`${total} mods across ${ARTIFACTS.length} artifacts`;
+}
+
+document.body.addEventListener('click',e=>{
+  const c=e.target.closest('.fchip'); if(!c) return;
+  const l=c.dataset.lbl; active.has(l)?active.delete(l):active.add(l); render();
+});
+renderFilters(); render();
+</script>
+</body>
+</html>

@@ -864,6 +864,7 @@ async function main() {
       if (req.url.startsWith('/weapons')) return res.end(fs.readFileSync(path.join(__dirname, 'weapon-watch.html')));
       if (req.url.startsWith('/drops')) return res.end(fs.readFileSync(path.join(__dirname, 'weapon-drops.html')));
       if (req.url.startsWith('/fashion')) return res.end(fs.readFileSync(path.join(__dirname, 'fashion.html')));
+      if (req.url.startsWith('/artifacts')) return res.end(fs.readFileSync(path.join(__dirname, 'artifacts.html')));
       return res.end(fs.readFileSync(HTML_FILE));
     } catch (err) {
       console.error(err);
