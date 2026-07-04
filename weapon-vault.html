@@ -31,9 +31,17 @@ input:focus{outline:none;border-color:var(--gold)}
 
 /* ---- weapon grid ---- */
 .slotsec{margin-bottom:14px}
-.slothd{font-family:Bahnschrift,sans-serif;text-transform:uppercase;letter-spacing:.1em;font-size:12px;color:var(--ink);border-bottom:1px solid var(--line-strong);padding-bottom:4px;margin-bottom:8px;display:flex;justify-content:space-between}
-.subhd{font-family:Bahnschrift,sans-serif;text-transform:uppercase;letter-spacing:.08em;font-size:10px;color:var(--gold);margin:9px 0 5px;opacity:.85}
+.slothd{font-family:Bahnschrift,sans-serif;text-transform:uppercase;letter-spacing:.1em;font-size:12px;color:var(--ink);border-bottom:1px solid var(--line-strong);padding-bottom:4px;margin-bottom:9px;display:flex;justify-content:space-between}
+/* per-slot: character block (equipped + inventory) on the left, vault on the right */
+.slotrow{display:grid;grid-template-columns:auto 1fr;gap:16px;align-items:start}
+@media(max-width:720px){.slotrow{grid-template-columns:1fr;gap:12px}}
+.subcol{min-width:0}
+.sublbl{font-family:Bahnschrift,sans-serif;text-transform:uppercase;letter-spacing:.08em;font-size:10px;color:var(--dim);margin-bottom:6px}
+.vaultcol{border-left:1px solid var(--line);padding-left:16px}
+@media(max-width:720px){.vaultcol{border-left:0;padding-left:0;border-top:1px solid var(--line);padding-top:10px}}
 .wgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(74px,1fr));gap:7px}
+.charcol .wgrid{grid-template-columns:repeat(5,64px)}
+@media(max-width:720px){.charcol .wgrid{grid-template-columns:repeat(auto-fill,minmax(64px,74px))}}
 .wt{position:relative;aspect-ratio:1;border:1px solid var(--line-strong);background:var(--legendary);cursor:pointer;overflow:hidden}
 .wt.exotic{background:var(--exotic)}
 .wt:hover{border-color:#fff}
@@ -45,6 +53,7 @@ input:focus{outline:none;border-color:var(--gold)}
 /* clipped top-left corner = the tag flag (calmer than a full bar) */
 .wt .tagc{position:absolute;left:0;top:0;width:0;height:0;border-style:solid;border-width:15px 15px 0 0;border-color:transparent transparent transparent transparent}
 .wt.tg-keep .tagc{border-top-color:var(--keep)} .wt.tg-favorite .tagc{border-top-color:var(--fav)} .wt.tg-junk .tagc{border-top-color:var(--junk)}
+.wt.equipped{outline:2px solid var(--keep);outline-offset:-2px;box-shadow:0 0 7px rgba(95,208,221,.5)}
 .wt.sel{outline:2px solid #fff;outline-offset:-2px}
 .wt.match{outline:2px solid var(--gold);outline-offset:-2px;z-index:1}
 .wt.hide{display:none}
@@ -108,7 +117,7 @@ input:focus{outline:none;border-color:var(--gold)}
 <body>
 <div id="gbanner"></div>
 <h1 class="disp">Weapon <span>Vault</span></h1>
-<p class="sub">Your whole arsenal as tiles — filter by element, ammo, rarity, tag, or a perk combo. <span id="cnt" class="count"></span></p>
+<p class="sub">Your selected guardian's weapons + the vault, by slot. Switch guardian with the emblem dots up top. <span id="cnt" class="count"></span></p>
 
 <div class="wrap">
   <div id="grid"><div class="big">Loading your vault…</div></div>
@@ -164,6 +173,7 @@ let WEAPONS={weapons:[],defs:{},perkIcons:{}}, PICONS={}, LIB=[];
 let PMINE={}, PPOP={}, maxMine=1, maxPop=1;   // per-perk score maps for the perk-score sorts
 let fEl=new Set(), fAmmo=new Set(), fMisc=new Set(), fTag=new Set(), q='', sortBy='power';
 let SLOTS=[new Set(),new Set()], activeSlot=0, onlyMatch=false;
+let selCid=null, selCls='';   // the character chosen in the banner selector
 const LOCLABEL={equipped:'Equipped',char:'On Character',vault:'In Vault'};
 
 // perk-match score: best (highest-value) perk in each column, summed. "mine" = your
@@ -218,25 +228,34 @@ function passQuick(w,d){
 function render(){
   const combo=(SLOTS[0].size||SLOTS[1].size);
   let shown=0, matched=0;
-  const eq={}, ch={}, vault=[];   // equipped/character grouped by class; vault flat
+  // per slot: this character's weapons (equipped + inventory) vs the shared vault
+  const bySlot={Kinetic:{ch:[],vault:[]},Energy:{ch:[],vault:[]},Power:{ch:[],vault:[]}};
   for(const w of WEAPONS.weapons){
     const d=WEAPONS.defs[w.hash]||{}; w._d=d;
     if(!passQuick(w,d)){ w._st='hide'; continue; }
     let st='';
     if(combo){ const sc=scoreCopy(w); if(sc&&sc.full){ st='match'; matched++; } else if(onlyMatch){ st='hide'; } else st='dim'; }
     if(st==='hide'){ w._st='hide'; continue; }
-    w._st=st; shown++;
-    if(w.loc==='equipped') (eq[w.own]=eq[w.own]||[]).push(w);
-    else if(w.loc==='char') (ch[w.own]=ch[w.own]||[]).push(w);
-    else vault.push(w);
+    const b=bySlot[d.slot]; if(!b){ w._st='hide'; continue; }
+    if(w.loc==='vault'){ b.vault.push(w); w._st=st; shown++; }
+    else if(w.ownCid===selCid){ b.ch.push(w); w._st=st; shown++; }   // only the selected character
+    else { w._st='hide'; }                                            // other characters hidden
   }
   const g=$('grid'); g.innerHTML='';
-  const grid=arr=>`<div class="wgrid">${arr.sort(cmp).map(tile).join('')}</div>`;
-  const section=(title,count,inner)=>{ const s=document.createElement('div'); s.className='slotsec'; s.innerHTML=`<div class="slothd"><span>${title}</span><span>${count}</span></div>${inner}`; g.appendChild(s); };
-  const byChar=(groups)=>{ let inner='',tot=0; for(const cls of Object.keys(groups)){ inner+=`<div class="subhd">${cls}</div>`+grid(groups[cls]); tot+=groups[cls].length; } return [inner,tot]; };
-  if(Object.keys(eq).length){ const [i,t]=byChar(eq); section('Equipped',t,i); }
-  if(Object.keys(ch).length){ const [i,t]=byChar(ch); section('On Character',t,i); }
-  if(vault.length) section('In Vault',vault.length,grid(vault));
+  const grid=arr=>`<div class="wgrid">${arr.map(tile).join('')||'<div class="slotempty" style="grid-column:1/-1;color:var(--dim);font-size:11px;padding:4px">—</div>'}</div>`;
+  for(const slot of SLOTORD){
+    const {ch,vault}=bySlot[slot];
+    if(!ch.length && !vault.length) continue;
+    ch.sort((a,b)=> (b.loc==='equipped')-(a.loc==='equipped') || cmp(a,b)); // equipped first
+    vault.sort(cmp);
+    const s=document.createElement('div'); s.className='slotsec';
+    s.innerHTML=`<div class="slothd"><span>${slot} Weapons</span><span>${ch.length+vault.length}</span></div>
+      <div class="slotrow">
+        <div class="subcol charcol"><div class="sublbl">${esc(selCls||'Character')} · ${ch.length}</div>${grid(ch)}</div>
+        <div class="subcol vaultcol"><div class="sublbl">Vault · ${vault.length}</div>${grid(vault)}</div>
+      </div>`;
+    g.appendChild(s);
+  }
   if(!shown) g.innerHTML='<div class="big">No weapons match these filters.</div>';
   observeImgs();
   $('cnt').textContent=`${shown} shown of ${WEAPONS.weapons.length}`;
@@ -246,7 +265,7 @@ function tile(w){
   const d=w._d, ex=d.tt===6;
   const el=ELCOL[d.dmg]?`<span class="el" style="background:${ELCOL[d.dmg]}"></span>`:'';
   const tg=w.tag?` tg-${w.tag}`:'';
-  return `<div class="wt ${ex?'exotic':''}${tg}${w._st==='match'?' match':''}${w._st==='dim'?' dim':''}" data-id="${w.id}" title="${esc(d.n||'')}${w.tag?' · '+w.tag:''}">
+  return `<div class="wt ${ex?'exotic':''}${tg}${w.loc==='equipped'?' equipped':''}${w._st==='match'?' match':''}${w._st==='dim'?' dim':''}" data-id="${w.id}" title="${esc(d.n||'')}${w.loc==='equipped'?' · equipped':''}${w.tag?' · '+w.tag:''}">
     ${d.icon?`<img data-src="${BN}${d.icon}" alt="">`:''}
     <span class="tagc"></span>${w.locked?'<span class="lk">🔒</span>':''}
     <span class="bot">${el}<span class="p">${w.pwr||''}</span></span></div>`;
@@ -341,10 +360,18 @@ $('pq').addEventListener('input',e=>{
 $('pdrop').addEventListener('click',e=>{const it=e.target.closest('[data-add]');if(!it)return;const n=it.dataset.add;SLOTS[0].delete(n);SLOTS[1].delete(n);SLOTS[activeSlot].add(n);$('pq').value='';$('pdrop').classList.remove('open');renderSlots();render();});
 document.addEventListener('click',e=>{if(!e.target.closest('.psearch'))$('pdrop').classList.remove('open');});
 
+// react to the banner's character selector (fires on load + when Diego switches)
+window.addEventListener('gbanner:char',e=>{ if(e.detail&&e.detail.cid){ selCid=e.detail.cid; selCls=e.detail.cls||selCls; if(WEAPONS.weapons.length) render(); } });
+
 async function load(){
   try{
-    const w=await fetch('/api/weapons').then(r=>r.json());
+    const [w,acc]=await Promise.all([
+      fetch('/api/weapons').then(r=>r.json()),
+      fetch('/api/account').then(r=>r.json()).catch(()=>null)
+    ]);
     WEAPONS=w; PICONS=w.perkIcons||{};
+    if(!selCid && acc&&acc.chars&&acc.chars.length){ selCid=acc.chars[0].id; selCls=acc.chars[0].cls; } // default = most-recent
+    if(window.GBANNER&&window.GBANNER.cid){ selCid=window.GBANNER.cid; selCls=window.GBANNER.cls; }
     // build filter chips from actual data
     const els=[...new Set(Object.values(w.defs).map(d=>d.dmg).filter(Boolean))].sort((a,b)=>['Kinetic','Solar','Arc','Void','Stasis','Strand'].indexOf(a)-['Kinetic','Solar','Arc','Void','Stasis','Strand'].indexOf(b));
     const ammo=[...new Set(Object.values(w.defs).map(d=>d.ammo).filter(Boolean))];

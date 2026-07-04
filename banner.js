@@ -35,6 +35,11 @@
         </div>
         <nav class="gb-nav">${nav}</nav>
       </div>`;
+    // let pages (e.g. Weapon Vault) react to the selected character
+    if (c) {
+      window.GBANNER = { cid: c.id, cls: c.cls };
+      window.dispatchEvent(new CustomEvent('gbanner:char', { detail: { cid: c.id, cls: c.cls } }));
+    }
   }
   render(); // paint nav + name immediately; hydrate emblem/power when the account loads
   fetch('/api/account').then((r) => r.json()).then((a) => { acc = a; render(); }).catch(() => {});
