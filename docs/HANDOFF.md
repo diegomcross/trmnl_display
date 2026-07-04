@@ -79,6 +79,7 @@ Core priorities, in his words:
 | `weapon-watch.html` | **Weapon Watch** god-roll tracker UI (served at `/weapons`): pick weapons, tag up to 6 perks (normal/★high priority), wanted masterwork + watched stats; scores every copy in the vault. Full-width copy rows, direct tag chips, Select-multiple batch mode, smart Vault/Equip, no-jump perk selection. Config → `weapon-watch.json`, tags → `weapon-tags.json` (gitignored). |
 | `weapon-drops.html` | **New Drops dashboard** (served at `/drops`): visual cards for *fresh* drops of watched weapons — weapon art, rolled perk icons, masterwork icon, stats, score/🎯. Backed by `weapon-seen.json` (gitignored) + `/api/drops/ack`. |
 | `dim-probe.js` | One-off DIM Sync API check (gitignored). Diego runs `node dim-probe.js` to confirm two-way DIM sync works before it's built. |
+| `fashion.html` | **Fashion loadouts** (served at `/fashion`): each character's equipped armor ornaments + shaders with icons; save named looks (`fashion.json`, gitignored) and re-apply them in one click. Apply requires the character to be in orbit. |
 | `CLAUDE.md` | Working rules for agents: never drop features, test before push, and **mandatory upkeep of this file + `docs/NEXT_PHASE.md`**. |
 | `docs/NEXT_PHASE.md` | The pickup point: specs + open questions for upcoming features. |
 
@@ -270,6 +271,17 @@ Core priorities, in his words:
     if in the vault, pull to the default character first, then equip. `LOCK_CTX` now also
     carries `byClass`/`clsById` maps (class↔characterId) to resolve source/target. Same
     write scope as Lock (MoveEquipDestinyItems — confirmed working).
+  - **Fashion loadouts (`/fashion`, shipped):** `fetchFashion` reads each character's
+    equipped armor and pulls the cosmetic plugs — **shader** = socket whose plug
+    `plugCategory` is `shader`; **ornament** = plug category starts with `armor_skins_`
+    (e.g. `armor_skins_warlock_head`); both carry `icon`. Save a named look (the ornament
+    + shader plug hashes per slot) to `fashion.json`; **apply** = `InsertSocketPlugFree`
+    each saved plug into the equipped piece's cosmetic socket (skips already-set). No
+    re-auth was needed — the token already has `AdvancedWriteActions` (confirmed: a no-op
+    re-insert returned `1634 DestinyCharacterNotInTower`, a location error, not a scope
+    error). **Apply only works in orbit** — Bungie returns `DestinyCharacterNotInTower`
+    otherwise; the UI surfaces that as a banner. Endpoints: `GET /api/fashion`,
+    `GET/POST /api/looks`, `POST /api/fashion/apply {characterId, look}`.
   - DIM overlay (armor): optional `dim-data.json` (tags + loadouts) merges into verdicts.
   - **DIM two-way tag sync (weapons, shipped):** Weapon Watch keep/favorite/junk tags are
     synced live with DIM's cloud. `vault-verdict.js` holds a small DIM Sync API client:

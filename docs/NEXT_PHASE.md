@@ -16,7 +16,13 @@ Remaining bundle (Diego: "bundle as many as possible"):
    DIM tags as truth and writes each change back via `POST /api/tag`.
 2. ✅ **Phase-2 live alerts — SHIPPED & verified** on the real panel (see HANDOFF).
 3. ✅ **Always-on vault-verdict** — `start-vault.ps1` written; Diego runs `-Install` once (§0b).
-4. **Fashion loadouts** — §3. Needs a re-auth for cosmetic write scope (Diego action). NOT started. (The only feature left.)
+4. ✅ **Fashion loadouts — SHIPPED & verified** (see HANDOFF). No re-auth needed after all —
+   token already had AdvancedWriteActions; apply just needs the character in orbit.
+
+**All planned features are shipped.** Only open items: Diego runs `start-vault.ps1 -Install`
+once (always-on), and end-to-end confirmation of the two in-orbit/in-game paths (a real
+god-roll drop firing the alert; applying a *different* fashion look in orbit) the next time
+he plays. Nothing else queued — next work will come from new Diego requests.
 
 ## 0. DIM two-way tag sync — ✅ SHIPPED 2026-07-03 (details in HANDOFF)
 
@@ -139,24 +145,11 @@ for seen instance ids + watch config.
   app's scopes, may need re-auth) so it can't be deleted. **No tag** — Diego
   tags manually when he reviews it.
 
-## 3. Fashion loadouts (LATER — only after weapons feature is complete)
+## 3. Fashion loadouts — ✅ SHIPPED 2026-07-03 (details in HANDOFF)
 
-**Diego's words:** save fashion loadouts (armor **ornaments + shaders**) that can
-be **applied to the currently equipped armor at the click of a button**; needs
-**images from the API** to identify ornaments and shaders.
-
-**Design notes:**
-- Ornament/shader defs + icons: manifest `DestinyInventoryItemDefinition`
-  (`displayProperties.icon` — prefix `https://www.bungie.net`); current
-  cosmetics on equipped armor from sockets (component 305).
-- Applying requires **write scope**: `InsertSocketPlugFree` (Bungie API) for
-  shaders/ornaments — check the OAuth app has `AdvancedWriteActions` /
-  MoveEquipDestinyItems permissions; may require re-auth with new scopes and
-  the character to be **in orbit / not in an activity**.
-- UI: new page in the Vault Verdict server (it has tokens already); grid of
-  saved looks with icon thumbnails, one Apply button per look.
-- Spec discussion with Diego still to happen — do not start before weapons
-  feature ships.
-
-**Files (expected):** `vault-verdict.js` (socket write calls + icon proxy),
-new `fashion.html`, new saved-looks JSON (gitignored).
+Save equipped ornament+shader looks (`fashion.json`) and re-apply via
+`InsertSocketPlugFree`. Token already had `AdvancedWriteActions` (no re-auth). Apply
+requires the character in orbit. Files: `vault-verdict.js` (fetchFashion/applyLook +
+`/api/fashion`, `/api/looks`, `/api/fashion/apply`), `fashion.html` (`/fashion`).
+Possible future polish: a picker to swap in *any* owned ornament/shader (not just
+save-current), and per-slot editing of a saved look.
