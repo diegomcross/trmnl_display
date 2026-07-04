@@ -1,0 +1,177 @@
+/* ============================================================================
+   theme.css — shared BrayTech-style skin for the whole Vault Verdict suite.
+   Matches bray.tech's in-game aesthetic: ground #101312, hairline white borders,
+   square (un-chamfered) tiles, Destiny rarity/energy colors, Neue Haas Grotesk
+   (rendered via its free twin Helvetica Neue / Arial), tabular numbers.
+
+   HOW IT WORKS: every page uses the same CSS-variable names (--bg, --panel,
+   --line, --gold, --clip, ...). This file is <link>ed AFTER each page's inline
+   <style>, so its :root token values and shared-component rules win on the
+   cascade and re-skin all pages at once. Page-specific LAYOUT (grids, spacing)
+   stays in each page; this file owns the visual identity. Edit here once.
+   ============================================================================ */
+
+:root{
+  --bg:#101312;            /* braytech ground (faint cool near-black) */
+  --panel:#15181a;
+  --panel2:#1a1e21;
+  --line:rgba(255,255,255,.10);
+  --line-strong:rgba(255,255,255,.20);
+  --ink:rgba(255,255,255,.86);
+  --white:#ffffff;
+  --mut:rgba(255,255,255,.46);
+  --dim:rgba(255,255,255,.30);
+
+  /* Destiny vocabulary — reusing the app's accent variable names */
+  --gold:#cdae32;          /* exotic / masterwork / primary accent */
+  --mw:#d2c046;
+  --keep:#6de8f1;          /* arc cyan  */
+  --purp:#a777c5;          /* void      */
+  --rev:#cdae32;
+  --junk:#e0523a;          /* solar-red */
+  --legendary:#522f65;
+  --solar:#f1631d;
+
+  --clip:none;             /* square everything that used the chamfer polygon */
+  --disp:"Neue Haas Grotesk Display","Helvetica Neue",Helvetica,Arial,sans-serif;
+  --text:"Neue Haas Grotesk Text","Helvetica Neue",Helvetica,Arial,sans-serif;
+}
+
+/* ---------- base ---------- */
+body{
+  background:var(--bg);
+  background-image:radial-gradient(1100px 320px at 50% -80px, rgba(109,232,241,.045), transparent 72%);
+  background-attachment:fixed;
+  color:var(--ink);
+  font-family:var(--text);
+}
+h1,h2,h3,.disp{ font-family:var(--disp); font-weight:500; color:var(--white); }
+h1{ letter-spacing:.04em; }
+.disp{ letter-spacing:.06em; }
+h1 span,.disp span{ color:var(--gold); }
+.sub{ color:var(--mut); }
+.sub a,a{ color:var(--keep); }
+.count,.note{ color:var(--mut); }
+::selection{ background:rgba(205,174,50,.30); }
+
+/* ---------- top nav ---------- */
+.nav{ gap:0; border:1px solid var(--line); width:max-content; max-width:100%; }
+.nav a{
+  font-family:var(--disp); text-transform:uppercase; letter-spacing:.13em; font-size:11px;
+  color:var(--mut); border:0; border-right:1px solid var(--line); clip-path:none; border-radius:0;
+  padding:8px 15px; background:transparent;
+}
+.nav a:last-child{ border-right:0; }
+.nav a.on{ color:var(--white); background:rgba(255,255,255,.06); box-shadow:inset 0 -2px 0 var(--gold); }
+
+/* ---------- buttons ---------- */
+.btn{
+  font-family:var(--disp); text-transform:uppercase; letter-spacing:.11em; font-size:11px;
+  background:transparent; border:1px solid var(--white); color:var(--white);
+  clip-path:none; border-radius:0; padding:8px 14px;
+}
+.btn:hover{ background:var(--white); color:#0b0c0d; }
+.btn:active{ background:var(--white); color:#0b0c0d; }
+.btn.sm{ padding:5px 10px; font-size:10px; }
+.btn.mut{ border-color:var(--line); color:var(--mut); }
+.btn.mut:hover{ border-color:var(--line-strong); color:var(--white); background:transparent; }
+.btn.red{ border-color:var(--junk); color:var(--junk); }
+.btn.red:hover{ background:var(--junk); color:#0b0c0d; }
+
+/* ---------- tabs ---------- */
+.tab{
+  font-family:var(--disp); text-transform:uppercase; letter-spacing:.08em; font-size:11px;
+  border:1px solid var(--line); color:var(--mut); background:transparent; clip-path:none; border-radius:0;
+}
+.tab.on{ color:var(--white); border-color:var(--line-strong); background:rgba(255,255,255,.06); }
+
+/* ---------- cards / panels ---------- */
+.card{
+  background:var(--panel); border:1px solid var(--line); border-left:1px solid var(--line);
+  clip-path:none; border-radius:0;
+}
+.panel{ background:var(--panel); border:1px solid var(--line); clip-path:none; border-radius:0; }
+.whead .nm{ color:var(--white); }
+.whead .sum{ color:var(--mut); }
+.meta{ color:var(--mut); }
+.meta b{ color:var(--white); }
+.trk{ background:rgba(255,255,255,.03); border:1px solid var(--line); clip-path:none; }
+.thd,.colh{ font-family:var(--disp); color:var(--mut); }
+
+/* ---------- perk buttons -> square tiles ---------- */
+.pk{
+  font-family:var(--text); border:1px solid var(--line); background:rgba(255,255,255,.03);
+  color:var(--mut); clip-path:none; border-radius:0;
+}
+.pk.t1{ border-color:var(--keep); color:var(--keep); background:rgba(109,232,241,.10); }
+.pk.t2{ border-color:var(--gold); color:var(--gold); background:rgba(205,174,50,.16); }
+.pk.t2::before{ content:"\2605 "; }
+
+/* ---------- score badge ---------- */
+.score{
+  font-family:var(--disp); background:transparent; border:1px solid var(--line); color:var(--white);
+  clip-path:none; border-radius:0; font-variant-numeric:tabular-nums;
+}
+.score.hot{ background:var(--mw); color:#0b0c0d; border-color:var(--mw); }
+.frac{ color:var(--mut); }
+
+/* ---------- stat pills ---------- */
+.st{
+  border:1px solid var(--line); background:transparent; color:var(--mut); clip-path:none; border-radius:0;
+  text-transform:uppercase; letter-spacing:.05em; font-size:10.5px;
+}
+.st b{ color:var(--white); letter-spacing:0; }
+.st.s1{ outline:none; border-color:var(--gold); } .st.s1 b{ color:var(--gold); }
+.st.s2{ outline:none; border-color:var(--keep); } .st.s2 b{ color:var(--keep); }
+.st.s3{ outline:none; border-color:var(--junk); } .st.s3 b{ color:var(--junk); }
+
+/* ---------- tag chips ---------- */
+.chip{
+  font-family:var(--disp); text-transform:uppercase; letter-spacing:.08em;
+  border:1px solid var(--line); color:var(--mut); background:transparent; clip-path:none; border-radius:0;
+}
+.chip.on.keep{ border-color:var(--keep); color:var(--keep); background:rgba(109,232,241,.12); }
+.chip.on.favorite{ border-color:var(--gold); color:var(--gold); background:rgba(205,174,50,.16); }
+.chip.on.junk{ border-color:var(--junk); color:var(--junk); background:rgba(224,82,58,.14); }
+
+/* ---------- lock / equip / vault small buttons ---------- */
+.lockb{ font-family:var(--disp); letter-spacing:.06em; border:1px solid var(--line); color:var(--mut); background:transparent; clip-path:none; border-radius:0; }
+.lockb:hover{ border-color:var(--line-strong); color:var(--white); }
+.lockb.on{ border-color:var(--gold); color:var(--gold); }
+
+/* ---------- inputs ---------- */
+input[type=search],select{
+  background:var(--panel2); border:1px solid var(--line); color:var(--ink);
+  clip-path:none; border-radius:0; font-family:var(--text);
+}
+input[type=checkbox]{ accent-color:var(--gold); }
+.tgl{ color:var(--mut); }
+
+/* ---------- badges ---------- */
+.badge{
+  font-family:var(--disp); text-transform:uppercase; letter-spacing:.10em;
+  background:var(--mw); color:#0b0c0d; clip-path:none; border-radius:0; font-weight:600;
+}
+
+/* ---------- New Drops cards: square, rarity framing ---------- */
+.drop{ border:1px solid var(--line); border-left:1px solid var(--line); clip-path:none; border-radius:0; }
+.drop.god{ box-shadow:inset 0 0 0 1px rgba(210,192,70,.35); border-color:rgba(210,192,70,.35); }
+.art{ border-bottom:1px solid var(--line); }
+.art .sc{ font-family:var(--disp); background:rgba(16,19,18,.82); border:1px solid var(--line); color:var(--white); clip-path:none; border-radius:0; }
+.art .sc.hot{ border-color:var(--mw); color:var(--mw); background:rgba(16,19,18,.82); }
+.art .tag{ font-family:var(--disp); text-transform:uppercase; letter-spacing:.10em; color:var(--gold); border:1px solid var(--gold); background:rgba(205,174,50,.14); clip-path:none; border-radius:0; }
+.drop .perk{ border:1px solid var(--line); background:rgba(255,255,255,.03); color:var(--mut); clip-path:none; border-radius:0; }
+.drop .perk.roll{ color:var(--ink); border-color:var(--line-strong); }
+.drop .perk.match{ color:var(--gold); border-color:var(--gold); background:rgba(205,174,50,.14); }
+/* icon squares (perk art, weapon art, fashion cosmetics) — the braytech tile frame */
+.perk img,.cos img,.mini img{ border:1px solid var(--line-strong); border-radius:0; background:#0d0f10; }
+
+/* ---------- Fashion ---------- */
+.slot,.mini{ background:rgba(255,255,255,.03); border:1px solid var(--line); clip-path:none; border-radius:0; }
+.cls{ color:var(--white); font-family:var(--disp); }
+.warn{ background:rgba(224,82,58,.12); border:1px solid var(--junk); color:var(--junk); clip-path:none; border-radius:0; }
+.res .ok{ color:var(--keep); } .res .bad{ color:var(--junk); }
+
+/* ---------- accessibility ---------- */
+:focus-visible{ outline:2px solid var(--gold); outline-offset:2px; }
+@media (prefers-reduced-motion:reduce){ *{ transition:none!important; animation:none!important; } }

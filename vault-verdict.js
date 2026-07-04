@@ -848,6 +848,10 @@ async function main() {
         if (req.method === 'POST') { saveLooks(JSON.parse(await readBody(req) || '[]')); return json({ ok: true }); }
         return json(loadLooks());
       }
+      if (req.url.startsWith('/theme.css')) {
+        res.writeHead(200, { 'Content-Type': 'text/css; charset=utf-8' });
+        return res.end(fs.readFileSync(path.join(__dirname, 'theme.css')));
+      }
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
       if (req.url.startsWith('/weapons')) return res.end(fs.readFileSync(path.join(__dirname, 'weapon-watch.html')));
       if (req.url.startsWith('/drops')) return res.end(fs.readFileSync(path.join(__dirname, 'weapon-drops.html')));
