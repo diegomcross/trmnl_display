@@ -1050,7 +1050,14 @@ async function main() {
         catch (err) { return json({ error: err.message }); }
       }
       if (req.url.startsWith('/api/perks')) {
-        return json(await buildPerkLibrary(e, req.url.includes('fresh=1')));
+        const lib = await buildPerkLibrary(e, req.url.includes('fresh=1'));
+        // overlay "mine" = how often each perk is a TRACKED perk across your watched
+        // weapons (priority-weighted: ★high counts 2), so the list can rank by your own taste.
+        const watch = loadWatch(), mine = {};
+        for (const cfg of Object.values(watch))
+          for (const [n, pr] of Object.entries(cfg.perks || {})) mine[n] = (mine[n] || 0) + (pr || 1);
+        const perks = lib.perks.map((p) => ({ ...p, mine: mine[p.n] || 0 }));
+        return json({ ...lib, perks, watchedWeapons: Object.keys(watch).length });
       }
       if (req.url.startsWith('/api/weapon-pools')) {
         return json(await buildWeaponPools(e));

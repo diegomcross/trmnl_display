@@ -32,20 +32,22 @@ input:focus{outline:none;border-color:var(--gold)}
 /* ---- weapon grid ---- */
 .slotsec{margin-bottom:14px}
 .slothd{font-family:Bahnschrift,sans-serif;text-transform:uppercase;letter-spacing:.1em;font-size:11px;color:var(--mut);border-bottom:1px solid var(--line);padding-bottom:4px;margin-bottom:8px;display:flex;justify-content:space-between}
-.wgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(58px,1fr));gap:5px}
-.wt{position:relative;aspect-ratio:1;border:1px solid var(--line);background:var(--legendary);cursor:pointer;overflow:hidden}
+.wgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(74px,1fr));gap:7px}
+.wt{position:relative;aspect-ratio:1;border:1px solid var(--line-strong);background:var(--legendary);cursor:pointer;overflow:hidden}
 .wt.exotic{background:var(--exotic)}
+.wt:hover{border-color:#fff}
 .wt>img{width:100%;height:100%;object-fit:cover;display:block}
-.wt .pw{position:absolute;right:0;bottom:0;background:rgba(0,0,0,.72);color:#fff;font:600 10px/1 Bahnschrift,sans-serif;padding:2px 3px}
-.wt .el{position:absolute;left:2px;bottom:2px;width:9px;height:9px;border-radius:50%;box-shadow:0 0 0 1px rgba(0,0,0,.6)}
-.wt .lk{position:absolute;right:2px;top:2px;font-size:9px;color:#fff;text-shadow:0 0 2px #000;opacity:.9}
-.wt .tg{position:absolute;left:0;top:0;width:100%;height:3px}
-.wt.tg-keep .tg{background:var(--keep)} .wt.tg-favorite .tg{background:var(--fav)} .wt.tg-junk .tg{background:var(--junk)}
-.wt.fresh{box-shadow:inset 0 0 0 1px var(--keep)}
-.wt.sel{outline:2px solid var(--white,#fff);outline-offset:-2px}
-.wt.match{outline:2px solid var(--gold);outline-offset:-2px}
+.wt .bot{position:absolute;left:0;right:0;bottom:0;display:flex;align-items:center;justify-content:space-between;gap:4px;padding:3px 5px 3px;background:linear-gradient(transparent,rgba(0,0,0,.85))}
+.wt .el{width:8px;height:8px;transform:rotate(45deg);box-shadow:0 0 0 1px rgba(0,0,0,.55);flex:0 0 auto}
+.wt .p{color:#fff;font:600 11px/1 Bahnschrift,"Roboto Condensed",sans-serif;letter-spacing:.02em}
+.wt .lk{position:absolute;right:3px;top:2px;font-size:10px;color:#fff;text-shadow:0 1px 2px #000;opacity:.92}
+/* clipped top-left corner = the tag flag (calmer than a full bar) */
+.wt .tagc{position:absolute;left:0;top:0;width:0;height:0;border-style:solid;border-width:15px 15px 0 0;border-color:transparent transparent transparent transparent}
+.wt.tg-keep .tagc{border-top-color:var(--keep)} .wt.tg-favorite .tagc{border-top-color:var(--fav)} .wt.tg-junk .tagc{border-top-color:var(--junk)}
+.wt.sel{outline:2px solid #fff;outline-offset:-2px}
+.wt.match{outline:2px solid var(--gold);outline-offset:-2px;z-index:1}
 .wt.hide{display:none}
-.wt.dim{opacity:.2}
+.wt.dim{opacity:.16}
 
 /* ---- right rail ---- */
 .rail{position:sticky;top:12px;display:flex;flex-direction:column;gap:12px}
@@ -215,11 +217,13 @@ function render(){
   $('matchcnt').textContent=combo?`${matched} weapon${matched===1?'':'s'} can roll this combo`:'';
 }
 function tile(w){
-  const d=w._d, ex=d.tt===6, el=ELCOL[d.dmg]?`<span class="el" style="background:${ELCOL[d.dmg]}"></span>`:'';
+  const d=w._d, ex=d.tt===6;
+  const el=ELCOL[d.dmg]?`<span class="el" style="background:${ELCOL[d.dmg]}"></span>`:'';
   const tg=w.tag?` tg-${w.tag}`:'';
-  return `<div class="wt ${ex?'exotic':''}${tg}${w._st==='match'?' match':''}${w._st==='dim'?' dim':''}${w.fresh?' fresh':''}" data-id="${w.id}" title="${esc(d.n||'')}">
-    ${d.icon?`<img data-src="${BN}${d.icon}" alt="">`:''}<span class="tg"></span>
-    ${w.locked?'<span class="lk">🔒</span>':''}${el}<span class="pw">${w.pwr||''}</span></div>`;
+  return `<div class="wt ${ex?'exotic':''}${tg}${w._st==='match'?' match':''}${w._st==='dim'?' dim':''}" data-id="${w.id}" title="${esc(d.n||'')}${w.tag?' · '+w.tag:''}">
+    ${d.icon?`<img data-src="${BN}${d.icon}" alt="">`:''}
+    <span class="tagc"></span>${w.locked?'<span class="lk">🔒</span>':''}
+    <span class="bot">${el}<span class="p">${w.pwr||''}</span></span></div>`;
 }
 // Only fetch a tile's emblem art once it scrolls near view — the vault can hold
 // hundreds of weapons and loading every icon at once floods the network.

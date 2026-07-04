@@ -114,11 +114,14 @@ input:focus,select:focus{outline:none;border-color:var(--gold)}
 <body>
 <div id="gbanner"></div>
 <h1 class="disp">Perk <span>Finder</span></h1>
-<p class="sub">Pick trait perks (ranked by how often the community recommends them), save role-tagged combos, and see which of your weapons best match. <span id="wlmeta" class="count"></span></p>
+<p class="sub">Pick trait perks, save role-tagged combos, and see which of your weapons best match. Rank by <b>Mine</b> (how often you track a perk), <b>Community</b> (DIM wishlists), or <b>Blend</b> (yours + community at low weight → sleeper rolls). <span id="wlmeta" class="count"></span></p>
 
 <div class="bar">
   <input id="q" placeholder="Search perks…" style="min-width:180px">
-  <button class="btn sm on" id="sortPop" data-sort="pop">Popular</button>
+  <span class="count" style="align-self:center">Rank:</span>
+  <button class="btn sm on" data-src="mine">Mine</button>
+  <button class="btn sm mut" data-src="community">Community</button>
+  <button class="btn sm mut" data-src="blend">Blend</button>
   <button class="btn sm mut" id="sortAz" data-sort="az">A–Z</button>
   <span style="width:1px;height:20px;background:var(--line)"></span>
   <button class="btn sm on" data-col="all">All cols</button>
@@ -192,36 +195,48 @@ const BN='https://www.bungie.net';
 let LIB=[], PICONS={}, WEAPONS={weapons:[],defs:{},perkIcons:{}}, COMBOS=[], OWNED=new Set();
 let WPOOLS=null, OWNEDW=new Set(), matchMode='inv';   // farmable-pool cache, owned weapon names, match mode
 // SLOTS[0], SLOTS[1] = the two combo slots (each a Set of perk names, "any of these").
-let SLOTS=[new Set(),new Set()], activeSlot=0, ROLE='', sort='pop', colFilter='all', ownedOnly=false, popOnly=false, q='';
+let SLOTS=[new Set(),new Set()], activeSlot=0, ROLE='', source='mine', azMode=false, colFilter='all', ownedOnly=false, popOnly=false, q='';
 
 const iconFor=n=>PICONS[n]?`<img class="pkico" src="${BN}${PICONS[n]}" alt="" loading="lazy">`:'<span class="pkico"></span>';
 const slotOf=n=>SLOTS[0].has(n)?0:SLOTS[1].has(n)?1:-1;   // which slot a perk sits in (-1 = none)
 
 function renderLib(){
+  const maxMine=Math.max(1,...LIB.map(p=>p.mine||0));
+  const maxPop=Math.max(1,...LIB.map(p=>p.pop||0));
+  const blend=p=>((p.mine||0)/maxMine)*100 + ((p.pop||0)/maxPop)*35;   // yours full weight, community 0.35
+  const val=p=> source==='mine'?(p.mine||0) : source==='community'?(p.pop||0) : blend(p);
   let list=LIB.filter(p=>{
     if(q && !p.n.toLowerCase().includes(q)) return false;
     if(colFilter!=='all' && !p.cols[+colFilter]) return false;
     if(ownedOnly && !OWNED.has(p.n)) return false;
-    if(popOnly && !p.pop) return false;
+    if(popOnly && !val(p)) return false;
     return true;
   });
-  list.sort(sort==='az' ? (a,b)=>a.n.localeCompare(b.n) : (a,b)=>b.pop-a.pop||a.n.localeCompare(b.n));
-  const max=Math.max(1,...LIB.map(p=>p.pop));
+  list.sort(azMode ? (a,b)=>a.n.localeCompare(b.n) : (a,b)=>val(b)-val(a)||a.n.localeCompare(b.n));
   $('libcount').textContent=`${list.length} of ${LIB.length}`;
   $('plib').innerHTML=list.length?list.map(p=>{
-    const scaled=Math.round(100*p.pop/max);
-    const pveW=p.pop?Math.round(scaled*p.pve/(p.pve+p.pvp||1)):0;
-    const pvpW=scaled-pveW;
     const cols=(p.cols[0]?'3':'')+(p.cols[1]?'4':'');
     const sl=slotOf(p.n);
+    let bar,num;
+    if(source==='community'){
+      const scaled=Math.round(100*(p.pop||0)/maxPop);
+      const pveW=p.pop?Math.round(scaled*p.pve/(p.pve+p.pvp||1)):0, pvpW=scaled-pveW;
+      bar=`<span class="popbar" title="PvE ${p.pve} · PvP ${p.pvp}"><i class="ip" style="width:${pveW}%"></i><i class="iv" style="left:${pveW}%;width:${pvpW}%"></i></span>`;
+      num=p.pop||'—';
+    } else if(source==='mine'){
+      const w=Math.round(100*(p.mine||0)/maxMine);
+      bar=`<span class="popbar" title="you track this perk ${p.mine||0}×"><i style="position:absolute;left:0;top:0;bottom:0;width:${w}%;background:var(--gold)"></i></span>`;
+      num=p.mine||'—';
+    } else {
+      const mineW=Math.round(((p.mine||0)/maxMine)*100), popW=Math.round(((p.pop||0)/maxPop)*35);
+      bar=`<span class="popbar" title="Mine ${p.mine||0} · Community ${p.pop||0}"><i style="position:absolute;left:0;top:0;bottom:0;width:${mineW}%;background:var(--gold)"></i><i style="position:absolute;left:${mineW}%;top:0;bottom:0;width:${popW}%;background:rgba(207,174,66,.42)"></i></span>`;
+      num=Math.round(blend(p))||'—';
+    }
     return `<div class="prow ${sl>=0?'sel':''}" data-p="${esc(p.n)}">
       ${iconFor(p.n)}
       <div class="pmeta">
         <div class="pname">${esc(p.n)} <span class="cols">C${cols||'?'}</span></div>
-        <div class="popwrap">
-          <span class="popbar" title="PvE ${p.pve} · PvP ${p.pvp}"><i class="ip" style="width:${pveW}%"></i><i class="iv" style="left:${pveW}%;width:${pvpW}%"></i></span>
-          <span class="popn">${p.pop||'—'}</span>
-        </div>
+        <div class="popwrap">${bar}<span class="popn">${num}</span></div>
       </div>
       ${sl>=0?`<span class="slotbadge">${sl+1}</span>`:(OWNED.has(p.n)?'<span class="own">✓</span>':'')}
     </div>`;
@@ -381,7 +396,13 @@ $('combos').addEventListener('click',async e=>{
 });
 
 $('q').addEventListener('input',e=>{ q=e.target.value.toLowerCase().trim(); renderLib(); });
-document.querySelectorAll('[data-sort]').forEach(b=>b.onclick=()=>{ sort=b.dataset.sort; $('sortPop').classList.toggle('on',sort==='pop'); $('sortPop').classList.toggle('mut',sort!=='pop'); $('sortAz').classList.toggle('on',sort==='az'); $('sortAz').classList.toggle('mut',sort!=='az'); renderLib(); });
+document.querySelectorAll('[data-src]').forEach(b=>b.onclick=()=>{
+  source=b.dataset.src; azMode=false;
+  document.querySelectorAll('[data-src]').forEach(x=>{x.classList.toggle('on',x===b);x.classList.toggle('mut',x!==b);});
+  $('sortAz').classList.remove('on'); $('sortAz').classList.add('mut');
+  renderLib();
+});
+$('sortAz').onclick=()=>{ azMode=!azMode; $('sortAz').classList.toggle('on',azMode); $('sortAz').classList.toggle('mut',!azMode); renderLib(); };
 document.querySelectorAll('[data-col]').forEach(b=>b.onclick=()=>{ colFilter=b.dataset.col; document.querySelectorAll('[data-col]').forEach(x=>{x.classList.toggle('on',x===b);x.classList.toggle('mut',x!==b);}); renderLib(); });
 $('ownedOnly').onclick=()=>{ ownedOnly=!ownedOnly; $('ownedOnly').classList.toggle('on',ownedOnly); $('ownedOnly').classList.toggle('mut',!ownedOnly); renderLib(); };
 $('popOnly').onclick=()=>{ popOnly=!popOnly; $('popOnly').classList.toggle('on',popOnly); $('popOnly').classList.toggle('mut',!popOnly); renderLib(); };
@@ -402,7 +423,7 @@ async function load(){
       fetch('/api/combos').then(r=>r.json()).catch(()=>[])
     ]);
     LIB=pk.perks||[]; COMBOS=Array.isArray(cb)?cb:[];
-    $('wlmeta').textContent=pk.wishlistAt?`Popularity from DIM community wishlist · ${LIB.length} trait perks`:'';
+    $('wlmeta').textContent=`${LIB.length} trait perks · you track perks across ${pk.watchedWeapons||0} weapons`;
     renderCombos();
     // weapons (for icons + inventory matching) — may be a beat slower
     const w=await fetch('/api/weapons').then(r=>r.json());
