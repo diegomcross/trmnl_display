@@ -31,7 +31,8 @@ input:focus{outline:none;border-color:var(--gold)}
 
 /* ---- weapon grid ---- */
 .slotsec{margin-bottom:14px}
-.slothd{font-family:Bahnschrift,sans-serif;text-transform:uppercase;letter-spacing:.1em;font-size:11px;color:var(--mut);border-bottom:1px solid var(--line);padding-bottom:4px;margin-bottom:8px;display:flex;justify-content:space-between}
+.slothd{font-family:Bahnschrift,sans-serif;text-transform:uppercase;letter-spacing:.1em;font-size:12px;color:var(--ink);border-bottom:1px solid var(--line-strong);padding-bottom:4px;margin-bottom:8px;display:flex;justify-content:space-between}
+.subhd{font-family:Bahnschrift,sans-serif;text-transform:uppercase;letter-spacing:.08em;font-size:10px;color:var(--gold);margin:9px 0 5px;opacity:.85}
 .wgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(74px,1fr));gap:7px}
 .wt{position:relative;aspect-ratio:1;border:1px solid var(--line-strong);background:var(--legendary);cursor:pointer;overflow:hidden}
 .wt.exotic{background:var(--exotic)}
@@ -114,6 +115,16 @@ input:focus{outline:none;border-color:var(--gold)}
 
   <div class="rail">
     <div class="card">
+      <div class="flabel">Sort by</div>
+      <div class="chips" id="fSort">
+        <button class="fchip on" data-sort="power">Power</button>
+        <button class="fchip" data-sort="recent">Recent</button>
+        <button class="fchip" data-sort="kills">Kills</button>
+        <button class="fchip" data-sort="mine">Perk · Mine</button>
+        <button class="fchip" data-sort="blend">Perk · Blend</button>
+      </div>
+    </div>
+    <div class="card">
       <div class="fgrp"><input id="q" placeholder="Search weapon name…" style="width:100%"></div>
       <div class="fgrp"><div class="flabel">Element</div><div class="chips" id="fEl"></div></div>
       <div class="fgrp"><div class="flabel">Ammo</div><div class="chips" id="fAmmo"></div></div>
@@ -150,8 +161,22 @@ const ELCOL={Kinetic:'#e6e6e6',Solar:'#f1631d',Arc:'#6de8f1',Void:'#a777c5',Stas
 const SLOTORD=['Kinetic','Energy','Power'];
 
 let WEAPONS={weapons:[],defs:{},perkIcons:{}}, PICONS={}, LIB=[];
-let fEl=new Set(), fAmmo=new Set(), fMisc=new Set(), fTag=new Set(), q='';
+let PMINE={}, PPOP={}, maxMine=1, maxPop=1;   // per-perk score maps for the perk-score sorts
+let fEl=new Set(), fAmmo=new Set(), fMisc=new Set(), fTag=new Set(), q='', sortBy='power';
 let SLOTS=[new Set(),new Set()], activeSlot=0, onlyMatch=false;
+const LOCLABEL={equipped:'Equipped',char:'On Character',vault:'In Vault'};
+
+// perk-match score: best (highest-value) perk in each column, summed. "mine" = your
+// tracked-perk weight; "blend" = mine + community at low weight (finds sleeper rolls).
+function perkScore(w,mode){
+  const cs=col=>{ let best=0; for(const pk of (col||[])){ const v=mode==='mine'?(PMINE[pk.n]||0):((PMINE[pk.n]||0)/maxMine + (PPOP[pk.n]||0)/maxPop*0.35); if(v>best)best=v; } return best; };
+  return cs(w.cols&&w.cols[0])+cs(w.cols&&w.cols[1]);
+}
+function cmp(a,b){
+  if(sortBy==='recent') return a.id<b.id?1:(a.id>b.id?-1:0);          // instanceId ~ acquisition order
+  const v=x=> sortBy==='kills'?(x.kills||0) : sortBy==='mine'?perkScore(x,'mine') : sortBy==='blend'?perkScore(x,'blend') : (x.pwr||0);
+  return v(b)-v(a) || (b.pwr||0)-(a.pwr||0);
+}
 
 // ---- filter chip builders ----
 function chipRow(el,items,set,cls){
@@ -193,7 +218,7 @@ function passQuick(w,d){
 function render(){
   const combo=(SLOTS[0].size||SLOTS[1].size);
   let shown=0, matched=0;
-  const bySlot={Kinetic:[],Energy:[],Power:[]};
+  const eq={}, ch={}, vault=[];   // equipped/character grouped by class; vault flat
   for(const w of WEAPONS.weapons){
     const d=WEAPONS.defs[w.hash]||{}; w._d=d;
     if(!passQuick(w,d)){ w._st='hide'; continue; }
@@ -201,16 +226,17 @@ function render(){
     if(combo){ const sc=scoreCopy(w); if(sc&&sc.full){ st='match'; matched++; } else if(onlyMatch){ st='hide'; } else st='dim'; }
     if(st==='hide'){ w._st='hide'; continue; }
     w._st=st; shown++;
-    (bySlot[d.slot]||(bySlot[d.slot]=[])).push(w);
+    if(w.loc==='equipped') (eq[w.own]=eq[w.own]||[]).push(w);
+    else if(w.loc==='char') (ch[w.own]=ch[w.own]||[]).push(w);
+    else vault.push(w);
   }
   const g=$('grid'); g.innerHTML='';
-  for(const slot of SLOTORD){
-    const arr=(bySlot[slot]||[]).sort((a,b)=>b.pwr-a.pwr);
-    if(!arr.length) continue;
-    const sec=document.createElement('div'); sec.className='slotsec';
-    sec.innerHTML=`<div class="slothd"><span>${slot} Weapons</span><span>${arr.length}</span></div><div class="wgrid">${arr.map(tile).join('')}</div>`;
-    g.appendChild(sec);
-  }
+  const grid=arr=>`<div class="wgrid">${arr.sort(cmp).map(tile).join('')}</div>`;
+  const section=(title,count,inner)=>{ const s=document.createElement('div'); s.className='slotsec'; s.innerHTML=`<div class="slothd"><span>${title}</span><span>${count}</span></div>${inner}`; g.appendChild(s); };
+  const byChar=(groups)=>{ let inner='',tot=0; for(const cls of Object.keys(groups)){ inner+=`<div class="subhd">${cls}</div>`+grid(groups[cls]); tot+=groups[cls].length; } return [inner,tot]; };
+  if(Object.keys(eq).length){ const [i,t]=byChar(eq); section('Equipped',t,i); }
+  if(Object.keys(ch).length){ const [i,t]=byChar(ch); section('On Character',t,i); }
+  if(vault.length) section('In Vault',vault.length,grid(vault));
   if(!shown) g.innerHTML='<div class="big">No weapons match these filters.</div>';
   observeImgs();
   $('cnt').textContent=`${shown} shown of ${WEAPONS.weapons.length}`;
@@ -239,7 +265,7 @@ function inspect(id){
   const tagBtn=(t,lbl)=>`<button class="btn sm ${w.tag===t?'act-on':'mut'}" data-act="tag" data-tag="${w.tag===t?'none':t}">${lbl}</button>`;
   $('ispcard').innerHTML=`<div class="ih"><span class="it ${d.tt===6?'exotic':''}">${d.icon?`<img src="${BN}${d.icon}">`:''}</span>
     <div><div class="disp" style="font-size:16px;color:#fff">${esc(d.n||'Weapon')}</div>
-    <div class="count" id="ispsub">${esc(d.ty||d.slot||'')} · ✦${w.pwr||'—'} · ${esc(w.own||'')}${w.locked?' · 🔒':''}${d.dmg?' · '+esc(d.dmg):''}</div></div></div>
+    <div class="count" id="ispsub">${esc(d.ty||d.slot||'')} · ✦${w.pwr||'—'} · ${LOCLABEL[w.loc]||esc(w.own||'')}${w.loc!=='vault'&&w.own?' ('+esc(w.own)+')':''}${w.locked?' · 🔒':''}${d.dmg?' · '+esc(d.dmg):''}${w.kills?' · '+w.kills.toLocaleString()+' kills':''}</div></div></div>
     ${col(w.cols?.[0],'Column 3')}${col(w.cols?.[1],'Column 4')}
     ${w.mw?`<div class="ispcol"><div class="ch">Masterwork</div><span class="pk">${w.mwIcon?`<img src="${BN}${w.mwIcon}">`:''}${esc(w.mw)}</span></div>`:''}
     <div class="ispacts">
@@ -302,6 +328,7 @@ document.querySelectorAll('.slot').forEach(s=>s.addEventListener('click',e=>{
 }));
 $('clearCombo').onclick=()=>{SLOTS=[new Set(),new Set()];activeSlot=0;renderSlots();render();};
 $('onlyMatch').onchange=e=>{onlyMatch=e.target.checked;render();};
+$('fSort').addEventListener('click',e=>{const b=e.target.closest('[data-sort]');if(!b)return;sortBy=b.dataset.sort;[...$('fSort').children].forEach(x=>x.classList.toggle('on',x===b));render();});
 
 // perk search dropdown
 $('pq').addEventListener('input',e=>{
@@ -326,8 +353,15 @@ async function load(){
     chipRow($('fMisc'),['Exotic','Legendary','Locked','New'],fMisc,'');
     chipRow($('fTag'),['favorite','keep','junk','none'],fTag,'');
     renderSlots(); render();
-    // perk library for the combo search (non-blocking)
-    fetch('/api/perks').then(r=>r.json()).then(p=>{LIB=p.perks||[];}).catch(()=>{});
+    // perk library (combo search) + per-perk score maps for the perk-score sorts
+    fetch('/api/perks').then(r=>r.json()).then(p=>{
+      LIB=p.perks||[];
+      PMINE={}; PPOP={};
+      for(const pk of LIB){ PMINE[pk.n]=pk.mine||0; PPOP[pk.n]=pk.pop||0; }
+      maxMine=Math.max(1,...LIB.map(pk=>pk.mine||0));
+      maxPop=Math.max(1,...LIB.map(pk=>pk.pop||0));
+      if(sortBy==='mine'||sortBy==='blend') render();
+    }).catch(()=>{});
   }catch(err){ $('grid').innerHTML=`<div class="big">Error: ${esc(err.message)}</div>`; }
 }
 load();

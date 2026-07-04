@@ -354,18 +354,20 @@ async function fetchProfile(e) {
     || (ms.destinyMemberships || []).find((x) => x.crossSaveOverride === 0 || x.crossSaveOverride === x.membershipType)
     || ms.destinyMemberships[0];
   const prof = await bungie(
-    `${BASE}/Destiny2/${m.membershipType}/Profile/${m.membershipId}/?components=102,200,201,205,300,304,305,310`,
+    // 309 = ItemPlugObjectives (kill-tracker progress)
+    `${BASE}/Destiny2/${m.membershipType}/Profile/${m.membershipId}/?components=102,200,201,205,300,304,305,309,310`,
     e, tok.access_token
   );
   const man = await loadManifest(e);
   const charName = {};
   for (const [cid, c] of Object.entries(prof.characters?.data || {})) charName[cid] = CLASS[c.classType] || 'Unknown';
+  // loc = where the item lives: vault | char (on a character, unequipped) | equipped.
   const raw = [];
-  for (const it of prof.profileInventory?.data?.items || []) raw.push({ it, own: 'Vault' });
+  for (const it of prof.profileInventory?.data?.items || []) raw.push({ it, own: 'Vault', loc: 'vault', cid: null });
   for (const [cid, inv] of Object.entries(prof.characterInventories?.data || {}))
-    for (const it of inv.items || []) raw.push({ it, own: charName[cid] });
+    for (const it of inv.items || []) raw.push({ it, own: charName[cid], loc: 'char', cid });
   for (const [cid, eq] of Object.entries(prof.characterEquipment?.data || {}))
-    for (const it of eq.items || []) raw.push({ it, own: charName[cid] });
+    for (const it of eq.items || []) raw.push({ it, own: charName[cid], loc: 'equipped', cid });
   // remember character context for item actions (lock/transfer/equip). Keep a
   // default character (lock/vault-pull need one) plus class<->id maps so we can
   // resolve which character holds a copy and name the target after an equip.
@@ -655,16 +657,26 @@ async function fetchWeapons(e) {
   const liveStats = prof.itemComponents?.stats?.data || {};
   const sockets = prof.itemComponents?.sockets?.data || {};
   const reusable = prof.itemComponents?.reusablePlugs?.data || {};
+  const plugObj = prof.itemComponents?.plugObjectives?.data || {};
 
   const weapons = [], defsOut = {}, perkIcons = {}; // perkIcons: perk name -> bungie.net icon path
   const px = (n, h) => { const ic = man.items[h]?.icon; if (ic && !perkIcons[n]) perkIcons[n] = ic; };
-  for (const { it, own } of raw) {
+  for (const { it, own, loc, cid } of raw) {
     const def = man.items[it.itemHash];
     if (!def || def.it !== 3 || !it.itemInstanceId || !WBUCKET[def.b]) continue;
     const id = it.itemInstanceId;
     const inst = instances[id] || {};
     const socks = sockets[id]?.sockets || [];
     const reuse = reusable[id]?.plugs || {};
+
+    // kill tracker: the tracker plug (pc contains 'masterworks.trackers') carries an
+    // objective whose progress = the weapon's kill count (whatever tracker is selected).
+    let kills = 0;
+    const trackSock = socks.find((s) => s.plugHash && /masterworks\.trackers/.test(man.items[s.plugHash]?.pc || ''));
+    if (trackSock) {
+      const objs = plugObj[id]?.objectivesPerPlug?.[trackSock.plugHash] || [];
+      for (const o of objs) if ((o.progress || 0) > kills) kills = o.progress;
+    }
 
     // trait columns: every perk available on THIS roll (multi-perk drops included).
     // Perks are identified by NAME: enhanced and normal variants of the same perk
@@ -730,8 +742,8 @@ async function fetchWeapons(e) {
       };
     }
     weapons.push({
-      id, hash: it.itemHash, rhash: it.itemHash, own, locked: !!(it.state & 1),
-      tag: tags[id] || '', pwr: inst.primaryStat?.value || 0,
+      id, hash: it.itemHash, rhash: it.itemHash, own, loc, ownCid: cid, locked: !!(it.state & 1),
+      tag: tags[id] || '', pwr: inst.primaryStat?.value || 0, kills,
       cols, mw, mwIcon, stats, statsMax,
     });
   }
