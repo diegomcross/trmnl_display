@@ -57,8 +57,8 @@ h1 span{color:var(--gold)}
 <link rel="stylesheet" href="/theme.css">
 </head>
 <body>
+<div id="gbanner"></div>
 <h1 class="disp">New <span>Drops</span></h1>
-<nav class="nav"><a href="/">Vault Verdict</a><a href="/weapons">Weapon Watch</a><a href="/perks">Perk Finder</a><a href="/drops" class="on">New Drops</a><a href="/fashion">Fashion</a><a href="/artifacts">Artifacts</a></nav>
 <p class="sub">Fresh drops of your watched weapons, scored against your god-roll wishlist.</p>
 <div class="bar">
   <button class="btn" id="refreshBtn">Refresh from Bungie</button>
@@ -163,5 +163,6 @@ async function load(fresh){
 }
 load(false);
 </script>
+<script src="/banner.js"></script>
 </body>
 </html>

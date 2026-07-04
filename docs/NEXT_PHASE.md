@@ -3,6 +3,29 @@
 > Maintained per CLAUDE.md. When a feature ships, move it to HANDOFF.md
 > "What works now" and delete it here.
 
+## Where we are (2026-07-04, evening — LOOK / BrayTech pass)
+
+Diego wants the app to look like his BrayTech character page
+(bray.tech/3/4611686018530139303/2305843010375154553/character): **top banner with his
+in-game emblem + name**, game-like everywhere, and **section tabs on the right** to reach
+Armor Vault / Weapon Vault / Fashion.
+
+**SHIPPED:** the nameplate banner (`banner.js` + `/api/account` + theme.css `.gb*`) on every
+page — emblem-art background, name (Aquarius), ✦power + class, character-switch dots, and the
+section nav right-aligned in the banner. See HANDOFF. This delivers "top banner + name" and the
+"section tabs on the right."
+
+**STILL OPEN — needs Diego's confirmation before building (don't assume):** he also said "add
+the filters for weapons on the right side." BrayTech has TWO side rails we haven't built:
+- **Left filter rail:** element (Kinetic/Solar/Arc/Void/Stasis/Strand), ammo (Primary/Special/
+  Heavy), rarity, champion mods, Shaped/Marked/Locked, subclass-verb icons — a visual filter set.
+- **Right rail:** ENGRAMS (postmaster), POWER (highest item per slot + actual light), CURRENCIES
+  (Glimmer/Bright Dust/etc).
+Open question for Diego: does he want (a) a BrayTech-style **left filter rail** on Weapon Watch /
+Vault (element/ammo/rarity/locked), (b) the **right power+currency rail**, or (c) both? And is the
+banner's right-aligned section nav enough for the "filter tabs on the right (armor/weapon/fashion)"
+he described, or did he mean a separate vertical rail? Ask before building — this is layout-heavy.
+
 ## Where we are (2026-07-04, latest)
 
 Just shipped: **Perk Finder** (`/perks`) — full details in HANDOFF. Diego asked for

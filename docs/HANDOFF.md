@@ -82,6 +82,7 @@ Core priorities, in his words:
 | `fashion.html` | **Fashion loadouts** (served at `/fashion`): each character's equipped armor ornaments + shaders with icons; save named looks (`fashion.json`, gitignored) and re-apply them in one click. Apply requires the character to be in orbit. |
 | `theme.css` | **Shared visual theme** for all four Vault Verdict pages (served at `/theme.css`, linked after each page's inline `<style>`). BrayTech/in-game look: ground `#101312`, hairline white borders, square tiles, Destiny rarity/energy colors, self-hosted **Arimo** (Helvetica/Neue-Haas twin) type, tabular numbers. Pages share CSS-var names so this one file re-skins everything — **edit design tokens here, once.** Also styles the **item tiles** (`.wtile` weapon art, `.pkico` perk-icon tiles) that Weapon Watch renders from `/api/weapons` art — a token repaint alone did NOT read as BrayTech; the real look needed the actual weapon/perk artwork as rarity-framed square tiles. The e-ink display (`server.js`, 1-bit) is separate and unaffected. |
 | `fonts/arimo-*.woff2` | Self-hosted Arimo 400/500/700 (latin subset, Apache-2.0), served at `/fonts/`. Bundled so type is identical on every device incl. Android. |
+| `banner.js` | **Shared in-game nameplate + section nav** (served at `/banner.js`, included by every page via `<script src="/banner.js">` into a `<div id="gbanner">`). Renders your equipped **emblem art as the banner background**, Bungie name, power (✦light) + class, character-switch dots, and the right-aligned section tabs (Armor Vault · Weapon Vault · Fashion · Perk Finder · New Drops · Artifacts). Data from `/api/account`. Replaces the old per-page `<nav class="nav">` — edit nav/banner in this one file. |
 | `perk-finder.html` | **Perk Finder** (served at `/perks`): pickable list of *all* trait perks in the game, ranked by community popularity (PvE/PvP split bar), with search + column/owned/ranked filters. Build a **combo as two slots** (Slot 1 + Slot 2; multiple perks in a slot = interchangeable "any of these") → live-scores your owned weapon copies, counting a **full match only when a weapon can roll one perk from each slot in *different columns*** (so the perks actually combine); marks copies you already have rolled. Save role-tagged combos (ad-clear/pve/pvp/dps) to `perk-combos.json` (gitignored). Backed by `/api/perks` + `/api/combos`. |
 | `.dim-wishlist.json` | Gitignored cache: the parsed DIM community wishlist folded to `{perkName:{total,pve,pvp}}` — the "popularity" behind Perk Finder. Re-downloaded weekly from the voltron list. |
 | `artifacts.html` | **Artifact Mods** reference (served at `/artifacts`): all 7 Monument of Triumph artifacts × 3 columns × 7 mods, with a filter by subclass verb (Solar/Arc/Void/Stasis/Strand/Prismatic keywords) + keywords (Champions, grenade, Super, weapon types) + free text search. **Data is STATIC** (hand-transcribed from the neonlightsmedia Monument of Triumph guide) — if Bungie changes artifacts/mods, edit the `ARTIFACTS` array in this file. No API. |
@@ -318,6 +319,15 @@ Core priorities, in his words:
     lazy-loaded on first Farmable use). Owned weapons are badged "owned" and listed first; each row
     shows the weapon's drop source (`src`). Verified: Voltshot|Rolling Storm + Jolting Feedback →
     15 farmable weapons (owned Keening/Antedate/… first, then Arc Logic→The Moon etc.).
+  - **In-game nameplate banner (2026-07-04, `banner.js` on every page):** Diego wants the app
+    to look like his BrayTech character page — top banner with his emblem + name. `GET /api/account`
+    (server `fetchAccount`, component 200) returns `{name, code, chars:[{id,cls,light,emblemBg,
+    emblem,lastPlayed}]}` sorted most-recently-played first. `banner.js` paints the emblem
+    background art + name (Aquarius) + ✦power + class + emblem dots to switch character, and the
+    section nav right-aligned (BrayTech style). The old per-page top nav was removed in favour of
+    this shared bar. Verified: banner + character-switch (Warlock ✦532 ↔ Titan ✦550) work on all
+    pages, no content regressed. **Still open per Diego's ask** (surface, don't assume): a left
+    filter rail (element/ammo/rarity like BrayTech) and a right power/currency rail — see NEXT_PHASE.
   - DIM overlay (armor): optional `dim-data.json` (tags + loadouts) merges into verdicts.
   - **DIM two-way tag sync (weapons, shipped):** Weapon Watch keep/favorite/junk tags are
     synced live with DIM's cloud. `vault-verdict.js` holds a small DIM Sync API client:

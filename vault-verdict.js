@@ -379,6 +379,26 @@ async function fetchProfile(e) {
 }
 let LOCK_CTX = null;
 
+// ---------- account nameplate: emblem banner + Bungie name + per-character power ----------
+// Light call (component 200 = characters) for the game-style header. Cached in memory;
+// ?fresh=1 re-pulls (power/emblem change as you play).
+let ACCOUNT = null;
+async function fetchAccount(e) {
+  const tok = await accessToken(e);
+  const ms = await bungie(`${BASE}/User/GetMembershipsById/${tok.membership_id}/254/`, e, tok.access_token);
+  const primary = ms.primaryMembershipId;
+  const m = (ms.destinyMemberships || []).find((x) => x.membershipId === primary)
+    || (ms.destinyMemberships || []).find((x) => x.crossSaveOverride === 0 || x.crossSaveOverride === x.membershipType)
+    || ms.destinyMemberships[0];
+  const prof = await bungie(`${BASE}/Destiny2/${m.membershipType}/Profile/${m.membershipId}/?components=200`, e, tok.access_token);
+  const chars = Object.entries(prof.characters?.data || {}).map(([id, c]) => ({
+    id, cls: CLASS[c.classType] || 'Guardian', light: c.light || 0,
+    emblemBg: c.emblemBackgroundPath || '', emblem: c.emblemPath || '', lastPlayed: c.dateLastPlayed || '',
+  })).sort((a, b) => (a.lastPlayed < b.lastPlayed ? 1 : -1)); // most recently played first
+  ACCOUNT = { name: m.bungieGlobalDisplayName || m.displayName || 'Guardian', code: m.bungieGlobalDisplayNameCode || null, chars };
+  return ACCOUNT;
+}
+
 // Lock/unlock an item via the Bungie API. Needs the MoveEquipDestinyItems OAuth
 // scope on the app — if missing, Bungie returns an auth error we pass through.
 async function setLock(e, itemId, locked) {
@@ -976,6 +996,10 @@ async function main() {
       if (req.url.startsWith('/api/weapon-pools')) {
         return json(await buildWeaponPools(e));
       }
+      if (req.url.startsWith('/api/account')) {
+        if (!ACCOUNT || req.url.includes('fresh=1')) await fetchAccount(e);
+        return json(ACCOUNT);
+      }
       if (req.url.startsWith('/api/combos')) {
         if (req.method === 'POST') { saveCombos(JSON.parse(await readBody(req) || '[]')); return json({ ok: true }); }
         return json(loadCombos());
@@ -988,6 +1012,10 @@ async function main() {
       if (req.url.startsWith('/theme.css')) {
         res.writeHead(200, { 'Content-Type': 'text/css; charset=utf-8' });
         return res.end(fs.readFileSync(path.join(__dirname, 'theme.css')));
+      }
+      if (req.url.startsWith('/banner.js')) {
+        res.writeHead(200, { 'Content-Type': 'application/javascript; charset=utf-8' });
+        return res.end(fs.readFileSync(path.join(__dirname, 'banner.js')));
       }
       if (req.url.startsWith('/fonts/')) {
         const f = path.basename(req.url.split('?')[0]);              // no path traversal
