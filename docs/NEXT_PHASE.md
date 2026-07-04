@@ -15,16 +15,24 @@ page — emblem-art background, name (Aquarius), ✦power + class, character-swi
 section nav right-aligned in the banner. See HANDOFF. This delivers "top banner + name" and the
 "section tabs on the right."
 
-**STILL OPEN — needs Diego's confirmation before building (don't assume):** he also said "add
-the filters for weapons on the right side." BrayTech has TWO side rails we haven't built:
-- **Left filter rail:** element (Kinetic/Solar/Arc/Void/Stasis/Strand), ammo (Primary/Special/
-  Heavy), rarity, champion mods, Shaped/Marked/Locked, subclass-verb icons — a visual filter set.
-- **Right rail:** ENGRAMS (postmaster), POWER (highest item per slot + actual light), CURRENCIES
-  (Glimmer/Bright Dust/etc).
-Open question for Diego: does he want (a) a BrayTech-style **left filter rail** on Weapon Watch /
-Vault (element/ammo/rarity/locked), (b) the **right power+currency rail**, or (c) both? And is the
-banner's right-aligned section nav enough for the "filter tabs on the right (armor/weapon/fashion)"
-he described, or did he mean a separate vertical rail? Ask before building — this is layout-heavy.
+**Diego's clarified vision (2026-07-04):** build a BrayTech-style **unified vault** — the armor &
+weapon **inventory/vault as a visual grid** in the left/center, and on the **right side** put the
+**tools we already built** (perk filters for weapons, junk/keep verdict for armor) where BrayTech
+shows engrams/power/currencies. Grid views are ADDITIVE — do NOT remove Weapon Watch / Vault
+Verdict tools.
+
+- ✅ **Weapon Vault — SHIPPED 2026-07-04** (`weapon-vault.html`, `/vault`; see HANDOFF): weapon
+  grid + right-rail filters (element/ammo/rarity/tag) + perk-combo filter + tile inspect. Nav now
+  has both "Weapon Vault" (grid) and "Weapon Watch" (tracker).
+- **NEXT: Armor Vault grid** — same treatment for armor (`vault-verdict.js` `fetchArmor` already
+  scores keep/junk/review). New `armor-vault.html` at (probably) `/` or `/armor`: armor tiles
+  grouped by slot/class, right rail = the keep/junk **verdict + its filters** (class, slot, bonus
+  set, keep/review/junk) instead of BrayTech's power/currency rail. Reuse Vault Verdict's engine;
+  present as a grid. Confirm with Diego whether the new grid becomes the primary "Armor Vault" (/)
+  or sits alongside the existing detailed Vault Verdict page.
+- **Later polish:** click a Weapon Vault tile → could offer lock/tag/equip actions inline (the
+  `/api/tag`,`/api/lock`,`/api/equip`,`/api/vault` endpoints already exist); a right power/currency
+  rail if Diego still wants the BrayTech info panel too.
 
 ## Where we are (2026-07-04, latest)
 

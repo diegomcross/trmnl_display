@@ -1027,6 +1027,7 @@ async function main() {
       }
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
       if (req.url.startsWith('/weapons')) return res.end(fs.readFileSync(path.join(__dirname, 'weapon-watch.html')));
+      if (req.url.startsWith('/vault')) return res.end(fs.readFileSync(path.join(__dirname, 'weapon-vault.html')));
       if (req.url.startsWith('/perks')) return res.end(fs.readFileSync(path.join(__dirname, 'perk-finder.html')));
       if (req.url.startsWith('/drops')) return res.end(fs.readFileSync(path.join(__dirname, 'weapon-drops.html')));
       if (req.url.startsWith('/fashion')) return res.end(fs.readFileSync(path.join(__dirname, 'fashion.html')));

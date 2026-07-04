@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Weapon Vault</title>
+<style>
+:root{
+  --bg:#0c0e12; --panel:#151821; --panel2:#1b1f2b; --line:#2a2f3d;
+  --ink:#e9ebf2; --mut:#8b93a7; --dim:#5c6375; --gold:#cfae42; --keep:#5fd0dd; --junk:#ff6a52; --fav:#cfae42;
+  --legendary:#522f65; --exotic:#cdae32;
+  --kinetic:#e6e6e6; --solar:#f1631d; --arc:#6de8f1; --void:#a777c5; --stasis:#4d88ff; --strand:#35e366;
+  --clip:none;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--ink);font:14px/1.45 "Segoe UI",Roboto,system-ui,sans-serif;padding:12px;padding-bottom:40px}
+.disp{font-family:Bahnschrift,"Roboto Condensed","Arial Narrow",sans-serif;text-transform:uppercase;letter-spacing:.09em}
+h1{font-size:20px;font-weight:600}
+h1 span{color:var(--gold)}
+h2{font-size:12px;color:var(--mut);letter-spacing:.08em}
+.sub{color:var(--mut);font-size:12px;margin:2px 0 10px}
+.count{color:var(--mut);font-size:12px}
+.btn{background:var(--panel2);border:1px solid var(--gold);color:var(--gold);padding:6px 11px;font-size:11px;cursor:pointer;font-family:inherit}
+.btn.sm{padding:4px 8px;font-size:10px}
+.btn.mut{border-color:var(--line);color:var(--mut)}
+input{background:var(--panel2);border:1px solid var(--line);color:var(--ink);padding:6px 9px;font:inherit;font-size:12px}
+input:focus{outline:none;border-color:var(--gold)}
+
+.wrap{display:grid;grid-template-columns:1fr 320px;gap:14px;align-items:start}
+@media(max-width:900px){.wrap{grid-template-columns:1fr}}
+
+/* ---- weapon grid ---- */
+.slotsec{margin-bottom:14px}
+.slothd{font-family:Bahnschrift,sans-serif;text-transform:uppercase;letter-spacing:.1em;font-size:11px;color:var(--mut);border-bottom:1px solid var(--line);padding-bottom:4px;margin-bottom:8px;display:flex;justify-content:space-between}
+.wgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(58px,1fr));gap:5px}
+.wt{position:relative;aspect-ratio:1;border:1px solid var(--line);background:var(--legendary);cursor:pointer;overflow:hidden}
+.wt.exotic{background:var(--exotic)}
+.wt>img{width:100%;height:100%;object-fit:cover;display:block}
+.wt .pw{position:absolute;right:0;bottom:0;background:rgba(0,0,0,.72);color:#fff;font:600 10px/1 Bahnschrift,sans-serif;padding:2px 3px}
+.wt .el{position:absolute;left:2px;bottom:2px;width:9px;height:9px;border-radius:50%;box-shadow:0 0 0 1px rgba(0,0,0,.6)}
+.wt .lk{position:absolute;right:2px;top:2px;font-size:9px;color:#fff;text-shadow:0 0 2px #000;opacity:.9}
+.wt .tg{position:absolute;left:0;top:0;width:100%;height:3px}
+.wt.tg-keep .tg{background:var(--keep)} .wt.tg-favorite .tg{background:var(--fav)} .wt.tg-junk .tg{background:var(--junk)}
+.wt.fresh{box-shadow:inset 0 0 0 1px var(--keep)}
+.wt.sel{outline:2px solid var(--white,#fff);outline-offset:-2px}
+.wt.match{outline:2px solid var(--gold);outline-offset:-2px}
+.wt.hide{display:none}
+.wt.dim{opacity:.2}
+
+/* ---- right rail ---- */
+.rail{position:sticky;top:12px;display:flex;flex-direction:column;gap:12px}
+.card{background:var(--panel);border:1px solid var(--line);padding:11px}
+.fgrp{margin-bottom:9px}
+.fgrp:last-child{margin-bottom:0}
+.flabel{font-family:Bahnschrift,sans-serif;text-transform:uppercase;letter-spacing:.07em;font-size:10px;color:var(--dim);margin-bottom:5px}
+.chips{display:flex;flex-wrap:wrap;gap:4px}
+.fchip{border:1px solid var(--line);background:var(--panel2);color:var(--mut);font-size:11px;padding:4px 8px;cursor:pointer;display:inline-flex;align-items:center;gap:5px}
+.fchip.on{border-color:var(--gold);color:var(--ink)}
+.fchip .dot{width:9px;height:9px;border-radius:50%}
+.fchip.on.el-Solar{border-color:var(--solar)} .fchip.on.el-Arc{border-color:var(--arc)} .fchip.on.el-Void{border-color:var(--void)}
+.fchip.on.el-Stasis{border-color:var(--stasis)} .fchip.on.el-Strand{border-color:var(--strand)} .fchip.on.el-Kinetic{border-color:var(--kinetic)}
+
+/* perk combo builder in the rail */
+.slotwrap{display:grid;grid-template-columns:1fr auto 1fr;gap:6px;align-items:stretch;margin-top:4px}
+.slot{background:var(--panel2);border:1px solid var(--line);padding:6px;min-height:52px;cursor:pointer}
+.slot.active{border-color:var(--gold);box-shadow:inset 0 0 0 1px var(--gold)}
+.slh{font-family:Bahnschrift,sans-serif;text-transform:uppercase;letter-spacing:.06em;font-size:10px;color:var(--mut);margin-bottom:4px}
+.slot.active .slh{color:var(--gold)}
+.slotx{display:flex;align-items:center;color:var(--gold);font-size:16px}
+.selperk{display:inline-flex;align-items:center;gap:4px;background:var(--panel);border:1px solid var(--gold);color:var(--gold);padding:2px 5px 2px 3px;font-size:11px;cursor:pointer;margin:2px 2px 0 0}
+.selperk img{width:18px;height:18px} .selperk .x{color:var(--junk);margin-left:2px}
+.slotempty{font-size:10px;color:var(--dim)}
+.psearch{position:relative;margin-top:8px}
+.pdrop{position:absolute;left:0;right:0;top:100%;z-index:5;background:var(--panel2);border:1px solid var(--line);max-height:210px;overflow:auto;display:none}
+.pdrop.open{display:block}
+.pitem{display:flex;align-items:center;gap:7px;padding:5px 8px;cursor:pointer;font-size:12px}
+.pitem:hover{background:rgba(207,174,66,.14)}
+.pitem img{width:22px;height:22px}
+.pitem .pn{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pitem .pp{font-size:10px;color:var(--dim);font-variant-numeric:tabular-nums}
+.pkico{width:22px;height:22px}
+
+/* inspect popover */
+#insp{position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;align-items:center;justify-content:center;z-index:20;padding:16px}
+#insp.open{display:flex}
+.ispcard{background:var(--panel);border:1px solid var(--line);max-width:420px;width:100%;padding:14px}
+.ispcard .ih{display:flex;gap:10px;align-items:center;margin-bottom:10px}
+.ispcard .it{width:52px;height:52px;border:1px solid var(--line);background:var(--legendary);flex:0 0 auto}
+.ispcard .it.exotic{background:var(--exotic)} .ispcard .it img{width:100%;height:100%;object-fit:cover}
+.ispcol{margin-top:8px}
+.ispcol .ch{font-family:Bahnschrift,sans-serif;text-transform:uppercase;font-size:10px;color:var(--dim);letter-spacing:.06em;margin-bottom:4px}
+.pk{display:inline-flex;align-items:center;gap:5px;border:1px solid var(--line);padding:2px 7px 2px 3px;font-size:11px;margin:0 4px 4px 0}
+.pk.on{border-color:var(--keep);color:var(--keep)} .pk img{width:20px;height:20px}
+.big{text-align:center;color:var(--mut);padding:24px 12px;font-size:13px}
+:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+@media(min-width:1300px){body{max-width:1280px;margin:0 auto}}
+</style>
+<link rel="stylesheet" href="/theme.css">
+</head>
+<body>
+<div id="gbanner"></div>
+<h1 class="disp">Weapon <span>Vault</span></h1>
+<p class="sub">Your whole arsenal as tiles — filter by element, ammo, rarity, tag, or a perk combo. <span id="cnt" class="count"></span></p>
+
+<div class="wrap">
+  <div id="grid"><div class="big">Loading your vault…</div></div>
+
+  <div class="rail">
+    <div class="card">
+      <div class="fgrp"><input id="q" placeholder="Search weapon name…" style="width:100%"></div>
+      <div class="fgrp"><div class="flabel">Element</div><div class="chips" id="fEl"></div></div>
+      <div class="fgrp"><div class="flabel">Ammo</div><div class="chips" id="fAmmo"></div></div>
+      <div class="fgrp"><div class="flabel">Rarity · State</div><div class="chips" id="fMisc"></div></div>
+      <div class="fgrp"><div class="flabel">Tag</div><div class="chips" id="fTag"></div></div>
+      <button class="btn sm mut" id="reset" style="margin-top:4px">Reset filters</button>
+    </div>
+
+    <div class="card">
+      <h2 class="disp">Perk combo filter</h2>
+      <p class="sub" style="margin:4px 0 6px">Pick perks into two slots — weapons that can roll one from each in different columns light up.</p>
+      <div class="slotwrap">
+        <div class="slot active" data-slot="0"><div class="slh">Slot 1</div><div id="s0"><span class="slotempty">click to add</span></div></div>
+        <div class="slotx">+</div>
+        <div class="slot" data-slot="1"><div class="slh">Slot 2</div><div id="s1"><span class="slotempty">optional</span></div></div>
+      </div>
+      <div class="psearch"><input id="pq" placeholder="Add a perk…" style="width:100%"><div class="pdrop" id="pdrop"></div></div>
+      <div style="display:flex;gap:6px;margin-top:8px;align-items:center">
+        <label style="font-size:11px;color:var(--mut);display:flex;gap:5px;align-items:center"><input type="checkbox" id="onlyMatch">only matches</label>
+        <button class="btn sm mut" id="clearCombo" style="margin-left:auto">Clear combo</button>
+      </div>
+      <div class="count" id="matchcnt" style="margin-top:6px"></div>
+    </div>
+  </div>
+</div>
+
+<div id="insp"><div class="ispcard" id="ispcard"></div></div>
+
+<script>
+const $=id=>document.getElementById(id);
+const esc=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
+const BN='https://www.bungie.net';
+const ELCOL={Kinetic:'#e6e6e6',Solar:'#f1631d',Arc:'#6de8f1',Void:'#a777c5',Stasis:'#4d88ff',Strand:'#35e366'};
+const SLOTORD=['Kinetic','Energy','Power'];
+
+let WEAPONS={weapons:[],defs:{},perkIcons:{}}, PICONS={}, LIB=[];
+let fEl=new Set(), fAmmo=new Set(), fMisc=new Set(), fTag=new Set(), q='';
+let SLOTS=[new Set(),new Set()], activeSlot=0, onlyMatch=false;
+
+// ---- filter chip builders ----
+function chipRow(el,items,set,cls){
+  el.innerHTML=items.map(v=>`<button class="fchip ${cls?cls+v:''}" data-v="${esc(v)}">${cls==='el-'?`<span class="dot" style="background:${ELCOL[v]}"></span>`:''}${esc(v)}</button>`).join('');
+  el.addEventListener('click',e=>{const b=e.target.closest('[data-v]');if(!b)return;const v=b.dataset.v;set.has(v)?set.delete(v):set.add(v);b.classList.toggle('on',set.has(v));render();});
+}
+
+// ---- perk combo (column-aware match, same rule as Perk Finder) ----
+const slotOf=n=>SLOTS[0].has(n)?0:SLOTS[1].has(n)?1:-1;
+function scoreCopy(w){
+  const A=SLOTS[0],B=SLOTS[1]; if(!A.size&&!B.size) return null;
+  const c0=w.cols?.[0]||[],c1=w.cols?.[1]||[];
+  const has=(col,set)=>col.some(pk=>set.has(pk.n));
+  if(!B.size){ return (has(c0,A)||has(c1,A))?{full:true}:{full:false}; }
+  const opt1=has(c0,A)&&has(c1,B), opt2=has(c1,A)&&has(c0,B);
+  return {full:opt1||opt2};
+}
+function renderSlots(){
+  document.querySelectorAll('.slot').forEach(s=>s.classList.toggle('active',+s.dataset.slot===activeSlot));
+  [0,1].forEach(i=>{const arr=[...SLOTS[i]];$('s'+i).innerHTML=arr.length?arr.map(n=>`<span class="selperk" data-rm="${esc(n)}">${PICONS[n]?`<img src="${BN}${PICONS[n]}">`:''}${esc(n)}<span class="x">✕</span></span>`).join(''):`<span class="slotempty">${i===0?'click to add':'optional'}</span>`;});
+}
+
+// ---- main grid ----
+function passQuick(w,d){
+  if(q && !d.n.toLowerCase().includes(q)) return false;
+  if(fEl.size && !fEl.has(d.dmg)) return false;
+  if(fAmmo.size && !fAmmo.has(d.ammo)) return false;
+  if(fMisc.size){
+    for(const m of fMisc){
+      if(m==='Exotic'&&d.tt!==6) return false;
+      if(m==='Legendary'&&d.tt!==5) return false;
+      if(m==='Locked'&&!w.locked) return false;
+      if(m==='New'&&!w.fresh) return false;
+    }
+  }
+  if(fTag.size && !fTag.has(w.tag||'none')) return false;
+  return true;
+}
+function render(){
+  const combo=(SLOTS[0].size||SLOTS[1].size);
+  let shown=0, matched=0;
+  const bySlot={Kinetic:[],Energy:[],Power:[]};
+  for(const w of WEAPONS.weapons){
+    const d=WEAPONS.defs[w.hash]||{}; w._d=d;
+    if(!passQuick(w,d)){ w._st='hide'; continue; }
+    let st='';
+    if(combo){ const sc=scoreCopy(w); if(sc&&sc.full){ st='match'; matched++; } else if(onlyMatch){ st='hide'; } else st='dim'; }
+    if(st==='hide'){ w._st='hide'; continue; }
+    w._st=st; shown++;
+    (bySlot[d.slot]||(bySlot[d.slot]=[])).push(w);
+  }
+  const g=$('grid'); g.innerHTML='';
+  for(const slot of SLOTORD){
+    const arr=(bySlot[slot]||[]).sort((a,b)=>b.pwr-a.pwr);
+    if(!arr.length) continue;
+    const sec=document.createElement('div'); sec.className='slotsec';
+    sec.innerHTML=`<div class="slothd"><span>${slot} Weapons</span><span>${arr.length}</span></div><div class="wgrid">${arr.map(tile).join('')}</div>`;
+    g.appendChild(sec);
+  }
+  if(!shown) g.innerHTML='<div class="big">No weapons match these filters.</div>';
+  observeImgs();
+  $('cnt').textContent=`${shown} shown of ${WEAPONS.weapons.length}`;
+  $('matchcnt').textContent=combo?`${matched} weapon${matched===1?'':'s'} can roll this combo`:'';
+}
+function tile(w){
+  const d=w._d, ex=d.tt===6, el=ELCOL[d.dmg]?`<span class="el" style="background:${ELCOL[d.dmg]}"></span>`:'';
+  const tg=w.tag?` tg-${w.tag}`:'';
+  return `<div class="wt ${ex?'exotic':''}${tg}${w._st==='match'?' match':''}${w._st==='dim'?' dim':''}${w.fresh?' fresh':''}" data-id="${w.id}" title="${esc(d.n||'')}">
+    ${d.icon?`<img data-src="${BN}${d.icon}" alt="">`:''}<span class="tg"></span>
+    ${w.locked?'<span class="lk">🔒</span>':''}${el}<span class="pw">${w.pwr||''}</span></div>`;
+}
+// Only fetch a tile's emblem art once it scrolls near view — the vault can hold
+// hundreds of weapons and loading every icon at once floods the network.
+const io=new IntersectionObserver((ents)=>{for(const en of ents){ if(en.isIntersecting){ const im=en.target; im.src=im.dataset.src; im.removeAttribute('data-src'); io.unobserve(im); } }},{rootMargin:'300px'});
+function observeImgs(){ document.querySelectorAll('.wt img[data-src]').forEach(im=>io.observe(im)); }
+
+// ---- inspect popover ----
+function inspect(id){
+  const w=WEAPONS.weapons.find(x=>x.id===id); if(!w) return;
+  const d=WEAPONS.defs[w.hash]||{};
+  const col=(arr,label)=>`<div class="ispcol"><div class="ch">${label}</div>${(arr||[]).map(p=>`<span class="pk ${p.on?'on':''}">${PICONS[p.n]?`<img src="${BN}${PICONS[p.n]}">`:''}${esc(p.n)}${p.on?' •':''}</span>`).join('')||'<span class="slotempty">—</span>'}</div>`;
+  $('ispcard').innerHTML=`<div class="ih"><span class="it ${d.tt===6?'exotic':''}">${d.icon?`<img src="${BN}${d.icon}">`:''}</span>
+    <div><div class="disp" style="font-size:16px;color:#fff">${esc(d.n||'Weapon')}</div>
+    <div class="count">${esc(d.ty||d.slot||'')} · ✦${w.pwr||'—'}${w.tag?' · '+esc(w.tag):''}${w.locked?' · 🔒':''}${d.dmg?' · '+esc(d.dmg):''}</div></div></div>
+    ${col(w.cols?.[0],'Column 3')}${col(w.cols?.[1],'Column 4')}
+    ${w.mw?`<div class="ispcol"><div class="ch">Masterwork</div><span class="pk">${w.mwIcon?`<img src="${BN}${w.mwIcon}">`:''}${esc(w.mw)}</span></div>`:''}
+    <div style="text-align:right;margin-top:10px"><button class="btn sm mut" onclick="document.getElementById('insp').classList.remove('open')">Close</button></div>`;
+  $('insp').classList.add('open');
+}
+
+// ---- wire ----
+$('grid').addEventListener('click',e=>{const t=e.target.closest('[data-id]');if(t) inspect(t.dataset.id);});
+$('insp').addEventListener('click',e=>{if(e.target.id==='insp')$('insp').classList.remove('open');});
+$('q').addEventListener('input',e=>{q=e.target.value.toLowerCase().trim();render();});
+$('reset').onclick=()=>{fEl.clear();fAmmo.clear();fMisc.clear();fTag.clear();q='';$('q').value='';document.querySelectorAll('.fchip.on').forEach(c=>c.classList.remove('on'));render();};
+document.querySelectorAll('.slot').forEach(s=>s.addEventListener('click',e=>{
+  const rm=e.target.closest('[data-rm]'); if(rm){SLOTS[0].delete(rm.dataset.rm);SLOTS[1].delete(rm.dataset.rm);renderSlots();render();return;}
+  activeSlot=+s.dataset.slot; renderSlots();
+}));
+$('clearCombo').onclick=()=>{SLOTS=[new Set(),new Set()];activeSlot=0;renderSlots();render();};
+$('onlyMatch').onchange=e=>{onlyMatch=e.target.checked;render();};
+
+// perk search dropdown
+$('pq').addEventListener('input',e=>{
+  const t=e.target.value.toLowerCase().trim();
+  if(!t){$('pdrop').classList.remove('open');return;}
+  const hits=LIB.filter(p=>p.n.toLowerCase().includes(t)).slice(0,20);
+  $('pdrop').innerHTML=hits.map(p=>`<div class="pitem" data-add="${esc(p.n)}">${PICONS[p.n]?`<img src="${BN}${PICONS[p.n]}">`:'<span class="pkico"></span>'}<span class="pn">${esc(p.n)}</span><span class="pp">${p.pop||''}</span></div>`).join('')||'<div class="pitem">no match</div>';
+  $('pdrop').classList.add('open');
+});
+$('pdrop').addEventListener('click',e=>{const it=e.target.closest('[data-add]');if(!it)return;const n=it.dataset.add;SLOTS[0].delete(n);SLOTS[1].delete(n);SLOTS[activeSlot].add(n);$('pq').value='';$('pdrop').classList.remove('open');renderSlots();render();});
+document.addEventListener('click',e=>{if(!e.target.closest('.psearch'))$('pdrop').classList.remove('open');});
+
+async function load(){
+  try{
+    const w=await fetch('/api/weapons').then(r=>r.json());
+    WEAPONS=w; PICONS=w.perkIcons||{};
+    // build filter chips from actual data
+    const els=[...new Set(Object.values(w.defs).map(d=>d.dmg).filter(Boolean))].sort((a,b)=>['Kinetic','Solar','Arc','Void','Stasis','Strand'].indexOf(a)-['Kinetic','Solar','Arc','Void','Stasis','Strand'].indexOf(b));
+    const ammo=[...new Set(Object.values(w.defs).map(d=>d.ammo).filter(Boolean))];
+    chipRow($('fEl'),els,fEl,'el-');
+    chipRow($('fAmmo'),ammo,fAmmo,'');
+    chipRow($('fMisc'),['Exotic','Legendary','Locked','New'],fMisc,'');
+    chipRow($('fTag'),['favorite','keep','junk','none'],fTag,'');
+    renderSlots(); render();
+    // perk library for the combo search (non-blocking)
+    fetch('/api/perks').then(r=>r.json()).then(p=>{LIB=p.perks||[];}).catch(()=>{});
+  }catch(err){ $('grid').innerHTML=`<div class="big">Error: ${esc(err.message)}</div>`; }
+}
+load();
+</script>
+<script src="/banner.js"></script>
+</body>
+</html>
