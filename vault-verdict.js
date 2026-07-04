@@ -432,6 +432,67 @@ async function equipWeapon(e, itemId, hash, ownClass) {
   return { own: LOCK_CTX.clsById[target] || ownClass };
 }
 
+// ---------- fashion (armor ornaments + shaders) ----------
+// Cosmetic sockets on equipped armor: the shader plug has plugCategory 'shader';
+// the ornament plug's category starts with 'armor_skins_' (e.g. armor_skins_warlock_head).
+const ARMOR_BUCKETS = { 3448274439: 'Helmet', 3551918588: 'Gauntlets', 14239492: 'Chest', 20886954: 'Legs', 1585787867: 'Class' };
+const SLOT_ORDER = ['Helmet', 'Gauntlets', 'Chest', 'Legs', 'Class'];
+
+async function fetchFashion(e) {
+  const { prof, man, m } = await fetchProfile(e);
+  const sockets = prof.itemComponents?.sockets?.data || {};
+  const chars = {};
+  for (const [cid, c] of Object.entries(prof.characters?.data || {})) {
+    const slots = {};
+    for (const it of prof.characterEquipment?.data?.[cid]?.items || []) {
+      const def = man.items[it.itemHash];
+      const slot = ARMOR_BUCKETS[def?.b];
+      if (!slot || !it.itemInstanceId) continue;
+      let orn = null, shd = null;
+      (sockets[it.itemInstanceId]?.sockets || []).forEach((s, idx) => {
+        if (!s.plugHash) return;
+        const p = man.items[s.plugHash]; if (!p) return;
+        if (p.pc === 'shader') shd = { hash: s.plugHash, name: p.n, icon: p.icon || '', idx };
+        else if (p.pc && p.pc.startsWith('armor_skins_')) orn = { hash: s.plugHash, name: p.n, icon: p.icon || '', idx };
+      });
+      slots[slot] = { itemId: it.itemInstanceId, name: def.n, icon: def.icon || '', orn, shd };
+    }
+    chars[cid] = { cls: CLASS[c.classType] || 'Unknown', slots };
+  }
+  return { characters: chars, order: SLOT_ORDER, account: `${m.membershipType}/${m.membershipId}` };
+}
+
+// Apply a saved look to a character's currently-equipped armor. Inserts the saved
+// ornament + shader plug into each piece's cosmetic sockets (skips ones already set).
+// Requires the character to be in orbit (Bungie returns DestinyCharacterNotInTower otherwise).
+async function applyLook(e, characterId, look) {
+  const tok = await accessToken(e);
+  if (!LOCK_CTX) await fetchProfile(e);
+  const fashion = await fetchFashion(e);
+  const ch = fashion.characters[characterId];
+  if (!ch) throw new Error('character not found');
+  const results = [];
+  for (const slot of SLOT_ORDER) {
+    const want = (look.slots || {})[slot]; if (!want) continue;
+    const cur = ch.slots[slot];
+    if (!cur) { results.push({ slot, ok: false, msg: 'nothing equipped' }); continue; }
+    for (const kind of ['orn', 'shd']) {
+      const wantHash = want[kind]; if (!wantHash) continue;
+      const sock = cur[kind];
+      if (!sock) { results.push({ slot, kind, ok: false, msg: `no ${kind === 'orn' ? 'ornament' : 'shader'} socket` }); continue; }
+      if (sock.hash === wantHash) { results.push({ slot, kind, ok: true, msg: 'already set' }); continue; }
+      try {
+        await bungiePost(`${BASE}/Destiny2/Actions/Items/InsertSocketPlugFree/`, {
+          plug: { socketIndex: sock.idx, socketArrayType: 0, plugItemHash: Number(wantHash) },
+          itemId: cur.itemId, characterId, membershipType: LOCK_CTX.membershipType,
+        }, e, tok.access_token);
+        results.push({ slot, kind, ok: true });
+      } catch (err) { results.push({ slot, kind, ok: false, msg: err.message }); }
+    }
+  }
+  return results;
+}
+
 // ---------- profile -> armor items ----------
 async function fetchArmor(e) {
   const { prof, man, m, raw } = await fetchProfile(e);
@@ -657,6 +718,10 @@ const SEEN_FILE = path.join(__dirname, 'weapon-seen.json');
 const loadSeen = () => { const s = loadJson(SEEN_FILE); return { seeded: !!s.seeded, ids: new Set(s.ids || []) }; };
 const saveSeen = (s) => saveJsonSafe(SEEN_FILE, { seeded: s.seeded, ids: [...s.ids] });
 
+const FASHION_FILE = path.join(__dirname, 'fashion.json'); // saved looks: [{name, cls, slots:{Helmet:{orn,shd},...}}]
+const loadLooks = () => { const l = loadJson(FASHION_FILE); return Array.isArray(l) ? l : []; };
+const saveLooks = (l) => saveJsonSafe(FASHION_FILE, l);
+
 // ---------- probe mode for debugging ----------
 async function probe(nameLike) {
   const e = env();
@@ -772,9 +837,21 @@ async function main() {
         if (wcache) for (const w of wcache.weapons) if (seen.ids.has(w.id)) w.fresh = false;
         return json({ ok: true, acked: toAck.length });
       }
+      if (req.url.startsWith('/api/fashion/apply') && req.method === 'POST') {
+        const { characterId, look } = JSON.parse(await readBody(req) || '{}');
+        if (!characterId || !look) return json({ error: 'missing characterId/look' });
+        try { return json({ ok: true, results: await applyLook(e, characterId, look) }); }
+        catch (err) { return json({ error: err.message }); }
+      }
+      if (req.url.startsWith('/api/fashion')) return json(await fetchFashion(e));
+      if (req.url.startsWith('/api/looks')) {
+        if (req.method === 'POST') { saveLooks(JSON.parse(await readBody(req) || '[]')); return json({ ok: true }); }
+        return json(loadLooks());
+      }
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
       if (req.url.startsWith('/weapons')) return res.end(fs.readFileSync(path.join(__dirname, 'weapon-watch.html')));
       if (req.url.startsWith('/drops')) return res.end(fs.readFileSync(path.join(__dirname, 'weapon-drops.html')));
+      if (req.url.startsWith('/fashion')) return res.end(fs.readFileSync(path.join(__dirname, 'fashion.html')));
       return res.end(fs.readFileSync(HTML_FILE));
     } catch (err) {
       console.error(err);
