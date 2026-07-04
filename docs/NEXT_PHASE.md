@@ -14,12 +14,19 @@ save/load/delete. His two answered design questions: **popularity source = DIM
 community wishlist** (not light.gg scrape); **perk scope = all trait perks in the
 game** (not owned-only).
 
+**Combo model corrected 2026-07-04 (Diego):** the flat "count matching perks" model
+was wrong — two perks in the *same* column can't roll together, so it over-counted.
+Rebuilt as **two slots** (Slot 1 + Slot 2, interchangeable perks within a slot); a
+weapon is a full match only if it can roll one perk from each slot in *different*
+columns. User never picks the column. See HANDOFF for the match logic. Verified live.
+
 **Possible Perk Finder follow-ups (not started, no commitment — surface to Diego):**
-- **AND vs OR for the artifact filter** and any future multi-select: Perk Finder
-  match is already "count how many selected perks a weapon has" (a soft AND that
-  ranks partials). Artifacts page chips are OR — offer an AND toggle if he wants.
+- **AND toggle for the Artifacts page** filter (its chips are still OR). Separate from
+  Perk Finder now that combos are slot-based.
 - **Chase mode:** match against each weapon's full *pool* (`defs[hash].pool`, what a
   weapon CAN roll) not just owned copies' current perks, to surface grind targets.
+- **3rd slot / origin-trait or barrel-mag slot** if he ever wants combos beyond the
+  two trait columns.
 - **Role-weighted scoring:** weight a combo's match by its role's PvE/PvP lean using
   the wishlist split already stored per perk.
 - **Wire combos into Weapon Watch / alerts:** a saved combo could seed a watch config.

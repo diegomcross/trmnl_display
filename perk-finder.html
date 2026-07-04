@@ -52,12 +52,26 @@ input:focus,select:focus{outline:none;border-color:var(--gold)}
 .popbar .iv{background:var(--pvp)} /* pvp portion */
 .popn{font-size:10px;color:var(--mut);font-variant-numeric:tabular-nums;min-width:30px;text-align:right}
 .own{font-size:10px;color:var(--keep);flex:0 0 auto}
-/* selection tray */
-.selperks{display:flex;flex-wrap:wrap;gap:5px;margin:8px 0}
-.selperk{display:inline-flex;align-items:center;gap:5px;background:var(--panel2);border:1px solid var(--gold);color:var(--gold);padding:3px 6px 3px 4px;font-size:12px;cursor:pointer}
+/* combo builder — two slots */
+.hint{font-size:11px;color:var(--mut);margin:4px 0 10px;line-height:1.4}
+.hint b{color:var(--ink)}
+.slotwrap{display:grid;grid-template-columns:1fr auto 1fr;gap:8px;align-items:stretch}
+@media(max-width:1050px){.slotwrap{grid-template-columns:1fr;gap:6px}.slotx{display:none}}
+.slot{background:var(--panel2);border:1px solid var(--line);padding:7px;cursor:pointer;min-height:70px}
+.slot.active{border-color:var(--gold);box-shadow:inset 0 0 0 1px var(--gold)}
+.slh{display:flex;justify-content:space-between;align-items:center;gap:6px;margin-bottom:6px}
+.slh .sname{font-family:Bahnschrift,sans-serif;text-transform:uppercase;letter-spacing:.06em;font-size:11px;color:var(--mut)}
+.slot.active .slh .sname{color:var(--gold)}
+.slh .add{font-size:10px;color:var(--dim);font-family:Bahnschrift,sans-serif;text-transform:uppercase;letter-spacing:.04em}
+.slot.active .slh .add{color:var(--gold)}
+.slchips{display:flex;flex-wrap:wrap;gap:5px}
+.slany{font-size:10px;color:var(--dim);align-self:center}
+.slotx{display:flex;align-items:center;justify-content:center;color:var(--gold);font-size:20px;font-family:Bahnschrift,sans-serif}
+.selperk{display:inline-flex;align-items:center;gap:5px;background:var(--panel);border:1px solid var(--gold);color:var(--gold);padding:3px 6px 3px 4px;font-size:12px;cursor:pointer}
 .selperk img{width:22px;height:22px}
 .selperk .x{color:var(--junk);font-weight:700;margin-left:2px}
-.roles{display:flex;gap:5px;flex-wrap:wrap;margin:6px 0}
+.slotempty{font-size:11px;color:var(--dim);padding:2px}
+.roles{display:flex;gap:5px;flex-wrap:wrap;margin:10px 0 6px}
 .roleb{border:1px solid var(--line);color:var(--mut);background:var(--panel2);padding:5px 10px;font-size:11px;cursor:pointer;font-family:Bahnschrift,sans-serif;letter-spacing:.05em;text-transform:uppercase}
 .roleb.on{border-color:var(--gold);color:var(--gold);background:rgba(207,174,66,.14)}
 .combo{display:flex;align-items:center;justify-content:space-between;gap:8px;background:var(--panel2);border:1px solid var(--line);border-left:3px solid var(--gold);padding:7px 9px;margin-bottom:6px;cursor:pointer}
@@ -80,6 +94,13 @@ input:focus,select:focus{outline:none;border-color:var(--gold)}
 .score{font-family:Bahnschrift,sans-serif;font-size:15px;font-weight:600;color:var(--gold);flex:0 0 auto;text-align:center;min-width:34px}
 .score b{display:block;font-size:9px;color:var(--dim);font-weight:400}
 .tags{color:var(--dim);font-size:12px}
+.slotbadge{flex:0 0 auto;width:16px;height:16px;border-radius:50%;background:var(--gold);color:#000;font-size:10px;font-weight:700;display:inline-grid;place-items:center;font-family:Bahnschrift,sans-serif}
+.match.full{border-color:var(--gold)}
+.match.rolled{border-color:var(--keep);box-shadow:inset 0 0 0 1px var(--keep)}
+.mslot{font-size:9px;color:var(--dim);font-family:Bahnschrift,sans-serif;text-transform:uppercase;margin-right:3px}
+.score.full{color:var(--gold)}
+.score.half{color:var(--mut)}
+.pill{display:inline-block;font-family:Bahnschrift,sans-serif;font-size:9px;letter-spacing:.04em;text-transform:uppercase;padding:1px 5px;border:1px solid var(--keep);color:var(--keep);margin-top:2px}
 .big{text-align:center;color:var(--mut);padding:26px 12px;font-size:13px}
 :focus-visible{outline:2px solid var(--gold);outline-offset:2px}
 @media(min-width:1200px){body{max-width:1180px;margin:0 auto}}
@@ -112,9 +133,19 @@ input:focus,select:focus{outline:none;border-color:var(--gold)}
 
   <div>
     <div class="card">
-      <h2 class="disp">Your selection <span id="selcount" class="count"></span></h2>
-      <div id="selperks" class="selperks"></div>
-      <div id="selempty" class="big" style="padding:14px">Click perks on the left to build a combo.</div>
+      <h2 class="disp">Build a combo</h2>
+      <p class="hint">Pick a perk from the list — it drops into the highlighted slot. Put the two perks that <b>combine</b> in <b>different slots</b>; put interchangeable alternatives in the <b>same</b> slot. A weapon matches only if it can roll one from each slot in <b>separate columns</b>, so they actually pair. You never pick the column — it's worked out per weapon.</p>
+      <div class="slotwrap">
+        <div class="slot active" data-slot="0">
+          <div class="slh"><span class="sname">Slot 1</span><span class="add">click to add here</span></div>
+          <div class="slchips" id="slot0"><span class="slotempty">empty</span></div>
+        </div>
+        <div class="slotx">+</div>
+        <div class="slot" data-slot="1">
+          <div class="slh"><span class="sname">Slot 2</span><span class="add">click to add here</span></div>
+          <div class="slchips" id="slot1"><span class="slotempty">optional</span></div>
+        </div>
+      </div>
       <div id="savebox" style="display:none">
         <div class="roles" id="roles">
           <button class="roleb" data-role="ad-clear">Ad-clear</button>
@@ -148,9 +179,11 @@ const esc=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'
 const BN='https://www.bungie.net';
 
 let LIB=[], PICONS={}, WEAPONS={weapons:[],defs:{},perkIcons:{}}, COMBOS=[], OWNED=new Set();
-let SEL=new Set(), ROLE='', sort='pop', colFilter='all', ownedOnly=false, popOnly=false, q='';
+// SLOTS[0], SLOTS[1] = the two combo slots (each a Set of perk names, "any of these").
+let SLOTS=[new Set(),new Set()], activeSlot=0, ROLE='', sort='pop', colFilter='all', ownedOnly=false, popOnly=false, q='';
 
 const iconFor=n=>PICONS[n]?`<img class="pkico" src="${BN}${PICONS[n]}" alt="" loading="lazy">`:'<span class="pkico"></span>';
+const slotOf=n=>SLOTS[0].has(n)?0:SLOTS[1].has(n)?1:-1;   // which slot a perk sits in (-1 = none)
 
 function renderLib(){
   let list=LIB.filter(p=>{
@@ -168,7 +201,8 @@ function renderLib(){
     const pveW=p.pop?Math.round(scaled*p.pve/(p.pve+p.pvp||1)):0;
     const pvpW=scaled-pveW;
     const cols=(p.cols[0]?'3':'')+(p.cols[1]?'4':'');
-    return `<div class="prow ${SEL.has(p.n)?'sel':''}" data-p="${esc(p.n)}">
+    const sl=slotOf(p.n);
+    return `<div class="prow ${sl>=0?'sel':''}" data-p="${esc(p.n)}">
       ${iconFor(p.n)}
       <div class="pmeta">
         <div class="pname">${esc(p.n)} <span class="cols">C${cols||'?'}</span></div>
@@ -177,71 +211,108 @@ function renderLib(){
           <span class="popn">${p.pop||'—'}</span>
         </div>
       </div>
-      ${OWNED.has(p.n)?'<span class="own">✓</span>':''}
+      ${sl>=0?`<span class="slotbadge">${sl+1}</span>`:(OWNED.has(p.n)?'<span class="own">✓</span>':'')}
     </div>`;
   }).join(''):'<div class="big">No perks match.</div>';
 }
 
-function renderSel(){
-  const arr=[...SEL];
-  $('selcount').textContent=arr.length?`(${arr.length})`:'';
-  $('selempty').style.display=arr.length?'none':'block';
-  $('savebox').style.display=arr.length?'block':'none';
-  $('selperks').innerHTML=arr.map(n=>`<span class="selperk" data-rm="${esc(n)}">${iconFor(n).replace('class="pkico"','')}${esc(n)}<span class="x">✕</span></span>`).join('');
+function chip(n){ return `<span class="selperk" data-rm="${esc(n)}">${iconFor(n).replace('class="pkico"','')}${esc(n)}<span class="x">✕</span></span>`; }
+
+function renderCombo(){
+  const filled=SLOTS[0].size+SLOTS[1].size;
+  document.querySelectorAll('.slot').forEach(s=>s.classList.toggle('active',+s.dataset.slot===activeSlot));
+  [0,1].forEach(i=>{
+    const box=$('slot'+i), arr=[...SLOTS[i]];
+    box.innerHTML=arr.length?arr.map(chip).join(''):`<span class="slotempty">${i===0?'empty':'optional'}</span>`;
+  });
+  $('savebox').style.display=filled?'block':'none';
   renderMatches();
 }
 
-function renderMatches(){
-  const sel=[...SEL];
-  if(!sel.length){ $('matches').innerHTML='<div class="big">Select perks to score your weapons.</div>'; $('matchcount').textContent=''; return; }
-  const rows=[];
-  for(const w of WEAPONS.weapons){
-    const avail=new Map(); // name -> equipped?
-    for(const col of (w.cols||[])) for(const pk of col){ if(!avail.has(pk.n)||pk.on) avail.set(pk.n,!!pk.on); }
-    let hit=0, equipped=0; const marks=[];
-    for(const n of sel){ if(avail.has(n)){ hit++; const on=avail.get(n); if(on)equipped++; marks.push({n,on}); } }
-    if(!hit) continue;
-    const def=WEAPONS.defs[w.hash]||{};
-    rows.push({w,def,hit,equipped,marks});
+function setActive(i){ activeSlot=i; document.querySelectorAll('.slot').forEach(s=>s.classList.toggle('active',+s.dataset.slot===i)); }
+
+// A copy matches when it can roll one Slot-1 perk AND one Slot-2 perk in DIFFERENT columns.
+// If only Slot 1 is filled it's a single-perk search. Returns match info or null.
+function scoreCopy(w){
+  const A=SLOTS[0], B=SLOTS[1];
+  const c0=w.cols?.[0]||[], c1=w.cols?.[1]||[];
+  const has=(col,set)=>col.find(pk=>set.has(pk.n));           // a perk of `set` available in this column
+  const eq=col=>col.find(pk=>pk.on)?.n;                        // currently-equipped perk in this column
+  const e0=eq(c0), e1=eq(c1);
+  if(!B.size){ // single-perk search on Slot 1
+    const a0=has(c0,A), a1=has(c1,A); if(!a0&&!a1) return null;
+    const pick=a0||a1, on=A.has(e0)||A.has(e1);
+    return {full:true, rolled:on, marks:[{slot:1,n:pick.n,on:!!pick.on}]};
   }
-  rows.sort((a,b)=>b.hit-a.hit||b.equipped-a.equipped||b.w.pwr-a.w.pwr);
-  $('matchcount').textContent=`(${rows.length})`;
+  // two slots: try A-in-col0 & B-in-col1, or A-in-col1 & B-in-col0
+  const a0=has(c0,A), b1=has(c1,B), a1=has(c1,A), b0=has(c0,B);
+  const opt1=a0&&b1, opt2=a1&&b0;
+  if(opt1||opt2){
+    // prefer the assignment that is currently equipped, for the "rolled" flag
+    const rolled=(A.has(e0)&&B.has(e1))||(A.has(e1)&&B.has(e0));
+    let ap,bp;
+    if(rolled){ if(A.has(e0)&&B.has(e1)){ap={n:e0,on:true};bp={n:e1,on:true};} else {ap={n:e1,on:true};bp={n:e0,on:true};} }
+    else if(opt1){ ap={n:a0.n,on:!!a0.on}; bp={n:b1.n,on:!!b1.on}; }
+    else { ap={n:a1.n,on:!!a1.on}; bp={n:b0.n,on:!!b0.on}; }
+    return {full:true, rolled, marks:[{slot:1,...ap},{slot:2,...bp}]};
+  }
+  // partial: has one slot somewhere but the two can't combine (different columns not possible)
+  const pa=has(c0,A)||has(c1,A), pb=has(c0,B)||has(c1,B);
+  if(pa||pb){ const m=[]; if(pa)m.push({slot:1,n:pa.n,on:!!pa.on}); if(pb)m.push({slot:2,n:pb.n,on:!!pb.on}); return {full:false, rolled:false, marks:m}; }
+  return null;
+}
+
+function renderMatches(){
+  if(!SLOTS[0].size && !SLOTS[1].size){ $('matches').innerHTML='<div class="big">Add perks to a slot to score your weapons.</div>'; $('matchcount').textContent=''; return; }
+  const rows=[];
+  for(const w of WEAPONS.weapons){ const sc=scoreCopy(w); if(sc){ rows.push({w,def:WEAPONS.defs[w.hash]||{},sc}); } }
+  // full+rolled first, then full (can roll), then partials; each by power
+  const rank=r=>(r.sc.full?(r.sc.rolled?0:1):2);
+  rows.sort((a,b)=>rank(a)-rank(b)||b.w.pwr-a.w.pwr);
+  const full=rows.filter(r=>r.sc.full).length;
+  $('matchcount').textContent=`(${full} match${full===1?'':'es'})`;
   const top=rows.slice(0,80);
   $('matches').innerHTML=top.length?top.map(r=>{
     const d=r.def, exotic=d.tt===6;
     const tile=`<span class="wtile ${exotic?'exotic':''}">${d.icon?`<img src="${BN}${d.icon}" alt="" loading="lazy">`:''}</span>`;
-    const hits=r.marks.map(m=>`<span class="${m.on?'on':''}">${PICONS[m.n]?`<img src="${BN}${PICONS[m.n]}" alt="">`:''}${esc(m.n)}${m.on?' •':''}</span>`).join('');
+    const hits=r.sc.marks.map(m=>`<span class="${m.on?'on':''}"><i class="mslot">S${m.slot}</i>${PICONS[m.n]?`<img src="${BN}${PICONS[m.n]}" alt="">`:''}${esc(m.n)}${m.on?' •':''}</span>`).join('');
     const tag=r.w.tag?` · <span class="tags">${esc(r.w.tag)}</span>`:'';
-    return `<div class="match">${tile}
+    const pill=r.sc.rolled?'<span class="pill">rolled now</span>':'';
+    const label=SLOTS[1].size?(r.sc.full?'✓':'½'):(r.sc.full?'✓':'');
+    return `<div class="match ${r.sc.rolled?'rolled':(r.sc.full?'full':'')}">${tile}
       <div class="mx"><div class="wn">${esc(d.n||'Weapon')}</div>
         <div class="wsub">${esc(d.ty||d.slot||'')}${r.w.pwr?' · '+r.w.pwr:''}${tag}</div>
-        <div class="mhit">${hits}</div></div>
-      <div class="score">${r.hit}/${sel.length}<b>${r.equipped} on</b></div></div>`;
-  }).join(''):'<div class="big">None of your weapons roll these perks.</div>';
+        <div class="mhit">${hits}</div>${pill}</div>
+      <div class="score ${r.sc.full?'full':'half'}">${label}</div></div>`;
+  }).join(''):'<div class="big">No weapon can roll this combo.</div>';
 }
 
 function renderCombos(){
   $('combocount').textContent=COMBOS.length?`(${COMBOS.length})`:'';
+  const desc=c=>{ const s=comboSlots(c); const j=a=>a.join(' / '); return s[1].length?`${j(s[0])}  +  ${j(s[1])}`:j(s[0]); };
   $('combos').innerHTML=COMBOS.length?COMBOS.map((c,i)=>`
     <div class="combo" data-load="${i}">
       <div style="min-width:0"><div class="cn">${esc(c.name)} <span class="cr">${esc(c.role||'')}</span></div>
-        <div class="cp">${esc((c.perks||[]).join(' · '))}</div></div>
+        <div class="cp">${esc(desc(c))}</div></div>
       <button class="btn sm red" data-del="${i}">✕</button>
     </div>`).join(''):'<div class="big" style="padding:12px">No saved combos yet. Build one above and hit Save.</div>';
 }
+// read a stored combo's two slots, migrating the old flat {perks:[...]} shape into Slot 1
+function comboSlots(c){ if(Array.isArray(c.slots)) return [c.slots[0]||[], c.slots[1]||[]]; return [c.perks||[], []]; }
 
 // ---- interactions ----
 $('plib').addEventListener('click',e=>{
   const row=e.target.closest('[data-p]'); if(!row) return;
-  const n=row.dataset.p;
-  if(SEL.has(n)) SEL.delete(n); else SEL.add(n);
-  row.classList.toggle('sel',SEL.has(n));
-  renderSel();
+  const n=row.dataset.p, cur=slotOf(n);
+  if(cur===activeSlot){ SLOTS[activeSlot].delete(n); }        // re-click in active slot = remove
+  else { if(cur>=0) SLOTS[cur].delete(n); SLOTS[activeSlot].add(n); } // move here / add here
+  renderCombo(); renderLib();
 });
-$('selperks').addEventListener('click',e=>{
-  const t=e.target.closest('[data-rm]'); if(!t) return;
-  SEL.delete(t.dataset.rm); renderSel(); renderLib();
-});
+document.querySelectorAll('.slot').forEach(s=>s.addEventListener('click',e=>{
+  const rm=e.target.closest('[data-rm]');
+  if(rm){ const n=rm.dataset.rm; SLOTS[0].delete(n); SLOTS[1].delete(n); renderCombo(); renderLib(); return; }
+  setActive(+s.dataset.slot);
+}));
 $('roles').addEventListener('click',e=>{
   const t=e.target.closest('[data-role]'); if(!t) return;
   ROLE=(ROLE===t.dataset.role)?'':t.dataset.role;
@@ -249,19 +320,19 @@ $('roles').addEventListener('click',e=>{
 });
 $('saveCombo').onclick=async()=>{
   const name=($('comboName').value||'').trim();
-  if(!SEL.size) return;
+  if(!SLOTS[0].size && !SLOTS[1].size) return;
   if(!name){ $('comboName').focus(); $('comboName').placeholder='Give it a name first…'; return; }
-  COMBOS.push({id:Date.now(),name,role:ROLE,perks:[...SEL]});
+  COMBOS.push({id:Date.now(),name,role:ROLE,slots:[[...SLOTS[0]],[...SLOTS[1]]]});
   await fetch('/api/combos',{method:'POST',body:JSON.stringify(COMBOS)});
   $('comboName').value=''; ROLE=''; [...$('roles').children].forEach(b=>b.classList.remove('on'));
   renderCombos();
 };
-$('clearSel').onclick=()=>{ SEL.clear(); renderSel(); renderLib(); };
+$('clearSel').onclick=()=>{ SLOTS=[new Set(),new Set()]; setActive(0); renderCombo(); renderLib(); };
 $('combos').addEventListener('click',async e=>{
   const del=e.target.closest('[data-del]');
   if(del){ e.stopPropagation(); COMBOS.splice(+del.dataset.del,1); await fetch('/api/combos',{method:'POST',body:JSON.stringify(COMBOS)}); renderCombos(); return; }
   const load=e.target.closest('[data-load]');
-  if(load){ const c=COMBOS[+load.dataset.load]; SEL=new Set(c.perks||[]); ROLE=c.role||''; [...$('roles').children].forEach(b=>b.classList.toggle('on',b.dataset.role===ROLE)); renderSel(); renderLib(); window.scrollTo({top:0,behavior:'smooth'}); }
+  if(load){ const c=COMBOS[+load.dataset.load], s=comboSlots(c); SLOTS=[new Set(s[0]),new Set(s[1])]; ROLE=c.role||''; setActive(0); [...$('roles').children].forEach(b=>b.classList.toggle('on',b.dataset.role===ROLE)); renderCombo(); renderLib(); window.scrollTo({top:0,behavior:'smooth'}); }
 });
 
 $('q').addEventListener('input',e=>{ q=e.target.value.toLowerCase().trim(); renderLib(); });
@@ -284,7 +355,7 @@ async function load(){
     WEAPONS=w; PICONS=w.perkIcons||{};
     OWNED=new Set();
     for(const wp of w.weapons) for(const col of (wp.cols||[])) for(const pk of col) OWNED.add(pk.n);
-    renderLib(); renderSel();
+    renderLib(); renderCombo();
   }catch(err){ $('plib').innerHTML=`<div class="big">Error: ${esc(err.message)}</div>`; }
 }
 load();
