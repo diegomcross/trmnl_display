@@ -722,6 +722,105 @@ const FASHION_FILE = path.join(__dirname, 'fashion.json'); // saved looks: [{nam
 const loadLooks = () => { const l = loadJson(FASHION_FILE); return Array.isArray(l) ? l : []; };
 const saveLooks = (l) => saveJsonSafe(FASHION_FILE, l);
 
+// ---------- Perk Finder: DIM community wishlist ("popularity") + full perk library ----------
+// light.gg has no public API, so "popularity" here = how often each perk appears across
+// the community's aggregated god-rolls (the DIM "voltron" list, 40+ curators). Each roll's
+// notes tell us if it's a PvE or PvP roll, so we can show a perk's PvE vs PvP lean too.
+const WISHLIST_URL = 'https://raw.githubusercontent.com/48klocs/dim-wish-list-sources/master/voltron.txt';
+const WISHLIST_FILE = path.join(__dirname, '.dim-wishlist.json');
+const WISHLIST_MAX_AGE = 7 * 864e5; // re-download weekly
+let WISHLIST = null, PERKLIB = null;
+
+// Count how often each perk hash is recommended, split by PvE/PvP from the roll's notes,
+// then fold to perk NAME (enhanced + base variants share a name in the manifest).
+function parseWishlist(text, man) {
+  const count = {};
+  let ctx = ''; // pve/pvp context from the most recent notes/title block
+  for (const raw of text.split('\n')) {
+    const line = raw.trim();
+    if (!line) { ctx = ''; continue; }
+    if (line.startsWith('dimwishlist:')) {
+      const m = line.match(/perks=([\d,]+)/); if (!m) continue;
+      const hi = line.indexOf('#');
+      const t = (hi >= 0 ? line.slice(hi + 1) : ctx).toLowerCase();
+      const pvp = /pvp/.test(t), pve = /pve/.test(t);
+      for (const h of m[1].split(',')) {
+        if (!h) continue;
+        const c = count[h] || (count[h] = { t: 0, pve: 0, pvp: 0 });
+        c.t++; if (pve) c.pve++; if (pvp) c.pvp++;
+      }
+    } else if (line.startsWith('//') || line.startsWith('title:') || line.startsWith('description:')) {
+      ctx = line.toLowerCase();
+    }
+  }
+  const byName = {};
+  for (const [h, c] of Object.entries(count)) {
+    const n = man.items[h]?.n; if (!n) continue;
+    const b = byName[n] || (byName[n] = { total: 0, pve: 0, pvp: 0 });
+    b.total += c.t; b.pve += c.pve; b.pvp += c.pvp;
+  }
+  return byName;
+}
+
+async function loadWishlist(man, fresh = false) {
+  if (WISHLIST && !fresh) return WISHLIST;
+  if (!fresh) {
+    try {
+      const st = fs.statSync(WISHLIST_FILE);
+      if (Date.now() - st.mtimeMs < WISHLIST_MAX_AGE) return (WISHLIST = JSON.parse(fs.readFileSync(WISHLIST_FILE, 'utf8')));
+    } catch {}
+  }
+  try {
+    console.log('Downloading DIM community wishlist (one-time / weekly, ~25MB)...');
+    const text = await fetch(WISHLIST_URL).then((r) => r.text());
+    WISHLIST = { generatedAt: new Date().toISOString(), perks: parseWishlist(text, man) };
+    fs.writeFileSync(WISHLIST_FILE, JSON.stringify(WISHLIST));
+    console.log(`Wishlist parsed: ${Object.keys(WISHLIST.perks).length} perks ranked by community god-rolls.`);
+  } catch (err) {
+    console.warn('wishlist download failed:', err.message);
+    try { WISHLIST = JSON.parse(fs.readFileSync(WISHLIST_FILE, 'utf8')); }
+    catch { WISHLIST = { generatedAt: null, perks: {} }; }
+  }
+  return WISHLIST;
+}
+
+// Every trait perk (columns 3 & 4) that can roll on ANY weapon in the game, deduped by
+// name, tagged with which column(s) it appears in and its community popularity.
+async function buildPerkLibrary(e, fresh = false) {
+  if (PERKLIB && !fresh) return PERKLIB;
+  const man = await loadManifest(e);
+  const wl = await loadWishlist(man, fresh);
+  const byName = new Map();
+  for (const d of Object.values(man.items)) {
+    if (d.it !== 3 || !d.tr) continue;
+    [0, 1].forEach((ci) => {
+      const ps = d.tr[ci]; if (!ps) return;
+      for (const h of (man.plugSets[ps] || [])) {
+        const it = man.items[h];
+        // pc==='frames' is the trait perks (Kill Clip, Incandescent…); everything else in
+        // these columns is barrel/mag/stock/grip filler or empty sockets — not roll-defining.
+        if (!it || !it.n || it.pc !== 'frames') continue;
+        let o = byName.get(it.n);
+        if (!o) { o = { n: it.n, icon: it.icon || '', cols: [false, false] }; byName.set(it.n, o); }
+        o.cols[ci] = true;
+        if (!o.icon && it.icon) o.icon = it.icon;
+      }
+    });
+  }
+  const perks = [...byName.values()].map((p) => {
+    const w = wl.perks[p.n] || { total: 0, pve: 0, pvp: 0 };
+    return { n: p.n, icon: p.icon, cols: p.cols, pop: w.total, pve: w.pve, pvp: w.pvp };
+  });
+  perks.sort((a, b) => b.pop - a.pop || a.n.localeCompare(b.n));
+  PERKLIB = { perks, count: perks.length, wishlistAt: wl.generatedAt };
+  return PERKLIB;
+}
+
+// Saved perk combos the user builds and role-tags (ad-clear / pve / pvp / dps).
+const COMBOS_FILE = path.join(__dirname, 'perk-combos.json'); // [{id,name,role,perks:[name,...]}]
+const loadCombos = () => { const c = loadJson(COMBOS_FILE); return Array.isArray(c) ? c : []; };
+const saveCombos = (c) => saveJsonSafe(COMBOS_FILE, c);
+
 // ---------- probe mode for debugging ----------
 async function probe(nameLike) {
   const e = env();
@@ -843,6 +942,13 @@ async function main() {
         try { return json({ ok: true, results: await applyLook(e, characterId, look) }); }
         catch (err) { return json({ error: err.message }); }
       }
+      if (req.url.startsWith('/api/perks')) {
+        return json(await buildPerkLibrary(e, req.url.includes('fresh=1')));
+      }
+      if (req.url.startsWith('/api/combos')) {
+        if (req.method === 'POST') { saveCombos(JSON.parse(await readBody(req) || '[]')); return json({ ok: true }); }
+        return json(loadCombos());
+      }
       if (req.url.startsWith('/api/fashion')) return json(await fetchFashion(e));
       if (req.url.startsWith('/api/looks')) {
         if (req.method === 'POST') { saveLooks(JSON.parse(await readBody(req) || '[]')); return json({ ok: true }); }
@@ -862,6 +968,7 @@ async function main() {
       }
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
       if (req.url.startsWith('/weapons')) return res.end(fs.readFileSync(path.join(__dirname, 'weapon-watch.html')));
+      if (req.url.startsWith('/perks')) return res.end(fs.readFileSync(path.join(__dirname, 'perk-finder.html')));
       if (req.url.startsWith('/drops')) return res.end(fs.readFileSync(path.join(__dirname, 'weapon-drops.html')));
       if (req.url.startsWith('/fashion')) return res.end(fs.readFileSync(path.join(__dirname, 'fashion.html')));
       if (req.url.startsWith('/artifacts')) return res.end(fs.readFileSync(path.join(__dirname, 'artifacts.html')));

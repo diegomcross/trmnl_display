@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Perk Finder</title>
+<style>
+:root{
+  --bg:#0c0e12; --panel:#151821; --panel2:#1b1f2b; --line:#2a2f3d;
+  --ink:#e9ebf2; --mut:#8b93a7; --dim:#5c6375; --gold:#cfae42; --keep:#5fd0dd; --junk:#ff6a52;
+  --pve:#7fd08a; --pvp:#ff7a6b;
+  --clip:polygon(10px 0,100% 0,100% calc(100% - 10px),calc(100% - 10px) 100%,0 100%,0 10px);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--ink);font:15px/1.45 "Segoe UI",Roboto,system-ui,sans-serif;padding:12px;padding-bottom:40px}
+.disp{font-family:Bahnschrift,"Roboto Condensed","Arial Narrow",sans-serif;text-transform:uppercase;letter-spacing:.09em}
+h1{font-size:22px;font-weight:600}
+h1 span{color:var(--gold)}
+h2{font-size:13px;color:var(--mut);letter-spacing:.06em}
+.sub{color:var(--mut);font-size:12px;margin:2px 0 10px}
+.nav{display:flex;gap:6px;margin:6px 0 4px;flex-wrap:wrap}
+.nav a{font-family:Bahnschrift,"Roboto Condensed","Arial Narrow",sans-serif;text-transform:uppercase;letter-spacing:.06em;font-size:12px;text-decoration:none;color:var(--mut);border:1px solid var(--line);padding:5px 12px;clip-path:polygon(8px 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%,0 8px)}
+.nav a.on{color:var(--gold);border-color:var(--gold);background:rgba(207,174,66,.12)}
+.bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
+.btn{background:var(--panel2);border:1px solid var(--gold);color:var(--gold);padding:7px 12px;font-size:12px;cursor:pointer;clip-path:var(--clip);font-family:inherit}
+.btn:active{background:var(--gold);color:#000}
+.btn.sm{padding:4px 9px;font-size:11px}
+.btn.mut{border-color:var(--line);color:var(--mut)}
+.btn.on{border-color:var(--gold);color:var(--gold);background:rgba(207,174,66,.14)}
+.btn.red{border-color:var(--junk);color:var(--junk)}
+input,select{background:var(--panel2);border:1px solid var(--line);color:var(--ink);padding:7px 10px;font:inherit;font-size:13px;clip-path:var(--clip)}
+input:focus,select:focus{outline:none;border-color:var(--gold)}
+.count{color:var(--mut);font-size:12px}
+.wrap{display:grid;grid-template-columns:1fr 360px;gap:14px;align-items:start}
+@media(max-width:820px){.wrap{grid-template-columns:1fr}}
+.card{background:var(--panel);border:1px solid var(--line);clip-path:var(--clip);padding:12px;margin-bottom:12px}
+/* perk library */
+.plib{display:grid;grid-template-columns:1fr 1fr;gap:6px;max-height:70vh;overflow:auto}
+@media(max-width:560px){.plib{grid-template-columns:1fr}}
+.prow{display:flex;align-items:center;gap:8px;background:var(--panel2);border:1px solid var(--line);padding:6px 8px;cursor:pointer;min-width:0}
+.prow:hover{border-color:var(--dim)}
+.prow.sel{border-color:var(--gold);background:rgba(207,174,66,.14)}
+.pkico{width:30px;height:30px;flex:0 0 auto;background:transparent;border:none;display:block}
+.pmeta{min-width:0;flex:1}
+.pname{font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.prow.sel .pname{color:var(--gold)}
+.cols{font-size:10px;color:var(--dim);font-family:Bahnschrift,sans-serif}
+.popwrap{display:flex;align-items:center;gap:6px;margin-top:3px}
+.popbar{flex:1;height:5px;background:#0a0c10;border:1px solid var(--line);position:relative;overflow:hidden}
+.popbar i{position:absolute;left:0;top:0;bottom:0;display:block}
+.popbar .ip{background:var(--pve)} /* pve portion */
+.popbar .iv{background:var(--pvp)} /* pvp portion */
+.popn{font-size:10px;color:var(--mut);font-variant-numeric:tabular-nums;min-width:30px;text-align:right}
+.own{font-size:10px;color:var(--keep);flex:0 0 auto}
+/* selection tray */
+.selperks{display:flex;flex-wrap:wrap;gap:5px;margin:8px 0}
+.selperk{display:inline-flex;align-items:center;gap:5px;background:var(--panel2);border:1px solid var(--gold);color:var(--gold);padding:3px 6px 3px 4px;font-size:12px;cursor:pointer}
+.selperk img{width:22px;height:22px}
+.selperk .x{color:var(--junk);font-weight:700;margin-left:2px}
+.roles{display:flex;gap:5px;flex-wrap:wrap;margin:6px 0}
+.roleb{border:1px solid var(--line);color:var(--mut);background:var(--panel2);padding:5px 10px;font-size:11px;cursor:pointer;font-family:Bahnschrift,sans-serif;letter-spacing:.05em;text-transform:uppercase}
+.roleb.on{border-color:var(--gold);color:var(--gold);background:rgba(207,174,66,.14)}
+.combo{display:flex;align-items:center;justify-content:space-between;gap:8px;background:var(--panel2);border:1px solid var(--line);border-left:3px solid var(--gold);padding:7px 9px;margin-bottom:6px;cursor:pointer}
+.combo:hover{border-color:var(--dim)}
+.combo .cn{font-size:13px}
+.combo .cr{font-size:10px;color:var(--mut);font-family:Bahnschrift,sans-serif;text-transform:uppercase;letter-spacing:.05em}
+.combo .cp{font-size:11px;color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:190px}
+/* matches */
+.match{display:flex;align-items:center;gap:9px;background:var(--panel2);border:1px solid var(--line);padding:7px 8px;margin-bottom:6px}
+.wtile{position:relative;width:44px;height:44px;flex:0 0 auto;display:inline-grid;place-items:center;border:1px solid var(--line);background:#522f65}
+.wtile.exotic{background:#cdae32}
+.wtile img{width:100%;height:100%;object-fit:cover}
+.mx{min-width:0;flex:1}
+.wn{font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.wsub{font-size:10px;color:var(--mut);font-family:Bahnschrift,sans-serif;text-transform:uppercase;letter-spacing:.04em}
+.mhit{display:flex;flex-wrap:wrap;gap:4px;margin-top:3px}
+.mhit span{font-size:10px;color:var(--dim);border:1px solid var(--line);padding:1px 5px;display:inline-flex;align-items:center;gap:3px}
+.mhit span.on{color:var(--keep);border-color:var(--keep)}
+.mhit img{width:15px;height:15px}
+.score{font-family:Bahnschrift,sans-serif;font-size:15px;font-weight:600;color:var(--gold);flex:0 0 auto;text-align:center;min-width:34px}
+.score b{display:block;font-size:9px;color:var(--dim);font-weight:400}
+.tags{color:var(--dim);font-size:12px}
+.big{text-align:center;color:var(--mut);padding:26px 12px;font-size:13px}
+:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+@media(min-width:1200px){body{max-width:1180px;margin:0 auto}}
+</style>
+<link rel="stylesheet" href="/theme.css">
+</head>
+<body>
+<h1 class="disp">Perk <span>Finder</span></h1>
+<nav class="nav"><a href="/">Vault Verdict</a><a href="/weapons">Weapon Watch</a><a href="/perks" class="on">Perk Finder</a><a href="/drops">New Drops</a><a href="/fashion">Fashion</a><a href="/artifacts">Artifacts</a></nav>
+<p class="sub">Pick trait perks (ranked by how often the community recommends them), save role-tagged combos, and see which of your weapons best match. <span id="wlmeta" class="count"></span></p>
+
+<div class="bar">
+  <input id="q" placeholder="Search perks…" style="min-width:180px">
+  <button class="btn sm on" id="sortPop" data-sort="pop">Popular</button>
+  <button class="btn sm mut" id="sortAz" data-sort="az">A–Z</button>
+  <span style="width:1px;height:20px;background:var(--line)"></span>
+  <button class="btn sm on" data-col="all">All cols</button>
+  <button class="btn sm mut" data-col="0">Col 3</button>
+  <button class="btn sm mut" data-col="1">Col 4</button>
+  <span style="width:1px;height:20px;background:var(--line)"></span>
+  <button class="btn sm mut" id="ownedOnly">In my inventory</button>
+  <button class="btn sm mut" id="popOnly">Hide unranked</button>
+  <span class="count" id="libcount"></span>
+</div>
+
+<div class="wrap">
+  <div>
+    <div class="card"><div id="plib" class="plib"><div class="big">Loading perks…</div></div></div>
+  </div>
+
+  <div>
+    <div class="card">
+      <h2 class="disp">Your selection <span id="selcount" class="count"></span></h2>
+      <div id="selperks" class="selperks"></div>
+      <div id="selempty" class="big" style="padding:14px">Click perks on the left to build a combo.</div>
+      <div id="savebox" style="display:none">
+        <div class="roles" id="roles">
+          <button class="roleb" data-role="ad-clear">Ad-clear</button>
+          <button class="roleb" data-role="pve">PvE</button>
+          <button class="roleb" data-role="pvp">PvP</button>
+          <button class="roleb" data-role="dps">DPS</button>
+        </div>
+        <div style="display:flex;gap:6px;margin-top:6px">
+          <input id="comboName" placeholder="Name this combo…" style="flex:1">
+          <button class="btn sm" id="saveCombo">Save</button>
+          <button class="btn sm mut" id="clearSel">Clear</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2 class="disp">Saved combos <span id="combocount" class="count"></span></h2>
+      <div id="combos"></div>
+    </div>
+
+    <div class="card">
+      <h2 class="disp">Best matches in your vault <span id="matchcount" class="count"></span></h2>
+      <div id="matches"><div class="big">Select perks to score your weapons.</div></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const $=id=>document.getElementById(id);
+const esc=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
+const BN='https://www.bungie.net';
+
+let LIB=[], PICONS={}, WEAPONS={weapons:[],defs:{},perkIcons:{}}, COMBOS=[], OWNED=new Set();
+let SEL=new Set(), ROLE='', sort='pop', colFilter='all', ownedOnly=false, popOnly=false, q='';
+
+const iconFor=n=>PICONS[n]?`<img class="pkico" src="${BN}${PICONS[n]}" alt="" loading="lazy">`:'<span class="pkico"></span>';
+
+function renderLib(){
+  let list=LIB.filter(p=>{
+    if(q && !p.n.toLowerCase().includes(q)) return false;
+    if(colFilter!=='all' && !p.cols[+colFilter]) return false;
+    if(ownedOnly && !OWNED.has(p.n)) return false;
+    if(popOnly && !p.pop) return false;
+    return true;
+  });
+  list.sort(sort==='az' ? (a,b)=>a.n.localeCompare(b.n) : (a,b)=>b.pop-a.pop||a.n.localeCompare(b.n));
+  const max=Math.max(1,...LIB.map(p=>p.pop));
+  $('libcount').textContent=`${list.length} of ${LIB.length}`;
+  $('plib').innerHTML=list.length?list.map(p=>{
+    const scaled=Math.round(100*p.pop/max);
+    const pveW=p.pop?Math.round(scaled*p.pve/(p.pve+p.pvp||1)):0;
+    const pvpW=scaled-pveW;
+    const cols=(p.cols[0]?'3':'')+(p.cols[1]?'4':'');
+    return `<div class="prow ${SEL.has(p.n)?'sel':''}" data-p="${esc(p.n)}">
+      ${iconFor(p.n)}
+      <div class="pmeta">
+        <div class="pname">${esc(p.n)} <span class="cols">C${cols||'?'}</span></div>
+        <div class="popwrap">
+          <span class="popbar" title="PvE ${p.pve} · PvP ${p.pvp}"><i class="ip" style="width:${pveW}%"></i><i class="iv" style="left:${pveW}%;width:${pvpW}%"></i></span>
+          <span class="popn">${p.pop||'—'}</span>
+        </div>
+      </div>
+      ${OWNED.has(p.n)?'<span class="own">✓</span>':''}
+    </div>`;
+  }).join(''):'<div class="big">No perks match.</div>';
+}
+
+function renderSel(){
+  const arr=[...SEL];
+  $('selcount').textContent=arr.length?`(${arr.length})`:'';
+  $('selempty').style.display=arr.length?'none':'block';
+  $('savebox').style.display=arr.length?'block':'none';
+  $('selperks').innerHTML=arr.map(n=>`<span class="selperk" data-rm="${esc(n)}">${iconFor(n).replace('class="pkico"','')}${esc(n)}<span class="x">✕</span></span>`).join('');
+  renderMatches();
+}
+
+function renderMatches(){
+  const sel=[...SEL];
+  if(!sel.length){ $('matches').innerHTML='<div class="big">Select perks to score your weapons.</div>'; $('matchcount').textContent=''; return; }
+  const rows=[];
+  for(const w of WEAPONS.weapons){
+    const avail=new Map(); // name -> equipped?
+    for(const col of (w.cols||[])) for(const pk of col){ if(!avail.has(pk.n)||pk.on) avail.set(pk.n,!!pk.on); }
+    let hit=0, equipped=0; const marks=[];
+    for(const n of sel){ if(avail.has(n)){ hit++; const on=avail.get(n); if(on)equipped++; marks.push({n,on}); } }
+    if(!hit) continue;
+    const def=WEAPONS.defs[w.hash]||{};
+    rows.push({w,def,hit,equipped,marks});
+  }
+  rows.sort((a,b)=>b.hit-a.hit||b.equipped-a.equipped||b.w.pwr-a.w.pwr);
+  $('matchcount').textContent=`(${rows.length})`;
+  const top=rows.slice(0,80);
+  $('matches').innerHTML=top.length?top.map(r=>{
+    const d=r.def, exotic=d.tt===6;
+    const tile=`<span class="wtile ${exotic?'exotic':''}">${d.icon?`<img src="${BN}${d.icon}" alt="" loading="lazy">`:''}</span>`;
+    const hits=r.marks.map(m=>`<span class="${m.on?'on':''}">${PICONS[m.n]?`<img src="${BN}${PICONS[m.n]}" alt="">`:''}${esc(m.n)}${m.on?' •':''}</span>`).join('');
+    const tag=r.w.tag?` · <span class="tags">${esc(r.w.tag)}</span>`:'';
+    return `<div class="match">${tile}
+      <div class="mx"><div class="wn">${esc(d.n||'Weapon')}</div>
+        <div class="wsub">${esc(d.ty||d.slot||'')}${r.w.pwr?' · '+r.w.pwr:''}${tag}</div>
+        <div class="mhit">${hits}</div></div>
+      <div class="score">${r.hit}/${sel.length}<b>${r.equipped} on</b></div></div>`;
+  }).join(''):'<div class="big">None of your weapons roll these perks.</div>';
+}
+
+function renderCombos(){
+  $('combocount').textContent=COMBOS.length?`(${COMBOS.length})`:'';
+  $('combos').innerHTML=COMBOS.length?COMBOS.map((c,i)=>`
+    <div class="combo" data-load="${i}">
+      <div style="min-width:0"><div class="cn">${esc(c.name)} <span class="cr">${esc(c.role||'')}</span></div>
+        <div class="cp">${esc((c.perks||[]).join(' · '))}</div></div>
+      <button class="btn sm red" data-del="${i}">✕</button>
+    </div>`).join(''):'<div class="big" style="padding:12px">No saved combos yet. Build one above and hit Save.</div>';
+}
+
+// ---- interactions ----
+$('plib').addEventListener('click',e=>{
+  const row=e.target.closest('[data-p]'); if(!row) return;
+  const n=row.dataset.p;
+  if(SEL.has(n)) SEL.delete(n); else SEL.add(n);
+  row.classList.toggle('sel',SEL.has(n));
+  renderSel();
+});
+$('selperks').addEventListener('click',e=>{
+  const t=e.target.closest('[data-rm]'); if(!t) return;
+  SEL.delete(t.dataset.rm); renderSel(); renderLib();
+});
+$('roles').addEventListener('click',e=>{
+  const t=e.target.closest('[data-role]'); if(!t) return;
+  ROLE=(ROLE===t.dataset.role)?'':t.dataset.role;
+  [...$('roles').children].forEach(b=>b.classList.toggle('on',b.dataset.role===ROLE));
+});
+$('saveCombo').onclick=async()=>{
+  const name=($('comboName').value||'').trim();
+  if(!SEL.size) return;
+  if(!name){ $('comboName').focus(); $('comboName').placeholder='Give it a name first…'; return; }
+  COMBOS.push({id:Date.now(),name,role:ROLE,perks:[...SEL]});
+  await fetch('/api/combos',{method:'POST',body:JSON.stringify(COMBOS)});
+  $('comboName').value=''; ROLE=''; [...$('roles').children].forEach(b=>b.classList.remove('on'));
+  renderCombos();
+};
+$('clearSel').onclick=()=>{ SEL.clear(); renderSel(); renderLib(); };
+$('combos').addEventListener('click',async e=>{
+  const del=e.target.closest('[data-del]');
+  if(del){ e.stopPropagation(); COMBOS.splice(+del.dataset.del,1); await fetch('/api/combos',{method:'POST',body:JSON.stringify(COMBOS)}); renderCombos(); return; }
+  const load=e.target.closest('[data-load]');
+  if(load){ const c=COMBOS[+load.dataset.load]; SEL=new Set(c.perks||[]); ROLE=c.role||''; [...$('roles').children].forEach(b=>b.classList.toggle('on',b.dataset.role===ROLE)); renderSel(); renderLib(); window.scrollTo({top:0,behavior:'smooth'}); }
+});
+
+$('q').addEventListener('input',e=>{ q=e.target.value.toLowerCase().trim(); renderLib(); });
+document.querySelectorAll('[data-sort]').forEach(b=>b.onclick=()=>{ sort=b.dataset.sort; $('sortPop').classList.toggle('on',sort==='pop'); $('sortPop').classList.toggle('mut',sort!=='pop'); $('sortAz').classList.toggle('on',sort==='az'); $('sortAz').classList.toggle('mut',sort!=='az'); renderLib(); });
+document.querySelectorAll('[data-col]').forEach(b=>b.onclick=()=>{ colFilter=b.dataset.col; document.querySelectorAll('[data-col]').forEach(x=>{x.classList.toggle('on',x===b);x.classList.toggle('mut',x!==b);}); renderLib(); });
+$('ownedOnly').onclick=()=>{ ownedOnly=!ownedOnly; $('ownedOnly').classList.toggle('on',ownedOnly); $('ownedOnly').classList.toggle('mut',!ownedOnly); renderLib(); };
+$('popOnly').onclick=()=>{ popOnly=!popOnly; $('popOnly').classList.toggle('on',popOnly); $('popOnly').classList.toggle('mut',!popOnly); renderLib(); };
+
+async function load(){
+  try{
+    const [pk,cb]=await Promise.all([
+      fetch('/api/perks').then(r=>r.json()),
+      fetch('/api/combos').then(r=>r.json()).catch(()=>[])
+    ]);
+    LIB=pk.perks||[]; COMBOS=Array.isArray(cb)?cb:[];
+    $('wlmeta').textContent=pk.wishlistAt?`Popularity from DIM community wishlist · ${LIB.length} trait perks`:'';
+    renderCombos();
+    // weapons (for icons + inventory matching) — may be a beat slower
+    const w=await fetch('/api/weapons').then(r=>r.json());
+    WEAPONS=w; PICONS=w.perkIcons||{};
+    OWNED=new Set();
+    for(const wp of w.weapons) for(const col of (wp.cols||[])) for(const pk of col) OWNED.add(pk.n);
+    renderLib(); renderSel();
+  }catch(err){ $('plib').innerHTML=`<div class="big">Error: ${esc(err.message)}</div>`; }
+}
+load();
+</script>
+</body>
+</html>

@@ -43,3 +43,11 @@ drop-alert.json
 .dim-token.json
 fashion.json
 fashion.json.bak
+.dim-wishlist.json
+perk-combos.json
+perk-combos.json.bak
+
+# vault-verdict server log + ad-hoc test dumps
+vault.log
+combos-test.json
+perks-test.json

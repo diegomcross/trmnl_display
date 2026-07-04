@@ -3,6 +3,27 @@
 > Maintained per CLAUDE.md. When a feature ships, move it to HANDOFF.md
 > "What works now" and delete it here.
 
+## Where we are (2026-07-04, latest)
+
+Just shipped: **Perk Finder** (`/perks`) — full details in HANDOFF. Diego asked for
+a pickable list of *all* weapon trait perks, ordered by light.gg-style popularity,
+that scores his inventory by perk match and lets him save role-tagged perk combos
+(ad-clear / pve / pvp / dps). Built & tested live: 356 trait perks, popularity from
+the DIM community wishlist (light.gg has no API), inventory match scoring, combo
+save/load/delete. His two answered design questions: **popularity source = DIM
+community wishlist** (not light.gg scrape); **perk scope = all trait perks in the
+game** (not owned-only).
+
+**Possible Perk Finder follow-ups (not started, no commitment — surface to Diego):**
+- **AND vs OR for the artifact filter** and any future multi-select: Perk Finder
+  match is already "count how many selected perks a weapon has" (a soft AND that
+  ranks partials). Artifacts page chips are OR — offer an AND toggle if he wants.
+- **Chase mode:** match against each weapon's full *pool* (`defs[hash].pool`, what a
+  weapon CAN roll) not just owned copies' current perks, to surface grind targets.
+- **Role-weighted scoring:** weight a combo's match by its role's PvE/PvP lean using
+  the wishlist split already stored per perk.
+- **Wire combos into Weapon Watch / alerts:** a saved combo could seed a watch config.
+
 ## Where we are (2026-07-03, latest)
 
 Shipped since phase-1 (all in HANDOFF): 75% god-roll threshold; per-copy

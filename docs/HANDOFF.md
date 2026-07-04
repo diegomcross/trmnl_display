@@ -82,6 +82,8 @@ Core priorities, in his words:
 | `fashion.html` | **Fashion loadouts** (served at `/fashion`): each character's equipped armor ornaments + shaders with icons; save named looks (`fashion.json`, gitignored) and re-apply them in one click. Apply requires the character to be in orbit. |
 | `theme.css` | **Shared visual theme** for all four Vault Verdict pages (served at `/theme.css`, linked after each page's inline `<style>`). BrayTech/in-game look: ground `#101312`, hairline white borders, square tiles, Destiny rarity/energy colors, self-hosted **Arimo** (Helvetica/Neue-Haas twin) type, tabular numbers. Pages share CSS-var names so this one file re-skins everything — **edit design tokens here, once.** Also styles the **item tiles** (`.wtile` weapon art, `.pkico` perk-icon tiles) that Weapon Watch renders from `/api/weapons` art — a token repaint alone did NOT read as BrayTech; the real look needed the actual weapon/perk artwork as rarity-framed square tiles. The e-ink display (`server.js`, 1-bit) is separate and unaffected. |
 | `fonts/arimo-*.woff2` | Self-hosted Arimo 400/500/700 (latin subset, Apache-2.0), served at `/fonts/`. Bundled so type is identical on every device incl. Android. |
+| `perk-finder.html` | **Perk Finder** (served at `/perks`): pickable list of *all* trait perks in the game, ranked by community popularity (PvE/PvP split bar), with search + column/owned/ranked filters. Select perks → live-scores your owned weapon copies by match (best-first, equipped perks marked `•`); save role-tagged combos (ad-clear/pve/pvp/dps) to `perk-combos.json` (gitignored). Backed by `/api/perks` + `/api/combos`. |
+| `.dim-wishlist.json` | Gitignored cache: the parsed DIM community wishlist folded to `{perkName:{total,pve,pvp}}` — the "popularity" behind Perk Finder. Re-downloaded weekly from the voltron list. |
 | `artifacts.html` | **Artifact Mods** reference (served at `/artifacts`): all 7 Monument of Triumph artifacts × 3 columns × 7 mods, with a filter by subclass verb (Solar/Arc/Void/Stasis/Strand/Prismatic keywords) + keywords (Champions, grenade, Super, weapon types) + free text search. **Data is STATIC** (hand-transcribed from the neonlightsmedia Monument of Triumph guide) — if Bungie changes artifacts/mods, edit the `ARTIFACTS` array in this file. No API. |
 | `CLAUDE.md` | Working rules for agents: never drop features, test before push, and **mandatory upkeep of this file + `docs/NEXT_PHASE.md`**. |
 | `docs/NEXT_PHASE.md` | The pickup point: specs + open questions for upcoming features. |
@@ -285,6 +287,23 @@ Core priorities, in his words:
     error). **Apply only works in orbit** — Bungie returns `DestinyCharacterNotInTower`
     otherwise; the UI surfaces that as a banner. Endpoints: `GET /api/fashion`,
     `GET/POST /api/looks`, `POST /api/fashion/apply {characterId, look}`.
+  - **Perk Finder (`/perks`, perk-finder.html — shipped 2026-07-04):** a pickable library
+    of **every trait perk in the game** (642 col-3/col-4 perks deduped by name; filtered to
+    `pc === 'frames'` so barrels/mags/stocks/grips are excluded — those flood the top by
+    popularity otherwise). Each perk shows a **popularity** bar split PvE (green) / PvP (red)
+    and a raw count. **"Popularity" = the DIM community wishlist**, not light.gg (which has no
+    public API). `buildPerkLibrary` (vault-verdict.js) merges the manifest perk list with
+    `loadWishlist`, which downloads the aggregated **voltron** list
+    (`48klocs/dim-wish-list-sources`, ~25MB), counts how often each perk hash is recommended
+    across all god-rolls (split PvE/PvP from each roll's notes), folds hash→name (enhanced +
+    base variants share a name), and caches the compact result to `.dim-wishlist.json`
+    (re-downloaded weekly). Endpoints: `GET /api/perks` (`?fresh=1` rebuilds) → `{perks,count,
+    wishlistAt}`; `GET/POST /api/combos` → the user's saved combos (`perk-combos.json`,
+    saveJsonSafe + `.bak`). **Inventory match** is client-side: for each selected perk name,
+    count owned weapon copies (from `/api/weapons`) that have it available (`•` = currently
+    equipped), rank best-first, top 80. Save a selection as a named combo tagged **ad-clear /
+    pve / pvp / dps**; click to reload it. Fully tested live (Kill Clip+Rampage → 72 matches,
+    Blast Furnace/Sorrow's Verse 2/2; save/load/delete round-trips; all filters).
   - DIM overlay (armor): optional `dim-data.json` (tags + loadouts) merges into verdicts.
   - **DIM two-way tag sync (weapons, shipped):** Weapon Watch keep/favorite/junk tags are
     synced live with DIM's cloud. `vault-verdict.js` holds a small DIM Sync API client:
