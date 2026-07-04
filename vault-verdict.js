@@ -452,30 +452,28 @@ async function equipWeapon(e, itemId, hash, ownClass) {
   return { own: LOCK_CTX.clsById[target] || ownClass };
 }
 
-// Find a legendary weapon to drop into a freed slot: same bucket (slot) as the exotic
-// being unequipped, preferring the same ammo type. Looks on the character first, then
-// the vault. Returns {id,hash,name,fromVault} or null.
-function findReplacementLegendary(prof, man, cid, bucket, ammo, exclude) {
-  const scan = (items, fromVault) => {
-    const out = [];
-    for (const it of items || []) {
-      if (!it.itemInstanceId || exclude.includes(it.itemInstanceId)) continue;
-      const d = man.items[it.itemHash];
-      if (!d || d.it !== 3 || d.b !== bucket || d.tt !== 5) continue; // legendary weapon, same slot
-      out.push({ id: it.itemInstanceId, hash: it.itemHash, name: d.n, ammo: d.ammo, fromVault });
-    }
-    return out;
-  };
-  let cand = scan(prof.characterInventories?.data?.[cid]?.items, false);
-  if (!cand.length) cand = scan(prof.profileInventory?.data?.items, true);
-  cand.sort((a, b) => (b.ammo === ammo) - (a.ammo === ammo)); // same-ammo first
-  return cand[0] || null;
+// Pick a legendary weapon in a given slot (bucket) from a set of items, preferring the
+// same ammo type as the exotic being freed. Returns {id,hash,name,ammo} or null.
+function pickSlotLegendary(items, man, bucket, ammo, exclude) {
+  const out = [];
+  for (const it of items || []) {
+    if (!it.itemInstanceId || exclude.includes(it.itemInstanceId)) continue;
+    const d = man.items[it.itemHash];
+    if (!d || d.it !== 3 || d.b !== bucket || d.tt !== 5) continue; // legendary weapon, same slot
+    out.push({ id: it.itemInstanceId, hash: it.itemHash, name: d.n, ammo: d.ammo });
+  }
+  out.sort((a, b) => (b.ammo === ammo) - (a.ammo === ammo)); // same-ammo first
+  return out[0] || null;
 }
 
-// Equip a weapon, handling the exotic-swap Bungie won't do cleanly: if the target
-// weapon is exotic and a DIFFERENT-slot exotic is already equipped, first drop a
-// matching-ammo legendary into that slot (freeing the exotic restriction), then equip.
-// dryRun returns the plan without moving anything (used for safe testing).
+// Equip a weapon, handling the exotic swap DIM does messily. Bungie AUTO-unequips an
+// existing exotic when you equip a second one, but leaves that slot however it likes.
+// To control it we first equip a matching-ammo legendary into the old exotic's slot —
+// but ONLY one already on the character, never a vault pull (Bungie forbids vault
+// transfers inside activities: DestinyCannotPerformActionAtThisLocation — which is
+// exactly why the old vault-fallback failed where DIM's plain equip works). If there's
+// no spare on the character, we skip the clean swap and just equip (like DIM). dryRun
+// returns the plan without moving anything.
 async function smartEquipWeapon(e, itemId, hash, ownClass, dryRun) {
   const { prof, man } = await fetchProfile(e);
   const target = (ownClass && ownClass !== 'Vault') ? (LOCK_CTX.byClass[ownClass] || LOCK_CTX.characterId) : LOCK_CTX.characterId;
@@ -487,15 +485,21 @@ async function smartEquipWeapon(e, itemId, hash, ownClass, dryRun) {
       .map((it) => ({ it, d: man.items[it.itemHash] }))
       .find((x) => x.d && x.d.it === 3 && x.d.tt === 6 && x.d.b !== bDef.b && x.it.itemInstanceId !== itemId);
     if (a) { // a conflicting exotic is equipped in another slot
-      const repl = findReplacementLegendary(prof, man, target, a.d.b, a.d.ammo, [itemId, a.it.itemInstanceId]);
-      if (repl) {
-        swap = { removed: a.d.n, added: repl.name, replId: repl.id };
+      const excl = [itemId, a.it.itemInstanceId];
+      const onChar = pickSlotLegendary(prof.characterInventories?.data?.[target]?.items, man, a.d.b, a.d.ammo, excl);
+      const vaultRepl = onChar ? null : pickSlotLegendary(prof.profileInventory?.data?.items, man, a.d.b, a.d.ammo, excl);
+      if (onChar) {
+        swap = { removed: a.d.n, added: onChar.name };
+        if (!dryRun) await equipItem(e, onChar.id, target); // no transfer — works in activities
+      } else if (vaultRepl) {
+        // best option is in the vault; the transfer only works outside activities.
+        swap = { removed: a.d.n, added: vaultRepl.name, fromVault: true };
         if (!dryRun) {
-          if (repl.fromVault) await transferItem(e, repl.id, repl.hash, target, false);
-          await equipItem(e, repl.id, target); // frees the old exotic's slot
+          try { await transferItem(e, vaultRepl.id, vaultRepl.hash, target, false); await equipItem(e, vaultRepl.id, target); }
+          catch (err) { swap = { removed: a.d.n, added: null, note: `couldn't pull ${vaultRepl.name} from the vault here — equipped directly, game moved ${a.d.n}` }; }
         }
       } else {
-        swap = { removed: a.d.n, added: null, note: 'no matching legendary found to free the slot' };
+        swap = { removed: a.d.n, added: null, note: `no spare ${a.d.ty || 'weapon'} on your character — equipped directly, game moved ${a.d.n}` };
       }
     }
   }

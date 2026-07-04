@@ -330,14 +330,19 @@ Core priorities, in his words:
     pages, no content regressed. **Still open per Diego's ask** (surface, don't assume): a left
     filter rail (element/ammo/rarity like BrayTech) and a right power/currency rail — see NEXT_PHASE.
   - **Smart exotic swap (2026-07-04, `smartEquipWeapon` in vault-verdict.js, used by `/api/equip`):**
-    Bungie rejects equipping a 2nd exotic weapon, so equipping an exotic while another exotic is
-    already equipped on that character first frees the old exotic's slot with a **legendary matching
-    its ammo** (`findReplacementLegendary`: same bucket/slot, prefer same ammo, character then vault),
-    equips that, THEN equips the chosen exotic. `POST /api/equip {id,hash,own,dryRun}` — `dryRun:true`
-    returns the plan `{swap:{removed,added}}` without moving anything (used for safe testing). Verified
-    live via dry-run against real equipped state: with Anarchy (Power) equipped, equipping any other
-    exotic planned remove Anarchy → add Seventh Seraph SAW (Heavy legendary) → equip choice. `hash`
-    must be the copy's REAL hash (`rhash`) for the transfer, like the other item actions.
+    Bungie AUTO-unequips an existing exotic when you equip a 2nd one, but leaves the freed slot
+    however it likes. To control it we equip a matching-ammo legendary into the old exotic's slot
+    first, THEN the chosen exotic. **CRITICAL (learned from a live failure):** the replacement must be
+    one **already on the character — NEVER a vault pull**. Bungie forbids vault transfers inside
+    activities (`DestinyCannotPerformActionAtThisLocation`); the first version's vault-fallback hit
+    exactly that error where DIM's plain equip works, because DIM never transfers. `pickSlotLegendary`
+    now checks the character first; if the only option is in the vault it tries but **falls back to a
+    plain equip** (letting the game move the old exotic, like DIM) so it always succeeds; if there's no
+    spare at all, plain equip. `POST /api/equip {id,hash,own,dryRun}` — `dryRun:true` returns the plan
+    `{swap:{removed,added,fromVault?,note?}}` without moving anything (USE THIS to test — never fire
+    real equip/transfer writes on his account in testing). `hash` must be the copy's REAL hash
+    (`rhash`). Verified via dry-run: Khvostov (Kinetic) equipped → equip an Energy exotic plans remove
+    Khvostov → add Seventh Seraph Carbine (on-character Kinetic legendary, no vault transfer).
   - DIM overlay (armor): optional `dim-data.json` (tags + loadouts) merges into verdicts.
   - **DIM two-way tag sync (weapons, shipped):** Weapon Watch keep/favorite/junk tags are
     synced live with DIM's cloud. `vault-verdict.js` holds a small DIM Sync API client:
