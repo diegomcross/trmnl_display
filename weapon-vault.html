@@ -334,7 +334,7 @@ let curW=null;
 function inspect(id){
   const w=WEAPONS.weapons.find(x=>x.id===id); if(!w) return;
   curW=w; const d=WEAPONS.defs[w.hash]||{};
-  const col=(arr,label)=>`<div class="ispcol"><div class="ch">${label}</div>${(arr||[]).map(p=>`<span class="pk ${p.on?'on':''} ${FAV.has(p.n)?'fav':''}" title="${FAV.has(p.n)?'★ favorite':''}">${PICONS[p.n]?`<img src="${BN}${PICONS[p.n]}">`:''}${esc(p.n)}${p.on?' •':''}${FAV.has(p.n)?' ★':''}</span>`).join('')||'<span class="slotempty">—</span>'}</div>`;
+  const col=(arr,label)=>`<div class="ispcol"><div class="ch">${label}</div>${(arr||[]).map(p=>`<span class="pk ${p.on?'on':''} ${FAV.has(p.n)?'fav':''}" data-pn="${esc(p.n)}" title="${FAV.has(p.n)?'★ favorite':''}">${PICONS[p.n]?`<img src="${BN}${PICONS[p.n]}">`:''}${esc(p.n)}${p.on?' •':''}${FAV.has(p.n)?' ★':''}</span>`).join('')||'<span class="slotempty">—</span>'}</div>`;
   const tagBtn=(t,lbl)=>`<button class="btn sm ${w.tag===t?'act-on':'mut'}" data-act="tag" data-tag="${w.tag===t?'none':t}">${lbl}</button>`;
   $('ispcard').innerHTML=`<div class="ih"><span class="it ${d.tt===6?'exotic':''}">${d.icon?`<img src="${BN}${d.icon}">`:''}</span>
     <div><div class="disp" style="font-size:16px;color:#fff">${esc(d.n||'Weapon')}</div>
@@ -427,6 +427,7 @@ async function load(){
       fetch('/api/favorites').then(r=>r.json()).catch(()=>[])
     ]);
     WEAPONS=w; PICONS=w.perkIcons||{}; FAV=new Set(Array.isArray(fv)?fv:[]); updateFavNote();
+    if(window.PerkTip) PerkTip.init({perkDescs:w.perkDescs,perkInsights:w.perkInsights});
     if(!selCid && acc&&acc.chars&&acc.chars.length){ selCid=acc.chars[0].id; selCls=acc.chars[0].cls; } // default = most-recent
     if(window.GBANNER&&window.GBANNER.cid){ selCid=window.GBANNER.cid; selCls=window.GBANNER.cls; }
     // build filter chips from actual data
@@ -450,6 +451,7 @@ async function load(){
 }
 load();
 </script>
+<script src="/perktip.js"></script>
 <script src="/banner.js"></script>
 </body>
 </html>

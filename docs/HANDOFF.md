@@ -86,7 +86,9 @@ Core priorities, in his words:
 | `banner.js` | **Shared in-game nameplate + section nav** (served at `/banner.js`, included by every page via `<script src="/banner.js">` into a `<div id="gbanner">`). Renders your equipped **emblem art as the banner background**, Bungie name, power (✦light) + class, character-switch dots, and the right-aligned section tabs (Armor Vault · Weapon Vault · Fashion · Perk Finder · New Drops · Artifacts). Data from `/api/account`. Replaces the old per-page `<nav class="nav">` — edit nav/banner in this one file. |
 | `perk-finder.html` | **Perk Finder** (served at `/perks`): pickable list of *all* trait perks in the game, ranked by community popularity (PvE/PvP split bar), with search + column/owned/ranked filters. Two builder modes: **Pick perks** (default, flat — click any perks, column/order irrelevant; weapons ranked by how many they can roll) and **Combo** (Slot 1 + Slot 2; a **full match only when a weapon can roll one perk from each slot in *different columns***). Both feed the Inventory/Farmable match panel; saved as `{perks:[]}` (flat) or `{slots:[[],[]]}` (combo), auto-detected on load. Perk list ranks by **Mine** (how often you track a perk across your watched weapons, priority-weighted — default), **Community** (DIM wishlist), or **Blend** (Mine full weight + Community ×0.35 → surfaces sleeper rolls). Save role-tagged combos (ad-clear/pve/pvp/dps) to `perk-combos.json` (gitignored). Backed by `/api/perks` (which overlays `mine` from `weapon-watch.json`) + `/api/combos`. |
 | `.dim-wishlist.json` | Gitignored cache: the parsed DIM community wishlist folded to `{perkName:{total,pve,pvp}}` — the "popularity" behind Perk Finder. Re-downloaded weekly from the voltron list. |
-| `.clarity.json` | Gitignored cache: **Clarity community insights** (the same data DIM shows on perks) folded to `{perkName:insightText}`. Downloaded weekly from `database-clarity.github.io/Live-Clarity-Database/descriptions/dim.json`, flattened (`descriptions.en[].linesContent[].text`). Powers the perk **hover popup**. |
+| `.clarity.json` | Gitignored cache: **Clarity community insights** (the same data DIM shows on perks) folded to `{perkName:insightText}`. Downloaded weekly from `database-clarity.github.io/Live-Clarity-Database/descriptions/dim.json`, flattened (`descriptions.en[].linesContent[].text`). Raw source for the perk **hover popup** (cleaned by `insightBullets`). |
+| `perktip.js` | **Shared perk hover popup** (served at `/perktip.js`, included by weapon-watch/perk-finder/weapon-vault). Sectioned card: element accent bar, name, **in-game description in an inset box** (same size), then **community-insight bullets**. Colouring engine: numbers **gold** (buff, shown `+11%`) / **red** (penalty `−`), **teal** seconds/time, **element-coloured keyword verbs** (Jolt=Arc, Scorch=Solar, Sever=Strand…), symbols `▸`(trigger) `▲`(ramp) `▼`(penalty) `×`(stacks) — **no emoji**. `PerkTip.init({perkDescs,perkInsights})`; auto `mouseover` on `[data-p]`/`[data-pn]`. Design + colours locked with Diego over live mockups. |
+| `.clarity-clean.json` | **Committed** curated perk bullets `{perkName:[{type,text}]}` (type ∈ trigger/ramp/penalty/buff/note → leading symbol). Hand-rewritten by Claude for the top ~34 perks, tight AND **complete** (every per-stack %, PvP split, enhanced bonus kept — Diego's rule: never drop info; numbers verbatim). English-only; other locales fall back to localised Clarity. Perks without an entry use the lossless `cleanClarityBullets` fallback. |
 | `perk-favorites.json` | Gitignored: Diego's **favorite trait perks** (a flat `[perkName,…]`), starred in Perk Finder. Used to score EVERY weapon in the Weapon Vault. `.bak` alongside (saveJsonSafe). GET/POST `/api/favorites`. |
 | `artifacts.html` | **Artifact Mods** reference (served at `/artifacts`): all 7 Monument of Triumph artifacts × 3 columns × 7 mods, with a filter by subclass verb (Solar/Arc/Void/Stasis/Strand/Prismatic keywords) + keywords (Champions, grenade, Super, weapon types) + free text search. **Data is STATIC** (hand-transcribed from the neonlightsmedia Monument of Triumph guide) — if Bungie changes artifacts/mods, edit the `ARTIFACTS` array in this file. No API. |
 | `CLAUDE.md` | Working rules for agents: never drop features, test before push, and **mandatory upkeep of this file + `docs/NEXT_PHASE.md`**. |
@@ -345,15 +347,20 @@ Core priorities, in his words:
     real equip/transfer writes on his account in testing). `hash` must be the copy's REAL hash
     (`rhash`). Verified via dry-run: Khvostov (Kinetic) equipped → equip an Energy exotic plans remove
     Khvostov → add Seventh Seraph Carbine (on-character Kinetic legendary, no vault transfer).
-  - **Perk hover popup + DIM community insights (2026-07-04):** hovering any perk (in Weapon
-    Watch pools/rolls, and Perk Finder rows) pops a tooltip with the perk's **in-game description**
-    and, where available, its **Clarity community insight** — the exact crowd-sourced, numbers-accurate
-    text DIM shows. `loadClarity` downloads `database-clarity.github.io/Live-Clarity-Database/descriptions/dim.json`
-    weekly, flattens `descriptions.en[].linesContent[].text`, folds hash→our perk NAME, caches to
-    `.clarity.json`. The slim manifest now stores each plug's `dsc` (in-game description) — this **bumped
-    slim5→slim6** (one-time full manifest re-download; ~1169 Clarity perks, 307 perk descriptions live).
-    `/api/weapons` returns `perkDescs` + `perkInsights` maps; `/api/perks` adds `dsc` + `insight` per perk.
-    Tooltip is a single floating `#ptip` div, shown on `[data-p]`/`[data-pn]` mouseover.
+  - **Perk hover popup — redesigned (2026-07-05, `perktip.js`):** hovering any perk (Weapon Watch
+    pools/rolls, Perk Finder rows, Weapon Vault inspect) pops the sectioned card described in the
+    files table — **in-game description** (manifest `dsc`) up top in an inset box, then the **community
+    insight** as cleaned, coloured bullets. Insight source = **Clarity** (`loadClarity` downloads
+    `.../descriptions/dim.json` weekly → `.clarity.json`); `insightBullets` serves curated
+    `.clarity-clean.json` bullets else the **lossless** `cleanClarityBullets` fallback. The slim
+    manifest stores each plug's `dsc` (**bumped slim5→slim6**, one-time re-download; ~1169 Clarity
+    perks, 307 descriptions). `/api/weapons` → `perkDescs` + `perkInsights` (bullets `[{type,text}]`);
+    `/api/perks` adds `dsc` + `insight` bullets per perk. **Never-drop-info rule** (Diego): audit via
+    `scratchpad/gen-report.js` — it flagged and we fixed two silent-drop bugs (the fallback 5-sentence
+    cap; the editorial filter eating whole data bullets). Now 0 real number-drops across 278 perks.
+    Colours/symbols/layout were locked with Diego over ~8 live in-browser mockups. **TODO: localisation**
+    — everything API-derived (manifest text, Clarity insight) must be pulled per-locale for pt-BR +
+    future langs; see NEXT_PHASE l10n spec. Curated English bullets are en-only.
   - **Favorite perks → whole-vault perk score (2026-07-04):** Perk Finder rows have a **★ star**
     (favorite any perk, weapon-independent) saved to `perk-favorites.json` via GET/POST `/api/favorites`
     (a `★ Favorites` filter + count too). The Weapon Vault scores **every** copy by `favScore` = how many

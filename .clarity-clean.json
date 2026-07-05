@@ -1,0 +1,140 @@
+{
+  "Kill Clip": [
+    {"type":"trigger","text":"Reload within 3.6s of a kill → 25% damage for 5s"},
+    {"type":"note","text":"Removed on stow; no splash/explosive damage"}
+  ],
+  "Rampage": [
+    {"type":"trigger","text":"Kill → stacking damage buff, max 3 stacks"},
+    {"type":"buff","text":"10% / 21% / 33.1% damage at 1 / 2 / 3 stacks"},
+    {"type":"ramp","text":"Each stack lasts 5s, expiring one at a time"},
+    {"type":"note","text":"Enhanced: +0.5s duration; no splash/explosive damage"}
+  ],
+  "Frenzy": [
+    {"type":"trigger","text":"After 12s in combat → 15% damage, 100 Handling, 100 Reload for 7.2s"},
+    {"type":"buff","text":"Works while stowed; dealing or taking damage refreshes it"},
+    {"type":"note","text":"In combat = damage within the last 5s; enhanced extends that window +0.5s"}
+  ],
+  "Rapid Hit": [
+    {"type":"trigger","text":"Precision hits → stacks of Rapid Hit (max 5), 2s each"},
+    {"type":"ramp","text":"Up to 25 Stability and 60 Reload Speed at 5 stacks"}
+  ],
+  "Outlaw": [
+    {"type":"trigger","text":"Precision kill → 70 Reload Speed for 6s"}
+  ],
+  "Demolitionist": [
+    {"type":"trigger","text":"Kill → 11% grenade energy (22% with Snipers / Shotguns / Glaives / Fusions)"},
+    {"type":"buff","text":"Using your grenade reloads the mag · 3s cooldown"},
+    {"type":"note","text":"Enhanced: grenade energy gains +10%"}
+  ],
+  "Incandescent": [
+    {"type":"trigger","text":"Kill → Solar explosion applying 30 Scorch (45 with Ember of Ashes)"},
+    {"type":"buff","text":"Killing elites widens the blast to 8m and adds 15 Scorch"}
+  ],
+  "Voltshot": [
+    {"type":"trigger","text":"Reload within 5.3s of a kill → next shot Jolts, for 8s"},
+    {"type":"buff","text":"Jolt chains Arc damage to nearby enemies"},
+    {"type":"note","text":"Enhanced: buff held 1s longer"}
+  ],
+  "Jolting Feedback": [
+    {"type":"trigger","text":"Repeated hits within 3s → next hit applies Jolt"},
+    {"type":"buff","text":"Amplified lowers the hits needed (e.g. Auto Rifles 14 → 11)"}
+  ],
+  "Destabilizing Rounds": [
+    {"type":"trigger","text":"Kill → Volatile Rounds for 4.5s and Volatile to enemies within 7m"},
+    {"type":"note","text":"1.5s cooldown between activations; enhanced: +1.5s duration"}
+  ],
+  "Golden Tricorn": [
+    {"type":"trigger","text":"Kill → 15% damage for 7s (Tier 1)"},
+    {"type":"ramp","text":"Matching-element ability kill → 50% damage for 10s (Tier 2)"}
+  ],
+  "Target Lock": [
+    {"type":"ramp","text":"Sustained hits ramp a damage buff from 16.73% up to 40% (PvP: 10.46% → 25%)"},
+    {"type":"note","text":"Max at 5 visual stacks (12.5% / 35.5% / 54.5% / 74.5% / 110.33% of the mag as hits)"},
+    {"type":"note","text":"≈25% average after a full 100% mag (PvP: 15.85%); 0.2s between hits; missing resets it"}
+  ],
+  "Vorpal Weapon": [
+    {"type":"buff","text":"Bonus damage vs bosses, minibosses, vehicles and supers"},
+    {"type":"buff","text":"Primary 20% / Special 15% / Power 10% (PvP: 60% / 20% / 20%)"}
+  ],
+  "Bait and Switch": [
+    {"type":"trigger","text":"Damage with all 3 weapons within 7s → 30% damage for 10s"}
+  ],
+  "Explosive Payload": [
+    {"type":"buff","text":"50% of body damage becomes an explosive detonation on impact"},
+    {"type":"buff","text":"PvE: payload +30%, ~+15% total damage and more stagger"},
+    {"type":"note","text":"PvP: ~same (±1-2%); Hand Cannons -7%. Grants 5 Reload Speed"}
+  ],
+  "Chill Clip": [
+    {"type":"trigger","text":"Direct hits apply 60 Slow within 4m (40 for Micro-Missile Sidearms & Rapid-Fire Fusions)"},
+    {"type":"buff","text":"Slow lasts 4s (PvP: 1.5s), or 8s (PvP: 2s) with Whisper of Durance"},
+    {"type":"note","text":"Needs ≥40% mag; once per shot. Enhanced lowers the threshold by 10% (50% → 40%)"}
+  ],
+  "Headstone": [
+    {"type":"trigger","text":"Precision kill → spawns a Stasis Crystal at the target"},
+    {"type":"note","text":"Making 5 crystals locks the perk for 5s"}
+  ],
+  "Repulsor Brace": [
+    {"type":"trigger","text":"Kill a Void-debuffed enemy → 45 HP Void Overshield for 8s (12s with Echo of Persistence)"}
+  ],
+  "Adrenaline Junkie": [
+    {"type":"trigger","text":"Kill → 1 stack (max 5, 4.5s); a grenade kill grants all 5"},
+    {"type":"buff","text":"6.7% / 13.3% / 20% / 26.6% / 33.3% damage + 20 Handling at 1-5 stacks"}
+  ],
+  "Envious Assassin": [
+    {"type":"trigger","text":"Kills with your other weapons → overfill this mag on swap"},
+    {"type":"buff","text":"12.5% of mag per kill (Special/Power 22.5%), up to 100% per swap and 200% total"},
+    {"type":"note","text":"Enhanced: +2.5% per kill (e.g. 10% → 12.5%)"}
+  ],
+  "Reconstruction": [
+    {"type":"ramp","text":"Every 5.5s while stowed → loads 25% of the mag from reserves"},
+    {"type":"buff","text":"Overfills up to double capacity; enhanced: loading delay -0.5s"}
+  ],
+  "Feeding Frenzy": [
+    {"type":"trigger","text":"Kill → 1 stack (max 5, 3.5s)"},
+    {"type":"buff","text":"13 / 55 / 65 / 85 / 100 Reload Speed at 1-5 stacks"},
+    {"type":"buff","text":"2.5% / 10% / 13% / 16% / 20% faster reload animation"}
+  ],
+  "One for All": [
+    {"type":"trigger","text":"Hit 3 separate enemies within 3s → 35% damage for 11s"},
+    {"type":"note","text":"Can't refresh; enhanced: +1s duration"}
+  ],
+  "Multikill Clip": [
+    {"type":"trigger","text":"Reload within 3.6s of 1 / 2 / 3 kills (within 3.5s of each) → 17% / 33% / 50% damage for 5s"}
+  ],
+  "Killing Wind": [
+    {"type":"trigger","text":"Kill → 40 Handling, 20 Range, 50 Mobility, 5% falloff distance for 5s"},
+    {"type":"buff","text":"More kills extend it up to 8s"}
+  ],
+  "Dragonfly": [
+    {"type":"trigger","text":"Precision kill → elemental explosion (up to 123.89 dmg, 4.5m)"},
+    {"type":"note","text":"Enhanced: +10% detonation damage"}
+  ],
+  "Zen Moment": [
+    {"type":"buff","text":"Hits grant stacks (max 5, 1s) reducing flinch, weapon shake 15% and reticle bounce 15%"},
+    {"type":"note","text":"Passively grants 5 Stability"}
+  ],
+  "Onslaught": [
+    {"type":"trigger","text":"Kill → 1 stack (max 3, 4.5s)"},
+    {"type":"buff","text":"16.7% / 28.6% / 37.5% faster firing + 15 / 25 / 35 Reload at 1-3 stacks"}
+  ],
+  "Heal Clip": [
+    {"type":"trigger","text":"Reload within 5.3s of a kill → Cure x2 to you, Cure x1 to allies within 15m"}
+  ],
+  "Slideshot": [
+    {"type":"trigger","text":"Slide → reloads 15% of the mag, 22 Range and Stability for 2.5s"},
+    {"type":"note","text":"0.3s cooldown; can re-trigger during a slide"}
+  ],
+  "Subsistence": [
+    {"type":"trigger","text":"Kills refill 10% of the mag from reserves (17% for SMGs and Autos)"}
+  ],
+  "Firing Line": [
+    {"type":"buff","text":"Near 2 allies → 20% bonus precision damage"}
+  ],
+  "Hatchling": [
+    {"type":"trigger","text":"Precision kill or 3 kills within 3s → spawns a Threadling"}
+  ],
+  "Slice": [
+    {"type":"trigger","text":"Class ability → Slice for 8s"},
+    {"type":"buff","text":"While active, hits Sever the target"}
+  ]
+}

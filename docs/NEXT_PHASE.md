@@ -3,6 +3,41 @@
 > Maintained per CLAUDE.md. When a feature ships, move it to HANDOFF.md
 > "What works now" and delete it here.
 
+## Where we are (2026-07-05 — perk popup REDESIGN shipped)
+
+Redesigned perk hover popup (locked design + Diego's decisions). Details in HANDOFF. Key points:
+- `perktip.js` shared popup; server serves cleaned insight **bullets** (`insightBullets`) from
+  `.clarity-clean.json` (curated, committed) + a **lossless** rule-based fallback.
+- **Diego's rule: NEVER drop info.** Decision: **keep hand-rewrites but make them COMPLETE**
+  (every per-stack %, PvP split, enhanced bonus kept). English curation is en-only; other locales
+  fall back to localised Clarity (see l10n spec).
+- **Audit tooling** (`scratchpad/gen-report.js` → perk-review.html artifact): compares in-game +
+  raw Clarity vs displayed for all 278 perks and flags any dropped number/keyword. Caught two real
+  bugs: the fallback `.slice(0,5)` cap (dropped Chaos Reshaped's damage+heal) and the editorial
+  filter nuking whole data-bearing bullets (Headseeker). Both fixed → **0 real number-drops**.
+  Regenerate: refresh 8788, `curl /api/weapons -o scratchpad/w.json`, `node scratchpad/gen-report.js`.
+- **Remaining work:** curated clean bullets cover ~34 top perks; the rest use the lossless fallback
+  (complete but denser). Expand curation over time (re-audit each with gen-report). Add the hover to
+  Perk Finder match rows + Weapon Vault tiles if wanted (currently: perk lists/rolls + vault inspect).
+
+## SPEC: localisation — pt-BR now, more languages later (2026-07-05, Diego)
+
+Translate the whole tool to **Portuguese (pt-BR)** and keep it open to more languages.
+**Per Diego's spec: everything API-derived must be pulled from the API in the selected locale**
+— do NOT translate API text ourselves.
+- **Bungie manifest:** `loadManifest` currently hard-codes `jsonWorldComponentContentPaths.en`.
+  Switch to the chosen locale's paths (Bungie ships en, pt-br, de, es, es-mx, fr, it, ja, ko, pl,
+  ru, zh-chs, zh-cht) → localised weapon/perk names, descriptions, sourceStrings, stat names.
+- **Clarity insights:** `loadClarity` uses `descriptions.en`; use `descriptions[locale]` (Clarity
+  ships several langs). This makes the community insight localise for free — and is another reason
+  to prefer lossless Clarity over English hand-rewrites (`.clarity-clean.json` is English-only and
+  would NOT translate; a localised build must fall back to Clarity's localised text).
+- **UI chrome** (button labels, section titles, our own copy) = a separate strings table (i18n),
+  not API — the only text we translate ourselves.
+- Cache per locale (`slimN-<ver>-<locale>.json`, `.clarity-<locale>.json`). A locale selector
+  (banner or settings) drives it. Source strings for filters (crucible/raid/etc.) also localise —
+  the Weapon Watch source search would then match localised source text.
+
 ## Where we are (2026-07-04, night — perk insights + favorites + search)
 
 Just shipped & verified live on 8787 (details in HANDOFF "What works now"):

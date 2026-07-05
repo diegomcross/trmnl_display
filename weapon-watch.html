@@ -95,12 +95,6 @@ input[type=checkbox]{accent-color:var(--gold);width:15px;height:15px;flex-shrink
 .hperks .hp2{color:var(--gold)}
 .hperks{overflow:hidden;text-overflow:ellipsis}
 :focus-visible{outline:2px solid var(--gold);outline-offset:2px}
-/* perk hover popup */
-#ptip{position:fixed;z-index:9999;max-width:340px;background:#080a0e;border:1px solid var(--gold);clip-path:var(--clip);padding:9px 11px;font-size:12px;line-height:1.5;color:var(--ink);display:none;pointer-events:none;box-shadow:0 8px 24px rgba(0,0,0,.65)}
-#ptip .ptn{font-weight:700;color:var(--gold);margin-bottom:4px;font-size:12.5px}
-#ptip .ptlab{font-size:9.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--keep);font-family:Bahnschrift,"Roboto Condensed",sans-serif;margin:5px 0 2px}
-#ptip .ptc{color:var(--ink)}
-#ptip .ptd{color:var(--mut);font-size:11.5px}
 @media(min-width:760px){body{max-width:880px;margin:0 auto}}
 @media(max-width:520px){
   .copy{grid-template-columns:1fr;gap:9px}
@@ -396,29 +390,6 @@ document.body.addEventListener('change',e=>{
   const cb=e.target.closest('input[data-sel]');
   if(cb){ cb.checked?sel.add(cb.dataset.sel):sel.delete(cb.dataset.sel); }
 });
-// ---- perk hover popup: manifest description + DIM/Clarity community insight ----
-const ptip=document.createElement('div'); ptip.id='ptip'; document.body.appendChild(ptip);
-function showTip(el){
-  const n=el.dataset.p||el.dataset.pn; if(!n) return;
-  const d=(DATA.perkDescs||{})[n]||'', c=(DATA.perkInsights||{})[n]||'';
-  if(!d && !c){ hideTip(); return; }
-  const html=s=>esc(s).replace(/\n/g,'<br>');
-  ptip.innerHTML=`<div class="ptn">${esc(n)}</div>`
-    +(c?`<div class="ptlab">Community insight (Clarity)</div><div class="ptc">${html(c)}</div>`:'')
-    +(d?`<div class="ptlab">In-game</div><div class="ptd">${html(d)}</div>`:'');
-  ptip.style.display='block'; positionTip(el);
-}
-function positionTip(el){
-  const r=el.getBoundingClientRect(), t=ptip.getBoundingClientRect();
-  let left=Math.min(r.left, window.innerWidth-8-t.width); if(left<8) left=8;
-  let top=r.bottom+8; if(top+t.height>window.innerHeight-8) top=r.top-8-t.height; if(top<8) top=8;
-  ptip.style.left=left+'px'; ptip.style.top=top+'px';
-}
-const hideTip=()=>{ptip.style.display='none';};
-document.body.addEventListener('mouseover',e=>{const el=e.target.closest('[data-p],[data-pn]'); if(el) showTip(el);});
-document.body.addEventListener('mouseout',e=>{const el=e.target.closest('[data-p],[data-pn]'); if(el&&!el.contains(e.relatedTarget)) hideTip();});
-window.addEventListener('scroll',hideTip,{passive:true});
-
 $('q').oninput=e=>{q=e.target.value;render();};
 $('refreshBtn').onclick=()=>load(true);
 $('wSort').onchange=e=>{wSort=e.target.value;renderWatched();};
@@ -440,12 +411,14 @@ async function load(fresh){
     ]);
     if(d.error) throw new Error(d.error);
     DATA=d; WATCH=w||{}; TAGS=tg||{};
+    if(window.PerkTip) PerkTip.init({perkDescs:DATA.perkDescs,perkInsights:DATA.perkInsights});
     $('status').textContent=`${DATA.weapons.length} weapons · synced ${new Date(d.fetchedAt).toLocaleTimeString()}`;
     render();
   }catch(err){ $('status').textContent='Load failed: '+err.message; }
 }
 load(false);
 </script>
+<script src="/perktip.js"></script>
 <script src="/banner.js"></script>
 </body>
 </html>

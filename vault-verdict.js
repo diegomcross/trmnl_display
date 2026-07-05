@@ -783,9 +783,9 @@ async function fetchWeapons(e) {
   if (!seen.seeded) { for (const w of weapons) seen.ids.add(w.id); seen.seeded = true; saveSeen(seen); }
   for (const w of weapons) w.fresh = !seen.ids.has(w.id);
 
-  const perkInsights = {};   // name -> Clarity community insight, only for perks we actually show
+  const perkInsights = {};   // name -> cleaned community-insight BULLETS ([{type,text}]), for perks we show
   for (const n of new Set([...Object.keys(perkIcons), ...Object.keys(perkDescs)])) {
-    const c = clarity.byName[n]; if (c) perkInsights[n] = c;
+    const b = insightBullets(n); if (b && b.length) perkInsights[n] = b;
   }
   return { weapons, defs: mergedDefs, perkIcons, perkDescs, perkInsights, fetchedAt: new Date().toISOString(), account: `${m.membershipType}/${m.membershipId}` };
 }
@@ -926,6 +926,52 @@ async function loadClarity(man, fresh = false) {
   return CLARITY;
 }
 
+// ---------- cleaned, readable perk bullets ----------
+// The hover popup shows tight bullets, not Clarity's clunky prose. Curated clean bullets
+// live in .clarity-clean.json ({ perkName: [{type,text}] }, numbers kept verbatim). Perks
+// without a curated entry fall back to a rule-based cleanup of the raw Clarity text.
+const CLEAN_FILE = path.join(__dirname, '.clarity-clean.json');
+let CLEAN = null;
+function loadCleanClarity(fresh = false) {
+  if (CLEAN && !fresh) return CLEAN;
+  try { CLEAN = JSON.parse(fs.readFileSync(CLEAN_FILE, 'utf8')); }
+  catch { CLEAN = {}; }
+  return CLEAN;
+}
+const EDITORIAL = /learn more|explainer|blog post|editor'?s note|clarity website|this note is temporary|will be removed|patch note|in the future/i;
+// bullet TYPE drives the leading symbol on the frontend (trigger ▸ / ramp ▲ / penalty ▼ / buff · / note)
+function guessBulletType(s) {
+  if (/reduc|penalt|drawback|slower|weaken|-\s?\d|decreas|less\b/i.test(s)) return 'penalty';
+  if (/ramp|each (stack|kill|hit)|per (kill|stack|hit)|\bbuilds\b|\bstacks?\b/i.test(s)) return 'ramp';
+  if (/^(on |after |when |while |reload|kill|final blow|precision|defeat|hit|dealing|landing|rapidly)/i.test(s.trim())
+      || /on (kill|hit|reload|precision|final blow)/i.test(s)) return 'trigger';
+  return 'buff';
+}
+// fallback: raw Clarity text -> bullets. LOSSLESS by design — keep every substantive line
+// (intro sentences + each "•" sub-bullet); only strip true editorial meta lines. NEVER cap:
+// an earlier 5-sentence cap silently dropped real effects (e.g. Chaos Reshaped's heal).
+function cleanClarityBullets(raw) {
+  if (!raw) return [];
+  const flat = raw.replace(/\s*\n+\s*/g, ' ').replace(/\s{2,}/g, ' ').trim();
+  const units = [];
+  flat.split(/\s*•\s*/).forEach((p, i) => {
+    p = p.trim(); if (!p) return;
+    if (i === 0) p.split(/(?<=[.!?])\s+/).forEach((s) => { s = s.trim(); if (s) units.push(s); });
+    else units.push(p);   // each "•" sub-bullet kept whole
+  });
+  // strip only the editorial SENTENCE(S) inside a unit — never a whole data-bearing bullet
+  return units
+    .map((u) => u.split(/(?<=[.!?])\s+/).map((s) => s.trim()).filter((s) => s && !EDITORIAL.test(s)).join(' '))
+    .filter(Boolean)
+    .map((text) => ({ type: guessBulletType(text), text }));
+}
+// curated clean bullets if we have them, else the rule-based fallback from raw Clarity
+function insightBullets(name) {
+  const clean = loadCleanClarity()[name];
+  if (Array.isArray(clean) && clean.length) return clean;
+  return cleanClarityBullets((CLARITY && CLARITY.byName[name]) || '');
+}
+
 // Every trait perk (columns 3 & 4) that can roll on ANY weapon in the game, deduped by
 // name, tagged with which column(s) it appears in and its community popularity.
 async function buildPerkLibrary(e, fresh = false) {
@@ -953,7 +999,7 @@ async function buildPerkLibrary(e, fresh = false) {
   const clarity = await loadClarity(man, fresh);
   const perks = [...byName.values()].map((p) => {
     const w = wl.perks[p.n] || { total: 0, pve: 0, pvp: 0 };
-    return { n: p.n, icon: p.icon, cols: p.cols, pop: w.total, pve: w.pve, pvp: w.pvp, dsc: p.dsc || '', insight: clarity.byName[p.n] || '' };
+    return { n: p.n, icon: p.icon, cols: p.cols, pop: w.total, pve: w.pve, pvp: w.pvp, dsc: p.dsc || '', insight: insightBullets(p.n) };
   });
   perks.sort((a, b) => b.pop - a.pop || a.n.localeCompare(b.n));
   PERKLIB = { perks, count: perks.length, wishlistAt: wl.generatedAt };
@@ -1159,6 +1205,10 @@ async function main() {
       if (req.url.startsWith('/banner.js')) {
         res.writeHead(200, { 'Content-Type': 'application/javascript; charset=utf-8' });
         return res.end(fs.readFileSync(path.join(__dirname, 'banner.js')));
+      }
+      if (req.url.startsWith('/perktip.js')) {
+        res.writeHead(200, { 'Content-Type': 'application/javascript; charset=utf-8' });
+        return res.end(fs.readFileSync(path.join(__dirname, 'perktip.js')));
       }
       if (req.url.startsWith('/fonts/')) {
         const f = path.basename(req.url.split('?')[0]);              // no path traversal
