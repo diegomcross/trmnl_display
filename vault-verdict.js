@@ -456,6 +456,25 @@ async function equipWeapon(e, itemId, hash, ownClass) {
   return { own: LOCK_CTX.clsById[target] || ownClass };
 }
 
+// Vault every UNEQUIPPED weapon and/or armor piece sitting in a character's inventory,
+// freeing all 9 stored slots per bucket. kind = 'weapons' | 'armor' | 'both'.
+async function cleanInventory(e, characterId, kind) {
+  const { prof, man } = await fetchProfile(e);
+  const inv = prof.characterInventories?.data?.[characterId]?.items || [];
+  const wantW = kind === 'weapons' || kind === 'both';
+  const wantA = kind === 'armor' || kind === 'both';
+  let moved = 0, failed = 0;
+  for (const it of inv) {
+    if (!it.itemInstanceId) continue;
+    const d = man.items[it.itemHash]; if (!d) continue;
+    const isW = d.it === 3 && WBUCKET[d.b], isA = d.it === 2 && BUCKET[d.b];
+    if (!((isW && wantW) || (isA && wantA))) continue;    // only weapons/armor, skip mods/postmaster
+    try { await transferItem(e, it.itemInstanceId, it.itemHash, characterId, true); moved++; }
+    catch { failed++; }
+  }
+  return { moved, failed };
+}
+
 // Pick a legendary weapon in a given slot (bucket) from a set of items, preferring the
 // same ammo type as the exotic being freed. Returns {id,hash,name,ammo} or null.
 function pickSlotLegendary(items, man, bucket, ammo, exclude) {
@@ -507,10 +526,26 @@ async function smartEquipWeapon(e, itemId, hash, ownClass, dryRun) {
       }
     }
   }
-  if (dryRun) return { own: LOCK_CTX.clsById[target] || ownClass, swap, dryRun: true, target: LOCK_CTX.clsById[target] };
-  if (!ownClass || ownClass === 'Vault') await transferItem(e, itemId, hash, target, false);
+  // pulling from the vault: a character slot holds 1 equipped + up to 9 stored, and Bungie
+  // refuses to pull a 10th (DestinyNoRoomInDestination) — THIS is why equip "didn't work" on a
+  // full slot. So if the slot is full, vault one (preferably unlocked) weapon first to make room.
+  let spill = null;
+  if (!ownClass || ownClass === 'Vault') {
+    const inv = prof.characterInventories?.data?.[target]?.items || [];
+    const slotItems = inv.filter((it) => it.itemInstanceId && it.itemInstanceId !== itemId && man.items[it.itemHash]?.b === bDef.b);
+    if (slotItems.length >= 9) {
+      const pick = slotItems.find((it) => !(it.state & 1)) || slotItems[0]; // prefer an unlocked one
+      const sd = pick && man.items[pick.itemHash];
+      if (pick) spill = { id: pick.itemInstanceId, hash: pick.itemHash, name: (sd && sd.n) || 'a weapon' };
+    }
+  }
+  if (dryRun) return { own: LOCK_CTX.clsById[target] || ownClass, swap, spill: spill && spill.name, dryRun: true, target: LOCK_CTX.clsById[target] };
+  if (!ownClass || ownClass === 'Vault') {
+    if (spill) { try { await transferItem(e, spill.id, spill.hash, target, true); } catch (err) {} } // make space
+    await transferItem(e, itemId, hash, target, false);
+  }
   await equipItem(e, itemId, target);
-  return { own: LOCK_CTX.clsById[target] || ownClass, swap };
+  return { own: LOCK_CTX.clsById[target] || ownClass, swap, spill: spill && spill.name };
 }
 
 // ---------- fashion (armor ornaments + shaders) ----------
@@ -666,11 +701,25 @@ async function fetchArmor(e) {
 const WBUCKET = { 1498876634: 'Kinetic', 2465295065: 'Energy', 953998645: 'Power' };
 const AMMO = { 1: 'Primary', 2: 'Special', 3: 'Heavy' };
 const DMG = { 1: 'Kinetic', 2: 'Arc', 3: 'Solar', 4: 'Void', 6: 'Stasis', 7: 'Strand' };
+// official element/subclass icons (bungie.net paths) keyed by damage-type enum, fetched once
+let DMG_ICONS = null;
+async function loadDamageIcons(e) {
+  if (DMG_ICONS) return DMG_ICONS;
+  DMG_ICONS = {};
+  try {
+    const meta = await bungie(`${BASE}/Destiny2/Manifest/`, e);
+    const p = meta.jsonWorldComponentContentPaths.en.DestinyDamageTypeDefinition;
+    const raw = await fetch(`https://www.bungie.net${p}`).then((r) => r.json());
+    for (const d of Object.values(raw)) if (d.enumValue != null && d.displayProperties?.icon) DMG_ICONS[d.enumValue] = d.displayProperties.icon;
+  } catch (err) { console.warn('damage icons load failed:', err.message); }
+  return DMG_ICONS;
+}
 
 async function fetchWeapons(e) {
   const { prof, man, m, raw } = await fetchProfile(e);
   const tags = await dimTagsFresh(e);   // live DIM tags (id -> tag), source of truth
   const clarity = await loadClarity(man);   // community insights for the perk hover popup
+  const dmgIcons = await loadDamageIcons(e); // official element icons for the tiles
 
   const instances = prof.itemComponents?.instances?.data || {};
   const liveStats = prof.itemComponents?.stats?.data || {};
@@ -751,7 +800,7 @@ async function fetchWeapons(e) {
     if (!defsOut[it.itemHash]) {
       defsOut[it.itemHash] = {
         n: def.n, ty: def.ty, tt: def.tt, slot: WBUCKET[def.b],
-        ammo: AMMO[def.ammo] || '', dmg: DMG[def.dmg] || '', src: def.src || '',
+        ammo: AMMO[def.ammo] || '', dmg: DMG[def.dmg] || '', dmgIcon: dmgIcons[def.dmg] || '', src: def.src || '',
         icon: def.icon || '', shot: def.shot || '',
         pool: (def.tr || []).map((ps) => {
           const names = new Set();
@@ -1196,8 +1245,14 @@ async function main() {
         try {
           const r = await smartEquipWeapon(e, id, hash, own, !!dryRun);
           if (!dryRun && wcache) { const w = wcache.weapons.find((x) => x.id === id); if (w) w.own = r.own; }
-          return json({ ok: true, own: r.own, swap: r.swap, dryRun: r.dryRun });
+          return json({ ok: true, own: r.own, swap: r.swap, spill: r.spill, dryRun: r.dryRun });
         } catch (err) { return json({ error: err.message }); }
+      }
+      if (req.url.startsWith('/api/clean-inventory') && req.method === 'POST') {
+        const { characterId, kind } = JSON.parse(await readBody(req) || '{}');
+        if (!characterId) return json({ error: 'missing characterId' });
+        try { const r = await cleanInventory(e, characterId, kind || 'both'); wcache = null; return json({ ok: true, ...r }); }
+        catch (err) { return json({ error: err.message }); }
       }
       if (req.url.startsWith('/api/drops/ack') && req.method === 'POST') {
         const { ids } = JSON.parse(await readBody(req) || '{}');

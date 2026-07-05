@@ -3,6 +3,23 @@
 > Maintained per CLAUDE.md. When a feature ships, move it to HANDOFF.md
 > "What works now" and delete it here.
 
+## Where we are (2026-07-05, late — vault manager batch + equip make-space + stability)
+
+Shipped & verified on 8788: (1) **equip make-space fix** — `smartEquipWeapon` vaults an unlocked
+weapon from a FULL character slot (1 equipped + 9 stored) before pulling from the vault; this was
+why equip "didn't work" (Diego diagnosed it). Card shows `· vaulted X to make room`. (2) **Vault
+inspect card**: trait Columns 3 & 4 now **side by side, perks stacked vertically** (`.ispcols2`).
+(3) **"Clean inventory → vault"** rail control (Weapons / Armor / Both) → `cleanInventory` +
+`POST /api/clean-inventory {characterId,kind}` vaults every unequipped weapon/armor for the
+selected guardian. (4) **Official element icons** on tiles (`loadDamageIcons` → `DamageTypeDefinition`
+icon per damage type, `def.dmgIcon`; `.wt .elic`) instead of the colour diamond. (5) **Weapon-type
+filter dropdown** + **sort-by-stat dropdown** (`fType`, `statSort` over `statsMax`) added to the
+existing rail. All `.env`/write actions use the same scope as lock/equip.
+
+**Server stability:** the app was flickering offline from an **EADDRINUSE crash-loop** on restart —
+now the server retries `listen()` after 3s instead of exiting (committed 153172d). Don't do the
+kill-node + racing-relaunch pattern; let the launcher restart it.
+
 ## Where we are (2026-07-05, evening — batch of UX fixes + god-roll dedupe)
 
 Shipped & verified live (8787): (1) **perk hover popup now has a 400ms delay** (`perktip.js`
