@@ -1089,6 +1089,7 @@ async function probe(nameLike) {
 // drop-alert.json — which the TRMNL server.js reads to interrupt the panel for a minute.
 const DROP_ALERT_FILE = path.join(__dirname, 'drop-alert.json');
 const GAME_PROCESS = process.env.GAME_PROCESS || 'destiny2.exe';
+const ALERTED = new Set();   // instance ids already alerted — a fresh drop only fires ONCE
 let gameUp = false;
 function checkGame() {
   exec(`tasklist /FI "IMAGENAME eq ${GAME_PROCESS}" /NH`, { windowsHide: true }, (err, stdout) => {
@@ -1275,12 +1276,14 @@ async function main() {
       const copiesOf = {}; wcache.weapons.forEach((w) => { (copiesOf[w.hash] = copiesOf[w.hash] || []).push(w); });
       for (const w of wcache.weapons) {
         if (!w.fresh || w.locked) continue;             // only brand-new, still-unlocked drops
+        if (ALERTED.has(w.id)) continue;                // and only alert each drop once
         const cfg = watch[w.hash]; if (!cfg) continue;  // of a watched weapon
         const raw = copiesOf[w.hash] || [];
         const rankOf = {};
         for (const s of (cfg.stats || [])) { const vals = [...new Set(raw.map((x) => x.statsMax[s] ?? -1))].sort((a, b) => b - a); rankOf[s] = (v) => { const i = vals.indexOf(v); return i === 0 ? 's1' : i === 1 ? 's2' : i === 2 ? 's3' : ''; }; }
         const sc = scoreWeaponCopy(w, cfg, rankOf);
         if (!sc.god) continue;
+        ALERTED.add(w.id);                              // mark so it won't re-fire next poll
         const d = wcache.defs[w.hash] || {};
         try { await setLock(e, w.id, true); w.locked = true; } catch (err) { console.warn('auto-lock failed:', err.message); }
         const stats = (cfg.stats || []).map((s) => ({ n: s, v: w.statsMax[s] ?? '—' }));

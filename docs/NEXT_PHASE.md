@@ -3,6 +3,21 @@
 > Maintained per CLAUDE.md. When a feature ships, move it to HANDOFF.md
 > "What works now" and delete it here.
 
+## Where we are (2026-07-05, evening — batch of UX fixes + god-roll dedupe)
+
+Shipped & verified live (8787): (1) **perk hover popup now has a 400ms delay** (`perktip.js`
+`HOVER_DELAY`) so it doesn't flash while skimming; (2) **Weapon Watch copies sort by tag**
+(favorite → keep → none → junk, then score) + a **"Junk untagged"** button that mass-junks every
+untagged weapon copy (writes to DIM, confirm dialog); (3) **god-roll alert fires ONCE per drop** —
+`ALERTED` Set in `pollDrops` (was re-firing every 25s poll because the drop stays `fresh`);
+(4) **Vault inspect card has a watch-perk picker** (all pool perks → Save to Weapon Watch, merges);
+(5) **Vault filters now dim non-matches and sort matches to the top** instead of hiding them
+(`filtersActive` + `bySort` in `render()`; `.wt.dim` opacity .34).
+
+**STILL PENDING — Fashion ghost + sparrow:** add ghost shell + vehicle (sparrow) equipment and
+their shaders to the Fashion save/apply (`vault-verdict.js` fetchFashion/applyLook + `fashion.html`).
+Ghost bucket `4023510869`, Vehicle bucket `2025709351`; shader/ornament sockets like armor.
+
 ## Where we are (2026-07-05, later — Perk Finder cards + weighted favorites + vault % shipped)
 
 Shipped & verified on 8788 (details → HANDOFF). Five features:

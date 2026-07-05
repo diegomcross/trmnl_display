@@ -121,10 +121,14 @@
     tip.style.display = 'block';
     place(el);
   }
-  function hide() { if (tip) tip.style.display = 'none'; }
+  function hide() { clearTimeout(hoverTimer); if (tip) tip.style.display = 'none'; }
 
+  var hoverTimer = null, HOVER_DELAY = 400;   // ms before the popup appears — avoids flashing while skimming
   function wire() {
-    document.body.addEventListener('mouseover', function (e) { var el = e.target.closest('[data-p],[data-pn]'); if (el) show(el); });
+    document.body.addEventListener('mouseover', function (e) {
+      var el = e.target.closest('[data-p],[data-pn]'); if (!el) return;
+      clearTimeout(hoverTimer); hoverTimer = setTimeout(function () { show(el); }, HOVER_DELAY);
+    });
     document.body.addEventListener('mouseout', function (e) { var el = e.target.closest('[data-p],[data-pn]'); if (el && !el.contains(e.relatedTarget)) hide(); });
     window.addEventListener('scroll', hide, { passive: true, capture: true });
   }

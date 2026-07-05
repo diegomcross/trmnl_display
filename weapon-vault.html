@@ -61,7 +61,7 @@ input:focus{outline:none;border-color:var(--gold)}
 .wt.sel{outline:2px solid #fff;outline-offset:-2px}
 .wt.match{outline:2px solid var(--gold);outline-offset:-2px;z-index:1}
 .wt.hide{display:none}
-.wt.dim{opacity:.16}
+.wt.dim{opacity:.34}
 /* tile favorite-roll % color grades */
 .wt .p.sgold{color:var(--gold)} .wt .p.steal{color:var(--keep)} .wt .p.swhite{color:#c9cede}
 .wt .p.sred{color:var(--junk)} .wt .p.sdim{color:var(--dim)}
@@ -118,6 +118,7 @@ input:focus{outline:none;border-color:var(--gold)}
 .pk{display:inline-flex;align-items:center;gap:5px;border:1px solid var(--line);padding:2px 7px 2px 3px;font-size:11px;margin:0 4px 4px 0}
 .pk.on{border-color:var(--keep);color:var(--keep)} .pk img{width:20px;height:20px}
 .pk.fav{border-color:var(--gold);color:var(--gold)}
+.pk.pick{cursor:pointer} .pk.pick.on{border-color:var(--gold);color:var(--gold);background:rgba(207,174,66,.14)}
 .ispacts{display:flex;flex-wrap:wrap;gap:5px;margin-top:12px;padding-top:10px;border-top:1px solid var(--line);align-items:center}
 .ispacts .sep{width:1px;height:18px;background:var(--line);margin:0 2px}
 .ispacts .btn.act-on{background:var(--gold);color:#000}
@@ -198,6 +199,7 @@ const LKSVG=on=>`<svg viewBox="0 0 24 24" width="11" height="11" fill="none" str
 let WEAPONS={weapons:[],defs:{},perkIcons:{}}, PICONS={}, LIB=[];
 let PMINE={}, PPOP={}, maxMine=1, maxPop=1;   // per-perk score maps for the perk-score sorts
 let FAV={}, tileMode='score', minScore=0;      // {perkName:grade} favorites + tile mode + threshold
+let WATCH={}, pickSet=new Set();               // weapon-watch config + the inspect card's watch-perk picks
 const FAVW={1:1,2:1.5,3:2};                     // star grade -> weight (1★=1 · 2★=1.5 · 3★=2)
 const favAny=()=>Object.keys(FAV).length>0;
 let fEl=new Set(), fAmmo=new Set(), fMisc=new Set(), fTag=new Set(), q='', sortBy='power';
@@ -270,20 +272,24 @@ function passQuick(w,d){
 }
 function render(){
   const combo=(SLOTS[0].size||SLOTS[1].size);
+  // any filter active? if so, non-matches are DIMMED and sorted below (not hidden) — Diego's ask
+  const filtersActive=!!(q||fEl.size||fAmmo.size||fMisc.size||fTag.size||combo||(favAny()&&minScore>0));
   let shown=0, matched=0;
   // per slot: equipped (selected char) / that char's inventory / the shared vault
   const bySlot={Kinetic:{eq:[],inv:[],vault:[]},Energy:{eq:[],inv:[],vault:[]},Power:{eq:[],inv:[],vault:[]}};
   for(const w of WEAPONS.weapons){
     const d=WEAPONS.defs[w.hash]||{}; w._d=d;
-    if(!passQuick(w,d)){ w._st='hide'; continue; }
-    if(favAny() && minScore>0 && favScore(w) < minScore){ w._st='hide'; continue; }   // min-score threshold
-    let st='';
-    if(combo){ const sc=scoreCopy(w); if(sc&&sc.full){ st='match'; matched++; } else if(onlyMatch){ st='hide'; } else st='dim'; }
-    if(st==='hide'){ w._st='hide'; continue; }
+    if(!(w.loc==='vault' || w.ownCid===selCid)){ w._st='hide'; continue; }  // other characters hidden
+    const passQ=passQuick(w,d);
+    const passThresh=!(favAny()&&minScore>0) || favScore(w)>=minScore;
+    const passCombo=!combo || !!((scoreCopy(w)||{}).full);
+    const isMatch=passQ&&passThresh&&passCombo;
+    if(combo&&passCombo) matched++;
+    if(!isMatch && onlyMatch){ w._st='hide'; continue; }   // "only matches" toggle still fully hides
     const b=bySlot[d.slot]; if(!b){ w._st='hide'; continue; }
-    if(w.loc==='vault'){ b.vault.push(w); w._st=st; shown++; }
-    else if(w.ownCid===selCid){ (w.loc==='equipped'?b.eq:b.inv).push(w); w._st=st; shown++; }
-    else { w._st='hide'; }                                            // other characters hidden
+    w._st = !filtersActive ? '' : (isMatch ? 'match' : 'dim');
+    (w.loc==='vault' ? b.vault : (w.loc==='equipped'?b.eq:b.inv)).push(w);
+    shown++;
   }
   const g=$('grid'); g.innerHTML='';
   const grid=arr=>`<div class="wgrid">${arr.map(tile).join('')||'<div class="slotempty" style="grid-column:1/-1;color:var(--dim);font-size:11px;padding:4px">—</div>'}</div>`;
@@ -292,7 +298,8 @@ function render(){
   for(const slot of SLOTORD){
     const {eq,inv,vault}=bySlot[slot];
     if(!eq.length && !inv.length && !vault.length) continue;
-    eq.sort(cmp); inv.sort(cmp); vault.sort(cmp);
+    const bySort=(a,b)=>((a._st==='dim')-(b._st==='dim'))||cmp(a,b);   // matches on top, dimmed below
+    eq.sort(bySort); inv.sort(bySort); vault.sort(bySort);
     const s=document.createElement('div'); s.className='slotsec';
     s.innerHTML=`<div class="slothd"><span>${slot} Weapons</span><span>${eq.length+inv.length+vault.length}</span></div>
       <div class="slotrow">
@@ -348,13 +355,22 @@ let curW=null;
 function inspect(id){
   const w=WEAPONS.weapons.find(x=>x.id===id); if(!w) return;
   curW=w; const d=WEAPONS.defs[w.hash]||{};
+  pickSet=new Set(Object.keys((WATCH[w.hash]||{}).perks||{}));   // perks already watched for this weapon
   const col=(arr,label)=>`<div class="ispcol"><div class="ch">${label}</div>${(arr||[]).map(p=>{const g=FAV[p.n]||0;return `<span class="pk ${p.on?'on':''} ${g?'fav':''}" data-pn="${esc(p.n)}" title="${g?'★'.repeat(g)+' favorite':''}">${PICONS[p.n]?`<img src="${BN}${PICONS[p.n]}">`:''}${esc(p.n)}${p.on?' •':''}${g?' '+'★'.repeat(g):''}</span>`;}).join('')||'<span class="slotempty">—</span>'}</div>`;
   const tagBtn=(t,lbl)=>`<button class="btn sm ${w.tag===t?'act-on':'mut'}" data-act="tag" data-tag="${w.tag===t?'none':t}">${lbl}</button>`;
+  // watch-perk picker: every perk this weapon can roll, tap to track for drop alerts
+  const pool=d.pool||[[],[]], allPool=[...(pool[0]||[]),...(pool[1]||[])];
+  const watchSec=allPool.length?`<div class="ispcol" style="border-top:1px solid var(--line);margin-top:12px;padding-top:10px">
+      <div class="ch">Watch perks — tap to track this weapon for drop alerts</div>
+      ${[[pool[0],'Col 3'],[pool[1],'Col 4']].map(([arr,cl])=>(arr&&arr.length)?`<div style="margin-bottom:3px"><span style="font-size:9px;color:var(--dim);font-family:Bahnschrift,sans-serif;letter-spacing:.06em">${cl}</span> ${arr.map(n=>`<span class="pk pick ${pickSet.has(n)?'on':''}" data-pick="${esc(n)}" data-pn="${esc(n)}">${PICONS[n]?`<img src="${BN}${PICONS[n]}">`:''}${esc(n)}</span>`).join('')}</div>`:'').join('')}
+      <div style="margin-top:7px;display:flex;align-items:center;gap:8px"><span class="count" id="wpcount">${pickSet.size} watched</span><button class="btn sm" data-act="savewatch" style="margin-left:auto">Save to Weapon Watch</button></div>
+    </div>`:'';
   $('ispcard').innerHTML=`<div class="ih"><span class="it ${d.tt===6?'exotic':''}">${d.icon?`<img src="${BN}${d.icon}">`:''}</span>
     <div><div class="disp" style="font-size:16px;color:#fff">${esc(d.n||'Weapon')}</div>
     <div class="count" id="ispsub">${esc(d.ty||d.slot||'')} · ✦${w.pwr||'—'} · ${LOCLABEL[w.loc]||esc(w.own||'')}${w.loc!=='vault'&&w.own?' ('+esc(w.own)+')':''}${w.locked?' · '+LKSVG(true):''}${d.dmg?' · '+esc(d.dmg):''}${w.kills?' · '+w.kills.toLocaleString()+' kills':''}</div></div></div>
     ${col(w.cols?.[0],'Column 3')}${col(w.cols?.[1],'Column 4')}
     ${w.mw?`<div class="ispcol"><div class="ch">Masterwork</div><span class="pk">${w.mwIcon?`<img src="${BN}${w.mwIcon}">`:''}${esc(w.mw)}</span></div>`:''}
+    ${watchSec}
     <div class="ispacts">
       <button class="btn sm" data-act="equip">Equip</button>
       ${w.own==='Vault'?'':'<button class="btn sm mut" data-act="vault">To Vault</button>'}
@@ -370,6 +386,13 @@ function inspect(id){
 const msg=(t,cls)=>{ const m=$('ispmsg'); if(m){ m.textContent=t; m.className='ispmsg'+(cls?' '+cls:''); } };
 async function doAct(act,ds){
   const w=curW; if(!w) return; const d=WEAPONS.defs[w.hash]||{};
+  if(act==='savewatch'){
+    if(pickSet.size){ WATCH[w.hash]=Object.assign({name:d.n,mw:'',stats:[]},WATCH[w.hash]||{},{name:d.n,perks:Object.fromEntries([...pickSet].map(n=>[n,1]))}); }
+    else delete WATCH[w.hash];
+    const r=await fetch('/api/watch',{method:'POST',body:JSON.stringify(WATCH)}).then(r=>r.json()).catch(()=>({error:'network'}));
+    msg(r&&r.ok?`Saved ${pickSet.size} watch perk${pickSet.size===1?'':'s'} to Weapon Watch`:('Save failed'+(r&&r.error?': '+r.error:'')), r&&r.ok?'ok':'warn');
+    return;
+  }
   const post=(ep,body)=>fetch('/api/'+ep,{method:'POST',body:JSON.stringify(body)}).then(r=>r.json()).catch(()=>({error:'network'}));
   if(act==='equip'){
     msg('Equipping…');
@@ -406,7 +429,11 @@ function refreshTile(w){
 // ---- wire ----
 $('grid').addEventListener('click',e=>{const t=e.target.closest('[data-id]');if(t) inspect(t.dataset.id);});
 $('insp').addEventListener('click',e=>{if(e.target.id==='insp')$('insp').classList.remove('open');});
-$('ispcard').addEventListener('click',e=>{const b=e.target.closest('[data-act]');if(!b)return;if(b.dataset.act==='close'){$('insp').classList.remove('open');return;}doAct(b.dataset.act,b.dataset);});
+$('ispcard').addEventListener('click',e=>{
+  const pick=e.target.closest('[data-pick]');
+  if(pick){ const n=pick.dataset.pick; if(pickSet.has(n)){pickSet.delete(n);pick.classList.remove('on');}else{pickSet.add(n);pick.classList.add('on');} const c=$('wpcount'); if(c)c.textContent=pickSet.size+' watched'; return; }
+  const b=e.target.closest('[data-act]');if(!b)return;if(b.dataset.act==='close'){$('insp').classList.remove('open');return;}doAct(b.dataset.act,b.dataset);
+});
 $('q').addEventListener('input',e=>{q=e.target.value.toLowerCase().trim();render();});
 $('reset').onclick=()=>{fEl.clear();fAmmo.clear();fMisc.clear();fTag.clear();q='';$('q').value='';document.querySelectorAll('.fchip.on').forEach(c=>c.classList.remove('on'));render();};
 document.querySelectorAll('.slot').forEach(s=>s.addEventListener('click',e=>{
@@ -444,6 +471,7 @@ async function load(){
     WEAPONS=w; PICONS=w.perkIcons||{};
     FAV=(fv&&!Array.isArray(fv)&&typeof fv==='object')?fv:{}; if(Array.isArray(fv)) fv.forEach(n=>FAV[n]=1);
     updateFavNote();
+    WATCH=await fetch('/api/watch').then(r=>r.json()).catch(()=>({}))||{};   // for the inspect watch-perk picker
     if(window.PerkTip) PerkTip.init({perkDescs:w.perkDescs,perkInsights:w.perkInsights});
     if(!selCid && acc&&acc.chars&&acc.chars.length){ selCid=acc.chars[0].id; selCls=acc.chars[0].cls; } // default = most-recent
     if(window.GBANNER&&window.GBANNER.cid){ selCid=window.GBANNER.cid; selCls=window.GBANNER.cls; }

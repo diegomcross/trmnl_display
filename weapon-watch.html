@@ -118,6 +118,7 @@ input[type=checkbox]{accent-color:var(--gold);width:15px;height:15px;flex-shrink
   <div class="bar" id="wAmmoTabs" style="margin:0"></div>
   <label class="tgl"><input type="checkbox" id="wOnlyHits"> Only show weapons with a hit</label>
   <button class="btn sm mut" id="selModeBtn">Select multiple</button>
+  <button class="btn sm red" id="junkUntaggedBtn">Junk untagged</button>
   <button class="btn sm mut" id="expJunkBtn">Copy junk DIM query</button>
   <span class="count" id="wCount" style="margin:0"></span>
 </div>
@@ -161,6 +162,7 @@ function scoreCopy(w,cfg,rankOf){
 const trackedCount=cfg=>Object.keys(cfg.perks||{}).length;
 const selectedCount=cfg=>trackedCount(cfg)+(cfg.mw?1:0)+((cfg.stats||[]).length);
 const tagOf=w=>TAGS[w.id]!==undefined?TAGS[w.id]:(w.tag||'none');   // local overlay wins, then DIM, then none
+const TAGRANK={favorite:0,keep:1,none:2,junk:3};   // copy display order within a weapon
 function copyText(text,btn,msg){
   const done=()=>{const old=btn.textContent;btn.textContent=msg;setTimeout(()=>btn.textContent=old,1600);};
   const fb=()=>{const ta=document.createElement('textarea');ta.value=text;document.body.appendChild(ta);ta.select();document.execCommand('copy');ta.remove();done();};
@@ -213,7 +215,9 @@ function renderWatched(){
       const vals=[...new Set(raw.map(w=>w.statsMax[s]??-1))].sort((a,b)=>b-a);
       rankOf[s]=v=>{const i=vals.indexOf(v);return i===0?'s1':i===1?'s2':i===2?'s3':'';};
     }
-    const copies=raw.map(w=>({w,sc:scoreCopy(w,cfg,rankOf)})).sort((a,b)=>b.sc.pct-a.sc.pct||b.sc.matchW-a.sc.matchW);
+    // order copies by TAG first (favorite → keep → none → junk), then by match score
+    const copies=raw.map(w=>({w,sc:scoreCopy(w,cfg,rankOf)})).sort((a,b)=>
+      (TAGRANK[tagOf(a.w)]??2)-(TAGRANK[tagOf(b.w)]??2) || b.sc.pct-a.sc.pct || b.sc.matchW-a.sc.matchW);
     return {hash,cfg,d,rankOf,copies,best:copies[0]?.sc.pct??0,hasGod:copies.some(c=>c.sc.god)};
   });
   const totalWatched=entries.length;
@@ -397,6 +401,15 @@ $('refreshBtn').onclick=()=>load(true);
 $('wSort').onchange=e=>{wSort=e.target.value;renderWatched();};
 $('wOnlyHits').onchange=e=>{wOnlyHits=e.target.checked;renderWatched();};
 $('selModeBtn').onclick=()=>{selMode=!selMode; if(!selMode) sel.clear(); renderWatched();};
+$('junkUntaggedBtn').onclick=()=>{
+  // mass-junk every weapon copy that has no tag yet (tag your keepers first, then junk the rest)
+  const ids=DATA.weapons.filter(w=>tagOf(w)==='none').map(w=>w.id);
+  if(!ids.length){ const o=$('junkUntaggedBtn').textContent; $('junkUntaggedBtn').textContent='Nothing untagged'; setTimeout(()=>$('junkUntaggedBtn').textContent=o,1400); return; }
+  if(!confirm(`Tag ${ids.length} untagged weapon cop${ids.length===1?'y':'ies'} as junk? This writes to DIM and can't be batch-undone.`)) return;
+  ids.forEach(id=>{ TAGS[id]='junk'; writeTag(id,'junk'); });
+  $('status').textContent=`Junked ${ids.length} untagged copies`;
+  renderWatched();
+};
 $('expJunkBtn').onclick=()=>{
   const ids=DATA.weapons.filter(w=>tagOf(w)==='junk').map(w=>w.id);
   if(!ids.length){ const o=$('expJunkBtn').textContent; $('expJunkBtn').textContent='Nothing junked'; setTimeout(()=>$('expJunkBtn').textContent=o,1200); return; }
