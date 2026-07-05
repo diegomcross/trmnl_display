@@ -85,7 +85,7 @@ Core priorities, in his words:
 | `weapon-vault.html` | **Weapon Vault** (served at `/vault`): your whole arsenal as a BrayTech-style tile grid (rarity-framed squares, power, element pip, lock, tag border), grouped by slot (Kinetic/Energy/Power), tiles lazy-load via IntersectionObserver. **Tile look (BrayTech-tuned 2026-07-04):** roomy 74px tiles, weapon art, a **clipped top-left corner** as the tag flag (keep=cyan / fav=gold / junk=red — replaced the distracting full-width bar), a small element diamond + power on a bottom gradient strip, lock top-right. **BrayTech-style layout (redesigned 2026-07-04):** grouped **by slot** (Kinetic/Energy/Power); within each slot the **selected guardian's** weapons sit on the LEFT — **Equipped** (marked cyan) as its own group, then that character's **Inventory** below it — a divider, then the shared **Vault** on the right, **capped to 3 rows** with a "Show all N" button (`capVaultRows` counts the grid's resolved columns × 3). **Only one guardian** shows, driven by the banner's emblem-dot selector: `banner.js` dispatches `gbanner:char {cid,cls}` (+ sets `window.GBANNER`) on load and on switch; the vault filters `w.ownCid===selCid` (vault is account-wide). (Earlier all-characters "location sections" version was scrapped — Diego: "looks nothing like DIM/BrayTech, only show one character.") **Sort control:** Power / Recent (by instanceId ≈ acquisition order) / Kills (from the kill-tracker, profile component 309) / Perk·Mine / Perk·Blend (best tracked/blended perk per column, summed). Right rail: quick filters (element/ammo/rarity/locked/new/tag + name search) that hide non-matches, and a **perk combo filter** (two column-aware slots, same rule as Perk Finder) that lights up matching weapons; click a tile to inspect its perks/MW **and manage it like DIM — Equip / To Vault / Lock / Keep / Fav / Junk** (calls `/api/equip`,`/api/vault`,`/api/lock`,`/api/tag`). Equip uses the **smart exotic swap** (below). Reads `/api/weapons` + `/api/perks`. First slice of the "vault-as-grid" vision (armor vault next). |
 | `banner.js` | **Shared in-game nameplate + section nav** (served at `/banner.js`, included by every page via `<script src="/banner.js">` into a `<div id="gbanner">`). Renders your equipped **emblem art as the banner background**, Bungie name, power (✦light) + class, character-switch dots, and the right-aligned section tabs (Armor Vault · Weapon Vault · Fashion · Perk Finder · New Drops · Artifacts). Data from `/api/account`. Replaces the old per-page `<nav class="nav">` — edit nav/banner in this one file. |
 | `perk-finder.html` | **Perk Finder** (served at `/perks`): pickable list of *all* trait perks in the game, ranked by community popularity (PvE/PvP split bar), with search + column/owned/ranked filters. Two builder modes: **Pick perks** (default, flat — click any perks, column/order irrelevant; weapons ranked by how many they can roll) and **Combo** (Slot 1 + Slot 2; a **full match only when a weapon can roll one perk from each slot in *different columns***). Both feed the Inventory/Farmable match panel; saved as `{perks:[]}` (flat) or `{slots:[[],[]]}` (combo), auto-detected on load. Perk list ranks by **Mine** (how often you track a perk across your watched weapons, priority-weighted — default), **Community** (DIM wishlist), or **Blend** (Mine full weight + Community ×0.35 → surfaces sleeper rolls). Save role-tagged combos (ad-clear/pve/pvp/dps) to `perk-combos.json` (gitignored). Backed by `/api/perks` (which overlays `mine` from `weapon-watch.json`) + `/api/combos`. |
-| `.dim-wishlist.json` | Gitignored cache: the parsed DIM community wishlist folded to `{perkName:{total,pve,pvp}}` — the "popularity" behind Perk Finder. Re-downloaded weekly from the voltron list. |
+| `.dim-wishlist.json` | Gitignored cache: the parsed DIM community wishlist folded to `{perkName:{weapons:[names],pve:[names],pvp:[names]}}` (distinct recommended weapons, not a raw roll-line count — see the popularity-algorithm note in "What works now") — the input to Perk Finder's "popularity" (`pop`). Re-downloaded weekly from the voltron list. |
 | `.clarity.json` | Gitignored cache: **Clarity community insights** (the same data DIM shows on perks) folded to `{perkName:insightText}`. Downloaded weekly from `database-clarity.github.io/Live-Clarity-Database/descriptions/dim.json`, flattened (`descriptions.en[].linesContent[].text`). Raw source for the perk **hover popup** (cleaned by `insightBullets`). |
 | `perktip.js` | **Shared perk hover popup** (served at `/perktip.js`, included by weapon-watch/perk-finder/weapon-vault). Sectioned card: element accent bar, name, **in-game description in an inset box** (same size), then **community-insight bullets**. Colouring engine: numbers **gold** (buff, shown `+11%`) / **red** (penalty `−`), **teal** seconds/time, **element-coloured keyword verbs** (Jolt=Arc, Scorch=Solar, Sever=Strand…), symbols `▸`(trigger) `▲`(ramp) `▼`(penalty) `×`(stacks) — **no emoji**. `PerkTip.init({perkDescs,perkInsights})`; auto `mouseover` on `[data-p]`/`[data-pn]`. Design + colours locked with Diego over live mockups. |
 | `.clarity-clean.json` | **Committed** curated perk bullets `{perkName:[{type,text}]}` (type ∈ trigger/ramp/penalty/buff/note → leading symbol). Hand-rewritten by Claude for the top ~34 perks, tight AND **complete** (every per-stack %, PvP split, enhanced bonus kept — Diego's rule: never drop info; numbers verbatim). English-only; other locales fall back to localised Clarity. Perks without an entry use the lossless `cleanClarityBullets` fallback. |
@@ -304,10 +304,32 @@ Core priorities, in his words:
     and a raw count. **"Popularity" = the DIM community wishlist**, not light.gg (which has no
     public API). `buildPerkLibrary` (vault-verdict.js) merges the manifest perk list with
     `loadWishlist`, which downloads the aggregated **voltron** list
-    (`48klocs/dim-wish-list-sources`, ~25MB), counts how often each perk hash is recommended
-    across all god-rolls (split PvE/PvP from each roll's notes), folds hash→name (enhanced +
-    base variants share a name), and caches the compact result to `.dim-wishlist.json`
-    (re-downloaded weekly). Endpoints: `GET /api/perks` (`?fresh=1` rebuilds) → `{perks,count,
+    (`48klocs/dim-wish-list-sources`, ~25MB), folds hash→name (enhanced + base variants share a
+    name), and caches the compact result to `.dim-wishlist.json` (re-downloaded weekly).
+    **Popularity algorithm (rewritten 2026-07-05 — old-perk inflation fix):** raw wishlist
+    roll-line counts badly favored old perks — the voltron list accumulates many curator-submitted
+    roll variants for the same long-lived weapons over years, so an ancient perk racks up dozens of
+    near-duplicate entries while a perk added last season has had only months to accumulate any,
+    independent of how good either currently is (this is what Diego flagged: "the older perks are
+    very inflated"). Fix: `parseWishlist` now reads the wishlist's `item=<hash>` field (previously
+    ignored) to track, per perk, the **distinct weapons** (by name, reissues folded) recommended for
+    it, not a raw line count. `buildPerkLibrary` then computes, per perk, `poolN` (how many CURRENT
+    weapons can roll it, from the existing pool-building loop) and `wcount` (how many of the
+    recommending weapons still can, intersected with the current pool so `wcount<=poolN`), and sets
+    **`pop` = the Wilson score lower bound** of `wcount/poolN` (`wilsonLB(successes,n,z=1.96)` — the
+    same statistic Reddit uses to rank comments by rate-of-upvotes without letting tiny-sample items
+    cheat to the top). This ranks by adoption *rate*, not raw magnitude, while still discounting
+    perks with a thin sample (e.g. 1/1 weapons recommended ≠ automatically "100%"). Verified live:
+    Kill Clip/Rampage/Outlaw (ancient, huge legacy pools) dropped to ranks #55/#87/#81 while Firing
+    Line/Chill Clip/Frenzy (current, genuinely in-demand) now rank #1/#3/#4. The on-disk cache shape
+    changed (`{weapons:[],pve:[],pvp:[]}` name-arrays instead of `{total,pve,pvp}` numbers);
+    `loadWishlist` detects the old shape and force-refreshes rather than silently degrading to 0.
+    **`pop` now drives sort order everywhere perks are listed** (Diego's ask): a shared
+    `perkPopMap(e)` (reuses `buildPerkLibrary`'s cache) sorts `fetchWeapons`'s `cols` (the actual
+    roll — shown in Weapon Watch copies, Weapon Vault inspect, New Drops, Perk Finder inventory
+    card) and `pool` (full per-weapon pool — Weapon Watch tracker, Weapon Vault watch-picker), and
+    `buildWeaponPools`'s pool (Perk Finder Farmable card), all most-popular-first. Endpoints:
+    `GET /api/perks` (`?fresh=1` rebuilds) → `{perks,count,
     wishlistAt}`; `GET/POST /api/combos` → the user's saved combos (`perk-combos.json`,
     saveJsonSafe + `.bak`; stored `{name,role,slots:[[...],[...]]}`, back-compat for old flat
     `{perks:[...]}` → Slot 1). **Combo model = TWO SLOTS** (Diego's correction 2026-07-04): a
@@ -374,11 +396,14 @@ Core priorities, in his words:
     "relative best-roll %" that made almost everything 100%.) Tile shows the color-coded % in place of power
     (`≥85 gold · ≥60 teal · ≥35 white · else red · — no pool/exotic`); `Tile shows: ★ Perk score / Power`
     toggle, a **Min-score slider** hides low tiles, a `Perk · Favs` sort.
-  - **Perk Finder weapon cards + tag filter (2026-07-05):** click a **Best-Match** weapon (Inventory) → a
-    smart card (perks cols 3/4 with rolled lit, MW, kills, power/element/lock) + **Equip / To Vault / Lock /
-    Keep / Fav / Junk** (ported from `weapon-vault.html` `inspect()`; same `/api/equip|vault|lock|tag`). Click
-    a **Farmable** weapon → a card of all rollable perks as checkboxes → **Save to Weapon Watch** (merges into
-    `weapon-watch.json`, keyed by the pool's weapon hash; verified it preserves existing entries). A **perk
+  - **Perk Finder weapon cards + tag filter (2026-07-05, perk layout redone 2026-07-05 night):** click a
+    **Best-Match** weapon (Inventory) → a smart card — perks cols 3/4 **side by side, listed vertically**
+    (`.cols2`/`.pool.vert`, same layout as Weapon Watch's tracker; was stacked `.wccol` blocks), rolled perk
+    lit cyan, MW, kills, power/element/lock — + **Equip / To Vault / Lock / Keep / Fav / Junk** (ported from
+    `weapon-vault.html` `inspect()`; same `/api/equip|vault|lock|tag`). Click a **Farmable** weapon → a card
+    of all rollable perks in the same side-by-side layout, **tap to cycle track → ★ high priority → off**
+    (6 max — was a binary checkbox) → **Save to Weapon Watch** (merges into `weapon-watch.json`, keyed by
+    the pool's weapon hash, priorities preserved; verified it preserves existing entries). A **perk
     tag filter** (chips: Damage/Reload/Stability/Handling/Range/Ability/Ammo/Healing + element verbs
     Jolt/Scorch/Slow/Sever/Volatile) narrows the library; tags come from `/api/perks` (`tagsFor` classifier
     over perk name + dsc + insight). Perks in the cards keep the `perktip.js` hover (`data-pn`).
@@ -390,11 +415,18 @@ Core priorities, in his words:
     (`.wgrid.eqbig`) — Diego confirmed this is correct. The character's **inventory** below it is a
     **3-column grid** (`.charside .wgrid` = `repeat(3,90px)`) to match his in-game/BrayTech character screen
     (he sent a picture; the earlier 5-column inventory was the thing he meant by "3×3", not the equipped tile).
-    The shared **vault** stays on the right, capped to 3 rows. **NOTE (open bug):** the character
-    inventory is NOT capped, so it can show >9 tiles — see NEXT_PHASE open issue #2.
-  - **Weapon Vault manager batch (2026-07-05):** inspect card shows perks/MW/kills/element + Equip /
-    To Vault / Lock / Keep / Fav / Junk (`/api/equip|vault|lock|tag`) AND a **watch-perk picker** (all
-    pool perks → Save to Weapon Watch). **Trait Columns 3 & 4 side by side** (`.ispcols2`), perks
+    The shared **vault** stays on the right, capped to 3 rows. The character inventory is now also
+    capped to a true 3×3 (`.invcap`, fixed 2026-07-05 — see the postmaster note above).
+  - **Weapon Vault manager batch (2026-07-05, watch-picker redone 2026-07-05 night):** inspect card shows
+    perks/MW/kills/element + Equip / To Vault / Lock / Keep / Fav / Junk (`/api/equip|vault|lock|tag`) AND
+    a **watch-perk picker** — **Column 3 | Column 4 side by side, perks listed vertically, tap to cycle
+    track → ★ high priority → off** (`.cols2`/`.pool.vert`/`.pk.t1`/`.pk.t2`, matching Weapon Watch's
+    tracker exactly — was a flat wrapped row of binary chips) → Save to Weapon Watch, 6-perk cap with the
+    same "6 max!" feedback. `pickSet` (a plain Set) became `pickPerks` (`{name:1|2}`) so priority actually
+    saves. **Gotcha:** the click handler must NOT call `inspect()` again to re-render — `inspect()`
+    re-derives `pickPerks` from the *saved* WATCH config every time, so re-opening the card would wipe an
+    unsaved edit; the handler instead mutates the clicked button + the `#wpcount` counter directly.
+    **Trait Columns 3 & 4 side by side** (`.ispcols2`, the read-only roll viewer, unchanged), perks
     vertical. **Equip make-space:** `smartEquipWeapon` vaults an unlocked weapon from a FULL slot
     (1 equipped + 9 stored) before pulling from the vault — the real reason equip failed; card reports
     "vaulted X to make room". **Clean inventory** rail control (Weapons/Armor/Both) → `cleanInventory`

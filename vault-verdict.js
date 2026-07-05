@@ -726,6 +726,7 @@ async function fetchWeapons(e) {
   const tags = await dimTagsFresh(e);   // live DIM tags (id -> tag), source of truth
   const clarity = await loadClarity(man);   // community insights for the perk hover popup
   const dmgIcons = await loadDamageIcons(e); // official element icons for the tiles
+  const POP = await perkPopMap(e);   // perk name -> community popularity, for most-popular-first ordering
 
   const instances = prof.itemComponents?.instances?.data || {};
   const liveStats = prof.itemComponents?.stats?.data || {};
@@ -770,7 +771,7 @@ async function fetchWeapons(e) {
         if (socks[si]?.plugHash === h) byName.get(n).on = true;
         px(n, h);
       }
-      cols[ci] = [...byName.values()];
+      cols[ci] = [...byName.values()].sort(byPop(POP));   // most-popular perk first
     });
 
     // masterwork: plug category 'masterworks.stat.<stat>'
@@ -815,7 +816,7 @@ async function fetchWeapons(e) {
         pool: (def.tr || []).map((ps) => {
           const names = new Set();
           for (const h of (man.plugSets[ps] || [])) { const n = man.items[h]?.n || `#${h}`; names.add(n); px(n, h); }
-          return [...names];
+          return [...names].sort(byPop(POP));   // most-popular perk first
         }),
       };
     }
@@ -902,35 +903,59 @@ const WISHLIST_FILE = path.join(__dirname, '.dim-wishlist.json');
 const WISHLIST_MAX_AGE = 7 * 864e5; // re-download weekly
 let WISHLIST = null, PERKLIB = null;
 
-// Count how often each perk hash is recommended, split by PvE/PvP from the roll's notes,
-// then fold to perk NAME (enhanced + base variants share a name in the manifest).
+// Track which DISTINCT WEAPONS (by name, reissues folded together) each perk is recommended
+// for, rather than a raw count of curated roll-lines. Raw roll-line counts badly inflate old
+// perks: the voltron list accumulates roll variants for the same long-lived weapons over many
+// years, so an ancient perk racks up dozens of near-duplicate roll entries for a handful of
+// legacy weapons while a perk added last season has only had a few months to accumulate any.
+// Counting "how many different weapons recommend this perk" instead is immune to that kind of
+// repeat-curation pile-up; buildPerkLibrary turns it into a rate (see wilsonLB below).
 function parseWishlist(text, man) {
-  const count = {};
+  const weapons = {}, pve = {}, pvp = {}; // perk hash -> Set(weapon name)
   let ctx = ''; // pve/pvp context from the most recent notes/title block
   for (const raw of text.split('\n')) {
     const line = raw.trim();
     if (!line) { ctx = ''; continue; }
     if (line.startsWith('dimwishlist:')) {
-      const m = line.match(/perks=([\d,]+)/); if (!m) continue;
+      const mi = line.match(/item=(\d+)/); const mp = line.match(/perks=([\d,]+)/);
+      if (!mi || !mp) continue;
+      const wname = man.items[mi[1]]?.n; if (!wname) continue;
       const hi = line.indexOf('#');
       const t = (hi >= 0 ? line.slice(hi + 1) : ctx).toLowerCase();
-      const pvp = /pvp/.test(t), pve = /pve/.test(t);
-      for (const h of m[1].split(',')) {
+      const isPvp = /pvp/.test(t), isPve = /pve/.test(t);
+      for (const h of mp[1].split(',')) {
         if (!h) continue;
-        const c = count[h] || (count[h] = { t: 0, pve: 0, pvp: 0 });
-        c.t++; if (pve) c.pve++; if (pvp) c.pvp++;
+        (weapons[h] || (weapons[h] = new Set())).add(wname);
+        if (isPve) (pve[h] || (pve[h] = new Set())).add(wname);
+        if (isPvp) (pvp[h] || (pvp[h] = new Set())).add(wname);
       }
     } else if (line.startsWith('//') || line.startsWith('title:') || line.startsWith('description:')) {
       ctx = line.toLowerCase();
     }
   }
   const byName = {};
-  for (const [h, c] of Object.entries(count)) {
+  for (const [h, set] of Object.entries(weapons)) {
     const n = man.items[h]?.n; if (!n) continue;
-    const b = byName[n] || (byName[n] = { total: 0, pve: 0, pvp: 0 });
-    b.total += c.t; b.pve += c.pve; b.pvp += c.pvp;
+    const b = byName[n] || (byName[n] = { weapons: new Set(), pve: new Set(), pvp: new Set() });
+    for (const wn of set) b.weapons.add(wn);
+    for (const wn of (pve[h] || [])) b.pve.add(wn);
+    for (const wn of (pvp[h] || [])) b.pvp.add(wn);
   }
-  return byName;
+  // serialize Sets to arrays for the on-disk JSON cache
+  const out = {};
+  for (const [n, b] of Object.entries(byName)) out[n] = { weapons: [...b.weapons], pve: [...b.pve], pvp: [...b.pvp] };
+  return out;
+}
+
+// Wilson score lower bound: ranks a "rate" (successes/n) so that small-sample items don't
+// unfairly outrank large-sample ones just by getting lucky (e.g. a perk on only 2 current
+// weapons, both curator-picked, would be a naive "100%" — Wilson pulls that down below a
+// perk recommended on 80 of 100 possible weapons, which is a much better-supported signal).
+// Same statistic Reddit uses for comment ranking; z=1.96 is the standard 95%-confidence value.
+function wilsonLB(successes, n, z = 1.96) {
+  if (!n) return 0;
+  const p = successes / n, z2 = z * z;
+  return (p + z2 / (2 * n) - z * Math.sqrt((p * (1 - p) + z2 / (4 * n)) / n)) / (1 + z2 / n);
 }
 
 async function loadWishlist(man, fresh = false) {
@@ -938,7 +963,12 @@ async function loadWishlist(man, fresh = false) {
   if (!fresh) {
     try {
       const st = fs.statSync(WISHLIST_FILE);
-      if (Date.now() - st.mtimeMs < WISHLIST_MAX_AGE) return (WISHLIST = JSON.parse(fs.readFileSync(WISHLIST_FILE, 'utf8')));
+      const cached = JSON.parse(fs.readFileSync(WISHLIST_FILE, 'utf8'));
+      // guard against a stale cache written before the weapons-per-perk rewrite (old shape was
+      // {total,pve,pvp} numbers) — force a re-download rather than silently degrading to 0 pop
+      const sample = Object.values(cached.perks || {})[0];
+      const shapeOk = !sample || Array.isArray(sample.weapons);
+      if (shapeOk && Date.now() - st.mtimeMs < WISHLIST_MAX_AGE) return (WISHLIST = cached);
     } catch {}
   }
   try {
@@ -1081,8 +1111,9 @@ async function buildPerkLibrary(e, fresh = false) {
         // these columns is barrel/mag/stock/grip filler or empty sockets — not roll-defining.
         if (!it || !it.n || it.pc !== 'frames') continue;
         let o = byName.get(it.n);
-        if (!o) { o = { n: it.n, icon: it.icon || '', cols: [false, false] }; byName.set(it.n, o); }
+        if (!o) { o = { n: it.n, icon: it.icon || '', cols: [false, false], weapons: new Set() }; byName.set(it.n, o); }
         o.cols[ci] = true;
+        o.weapons.add(d.n);   // which CURRENT weapons can roll this perk — the Wilson denominator
         if (!o.icon && it.icon) o.icon = it.icon;
         if (!o.dsc && it.dsc) o.dsc = it.dsc;
       }
@@ -1090,15 +1121,33 @@ async function buildPerkLibrary(e, fresh = false) {
   }
   const clarity = await loadClarity(man, fresh);
   const perks = [...byName.values()].map((p) => {
-    const w = wl.perks[p.n] || { total: 0, pve: 0, pvp: 0 };
+    const w = wl.perks[p.n] || { weapons: [], pve: [], pvp: [] };
+    const poolN = p.weapons.size;
+    // only count wishlist recommendations for weapons that can STILL roll this perk today —
+    // keeps successes <= n so the rate (and Wilson bound) stays a meaningful proportion
+    const recWeapons = (w.weapons || []).filter((n) => p.weapons.has(n));
+    const pop = poolN ? Math.round(100 * wilsonLB(recWeapons.length, poolN)) : 0;
     const insight = insightBullets(p.n);
     const tags = tagsFor(`${p.n} ${p.dsc || ''} ${insight.map((b) => b.text).join(' ')}`);
-    return { n: p.n, icon: p.icon, cols: p.cols, pop: w.total, pve: w.pve, pvp: w.pvp, dsc: p.dsc || '', insight, tags };
+    return {
+      n: p.n, icon: p.icon, cols: p.cols, pop, wcount: recWeapons.length, poolN,
+      pve: (w.pve || []).length, pvp: (w.pvp || []).length, dsc: p.dsc || '', insight, tags,
+    };
   });
-  perks.sort((a, b) => b.pop - a.pop || a.n.localeCompare(b.n));
+  perks.sort((a, b) => b.pop - a.pop || b.wcount - a.wcount || a.n.localeCompare(b.n));
   PERKLIB = { perks, count: perks.length, wishlistAt: wl.generatedAt };
   return PERKLIB;
 }
+// Perk name -> popularity (0-100, Wilson-ranked) for sorting perk lists everywhere else
+// (weapon roll columns, watch-perk pickers) so the most-recommended perk shows first.
+async function perkPopMap(e) {
+  const lib = await buildPerkLibrary(e);
+  const m = {};
+  for (const p of lib.perks) m[p.n] = p.pop;
+  return m;
+}
+const byPop = (pop) => (a, b) => (pop[typeof b === 'string' ? b : b.n] || 0) - (pop[typeof a === 'string' ? a : a.n] || 0)
+  || (typeof a === 'string' ? a : a.n).localeCompare(typeof b === 'string' ? b : b.n);
 
 // Every weapon in the game with its full trait-perk POOL (what it CAN roll), for the
 // Perk Finder "Farmable" mode. Reissues (same name, new hash) are merged and their pools
@@ -1107,10 +1156,11 @@ let WPOOLS = null;
 async function buildWeaponPools(e) {
   if (WPOOLS) return WPOOLS;
   const man = await loadManifest(e);
+  const POP = await perkPopMap(e);   // most-popular perk first, same ordering as fetchWeapons
   const nameCol = (ps) => {
     const s = new Set();
     for (const h of (man.plugSets[ps] || [])) { const it = man.items[h]; if (it && it.n && it.pc === 'frames') s.add(it.n); }
-    return [...s];
+    return [...s].sort(byPop(POP));
   };
   const groups = {};
   for (const [h, d] of Object.entries(man.items)) {

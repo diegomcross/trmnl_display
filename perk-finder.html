@@ -126,6 +126,8 @@ input:focus,select:focus{outline:none;border-color:var(--gold)}
 .wcpk.on{border-color:var(--keep);color:var(--keep)}
 .wcpk.pick{cursor:pointer}
 .wcpk.pick.on{border-color:var(--gold);color:var(--gold);background:rgba(207,174,66,.12)}
+/* roll viewer (.cols2/.pool.vert/.pk from theme.css) — cyan = this perk is the one actually rolled */
+.pk.on{border-color:var(--keep);color:var(--keep)}
 .wcacts{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px;padding-top:10px;border-top:1px solid var(--line);align-items:center}
 .wcacts .wcsep{width:1px;height:18px;background:var(--line);margin:0 2px}
 .wcacts .btn.act-on{background:var(--gold);color:#000}
@@ -232,7 +234,7 @@ const BN='https://www.bungie.net';
 const LKSVG=on=>`<svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px">${on?'<path d="M7 10V7a5 5 0 0 1 10 0v3"/>':'<path d="M7 10V7a5 5 0 0 1 9.4-2"/>'}<rect x="4.5" y="10" width="15" height="10.5" rx="2"/></svg>`;
 
 let LIB=[], PICONS={}, PINFO={}, FAV={}, favOnly=false, WEAPONS={weapons:[],defs:{},perkIcons:{}}, COMBOS=[], OWNED=new Set();
-let TAGSEL=new Set(), WATCH={}, curW=null, curWP=null, pickSet=new Set();   // perk tag filter, watch config, open cards
+let TAGSEL=new Set(), WATCH={}, curW=null, curWP=null, pickPerks={};   // perk tag filter, watch config, farmable card priorities (name -> 1/2)
 const favCount=()=>Object.keys(FAV).length;
 let WPOOLS=null, OWNEDW=new Set(), matchMode='inv';   // farmable-pool cache, owned weapon names, match mode
 // SLOTS[0], SLOTS[1] = the two combo slots (each a Set of perk names, "any of these").
@@ -561,11 +563,11 @@ const wcmsg=(t,c)=>{const m=$('wcmsg'); if(m){m.textContent=t;m.className='wcmsg
 function inspectInv(id){
   const w=WEAPONS.weapons.find(x=>x.id===id); if(!w) return; curW=w; curWP=null;
   const d=WEAPONS.defs[w.hash]||{};
-  const col=(arr,lbl)=>`<div class="wccol"><div class="wclbl">${lbl}</div>${(arr||[]).map(p=>`<span class="wcpk ${p.on?'on':''}" data-pn="${esc(p.n)}">${PICONS[p.n]?`<img src="${BN}${PICONS[p.n]}">`:''}${esc(p.n)}${p.on?' •':''}</span>`).join('')||'<span class="count">—</span>'}</div>`;
+  const col=(arr,lbl)=>`<div class="pcol"><div class="colh">${lbl}</div><div class="pool vert">${(arr||[]).map(p=>`<span class="pk ${p.on?'on':''}" data-pn="${esc(p.n)}">${PICONS[p.n]?`<img src="${BN}${PICONS[p.n]}">`:''}${esc(p.n)}${p.on?' •':''}</span>`).join('')||'<span class="count">—</span>'}</div></div>`;
   const tagBtn=(t,l)=>`<button class="btn sm ${w.tag===t?'act-on':'mut'}" data-wact="tag" data-tag="${w.tag===t?'none':t}">${l}</button>`;
   $('wcbox').innerHTML=`<div class="wchead"><span class="wtile ${d.tt===6?'exotic':''}">${d.icon?`<img src="${BN}${d.icon}">`:''}</span>
     <div><div class="wcn">${esc(d.n||'Weapon')}</div><div class="count">${esc(d.ty||d.slot||'')} · ✦${w.pwr||'—'}${d.dmg?' · '+esc(d.dmg):''}${w.locked?' · '+LKSVG(true):''}${w.kills?' · '+w.kills.toLocaleString()+' kills':''}</div></div></div>
-    ${col(w.cols&&w.cols[0],'Column 3')}${col(w.cols&&w.cols[1],'Column 4')}
+    <div class="cols2">${col(w.cols&&w.cols[0],'Column 3')}${col(w.cols&&w.cols[1],'Column 4')}</div>
     ${w.mw?`<div class="wccol"><div class="wclbl">Masterwork</div><span class="wcpk">${w.mwIcon?`<img src="${BN}${w.mwIcon}">`:''}${esc(w.mw)}</span></div>`:''}
     <div class="wcacts">
       <button class="btn sm" data-wact="equip">Equip</button>
@@ -580,18 +582,22 @@ function inspectInv(id){
 }
 function renderFarmCard(){
   const wp=curWP; if(!wp) return;
-  const col=(arr,ci)=>`<div class="wccol"><div class="wclbl">Column ${ci+3}</div>${(arr||[]).map(n=>`<span class="wcpk pick ${pickSet.has(n)?'on':''}" data-pick="${esc(n)}" data-pn="${esc(n)}">${PICONS[n]?`<img src="${BN}${PICONS[n]}">`:''}${esc(n)}${pickSet.has(n)?' ✓':''}</span>`).join('')||'<span class="count">—</span>'}</div>`;
+  const tracked=Object.keys(pickPerks).length;
+  const col=(arr,ci)=>`<div class="pcol"><div class="colh">Column ${ci+3}</div><div class="pool vert">${(arr||[]).map(pn=>{
+    const pr=pickPerks[pn]||0;
+    return `<button class="pk ${pr===1?'t1':pr===2?'t2':''}" data-pick="${esc(pn)}" data-pn="${esc(pn)}">${PICONS[pn]?`<img src="${BN}${PICONS[pn]}">`:''}${esc(pn)}</button>`;
+  }).join('')||'<span class="count">—</span>'}</div></div>`;
   $('wcbox').innerHTML=`<div class="wchead"><span class="wtile ${wp.tt===6?'exotic':''}">${wp.icon?`<img src="${BN}${wp.icon}">`:''}</span>
     <div><div class="wcn">${esc(wp.n)}</div><div class="count">${esc(wp.ty||wp.slot||'')}${wp.src?' · '+esc(wp.src):''}</div></div></div>
-    <div class="count" style="margin:6px 0 2px">Tap perks to <b style="color:var(--gold)">watch</b> — saved to Weapon Watch.</div>
-    ${col(wp.pool[0],0)}${col(wp.pool[1],1)}
-    <div class="wcacts"><span class="count">${pickSet.size} selected</span><button class="btn sm" data-wact="savewatch" style="margin-left:auto">Save to Weapon Watch</button></div>
+    <div class="count" style="margin:6px 0 2px">Tap: track → ★ high → off (${tracked}/6) — saved to Weapon Watch.</div>
+    <div class="cols2">${col(wp.pool[0],0)}${col(wp.pool[1],1)}</div>
+    <div class="wcacts"><button class="btn sm" data-wact="savewatch" style="margin-left:auto">Save to Weapon Watch</button></div>
     <div class="wcmsg" id="wcmsg"></div>
     <div style="text-align:right;margin-top:8px"><button class="btn sm mut" data-wact="close">Close</button></div>`;
 }
 function farmCard(name){
   const wp=(WPOOLS||[]).find(x=>x.n===name); if(!wp) return; curWP=wp; curW=null;
-  pickSet=new Set(Object.keys((WATCH[wp.hash]||{}).perks||{}));
+  pickPerks={...(WATCH[wp.hash]||{}).perks};
   renderFarmCard(); $('wcard').classList.add('open');
 }
 async function doWact(act,ds){
@@ -599,10 +605,11 @@ async function doWact(act,ds){
   const post=(ep,body)=>fetch('/api/'+ep,{method:'POST',body:JSON.stringify(body)}).then(r=>r.json()).catch(()=>({error:'network'}));
   if(act==='savewatch'){
     const wp=curWP; if(!wp) return;
-    if(pickSet.size){ WATCH[wp.hash]=Object.assign({name:wp.n,mw:'',stats:[]},WATCH[wp.hash]||{},{name:wp.n,perks:Object.fromEntries([...pickSet].map(n=>[n,1]))}); }
+    const n=Object.keys(pickPerks).length;
+    if(n){ WATCH[wp.hash]=Object.assign({name:wp.n,mw:'',stats:[]},WATCH[wp.hash]||{},{name:wp.n,perks:{...pickPerks}}); }
     else delete WATCH[wp.hash];
     const r=await post('watch',WATCH);
-    wcmsg(r&&r.ok?`Saved ${pickSet.size} perk${pickSet.size===1?'':'s'} to Weapon Watch`:('Save failed'+(r.error?': '+r.error:'')), r&&r.ok?'ok':'warn');
+    wcmsg(r&&r.ok?`Saved ${n} perk${n===1?'':'s'} to Weapon Watch`:('Save failed'+(r.error?': '+r.error:'')), r&&r.ok?'ok':'warn');
     return;
   }
   const w=curW; if(!w) return;
@@ -617,7 +624,14 @@ $('matches').addEventListener('click',e=>{
 });
 $('wcbox').addEventListener('click',e=>{
   const pick=e.target.closest('[data-pick]');
-  if(pick){ const n=pick.dataset.pick; pickSet.has(n)?pickSet.delete(n):pickSet.add(n); renderFarmCard(); return; }
+  if(pick){
+    const n=pick.dataset.pick, cur=pickPerks[n]||0;
+    if(cur===0){ if(Object.keys(pickPerks).length>=6){ pick.textContent='6 max!'; setTimeout(renderFarmCard,900); return; } pickPerks[n]=1; }
+    else if(cur===1) pickPerks[n]=2;
+    else delete pickPerks[n];
+    renderFarmCard();
+    return;
+  }
   const b=e.target.closest('[data-wact]'); if(b){ doWact(b.dataset.wact,b.dataset); }
 });
 $('wcard').addEventListener('click',e=>{ if(e.target.id==='wcard') closeCard(); });

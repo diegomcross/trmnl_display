@@ -3,38 +3,58 @@
 > Maintained per CLAUDE.md. When a feature ships, move it to HANDOFF.md
 > "What works now" and delete it here.
 
-## ⚠ OPEN ISSUES / BUGS — PICK UP HERE FIRST (2026-07-05, Diego's latest feedback)
+## Where we are (2026-07-05, night — watch-perk picker rebuild + community popularity fix)
 
-**Hard-refresh (Ctrl+Shift+R) before testing — the HTML is served from disk, so a stale tab shows
-old markup.**
+Diego's three asks, all shipped & verified live on 8787:
 
-**✅ RESOLVED 2026-07-05 (late night) — issues 1–3 fixed & verified live on 8787:**
-1. **Weapon Vault filters/sort — FIXED.** `chipRow` now uses `el.onclick=` (idempotent) instead of
-   `addEventListener`, so re-running it on every `load()` no longer stacks duplicate handlers. Chips
-   highlight and toggle cleanly. **Design change:** the quick filters (name/type/element/ammo/rarity/
-   tag) now **HIDE non-matches** (real narrowing, Diego's ask) — `passQuick` fail → `continue` in
-   `render()`. The **combo + min-score** overlay still DIMS/floats matches (with the `only matches`
-   toggle to hard-hide those). Verified: Solar chip 661→129 tiles, all visible tiles Solar, second
-   click restores + un-highlights (no double-toggle).
-2. **Character inventory 3×3 — FIXED at the source.** Root cause was the **postmaster**: `fetchWeapons`
-   marked everything in `characterInventories` as `loc:'char'`, but the postmaster (bucket `215593132`)
-   lives there too, so postmaster weapons inflated a slot to 14. Now `vault-verdict.js` tags
-   `loc:'postmaster'` when the live `it.bucketHash===215593132`; the UI renders a separate labeled
-   **"Postmaster · N"** subcol (nothing hidden) and the real inventory grid (`.invcap`) is capped to
-   3 rows via the generalized `capRows(sel)` (was `capVaultRows`). Verified: no char slot >9 (max 9),
-   7 postmaster weapons split out into their own groups.
-3. **Card Col 3 / Col 4 layout — no change needed (was stale cache).** Live inspect card renders
-   `.ispcols2` as a 2-col grid (Column 3 | Column 4, perks stacked). Confirmed; Diego just needs a
-   hard-refresh.
+1. **Weapon Vault smart card watch-perk picker was messy — rebuilt to match Weapon Watch exactly.**
+   It used to be a flat wrapped row of binary on/off perk chips. Now it's the same **side-by-side
+   Column 3 | Column 4 grid, perks listed vertically, tap-to-cycle track → ★ high priority → off**
+   (`.cols2`/`.pool.vert`/`.pk.t1`/`.pk.t2` — the exact shared classes Weapon Watch already used),
+   6-perk cap with the same "6 max!" feedback. `weapon-vault.html`'s `pickSet` (a plain Set) became
+   `pickPerks` (`{name: 1|2}`, matching Weapon Watch's `cfg.perks` shape) so priority actually saves.
+   **Bug hit + fixed during this:** the click handler first called `inspect(curW.id)` to re-render
+   with the new 3-state styling — but `inspect()` re-derives `pickPerks` from the *saved* WATCH
+   config every time it runs, so re-opening the card silently wiped the edit before it was ever
+   saved. Fixed by mutating the clicked button + the `#wpcount` counter directly instead (the same
+   targeted-DOM-update pattern the old binary version used) — never call `inspect()` again from
+   inside its own click handler.
+2. **Perk Finder — both smart cards reorganized the same way.** Inventory card (`inspectInv`)'s roll
+   viewer went from stacked `.wccol` blocks to the same side-by-side `.cols2` grid (read-only, shows
+   the actual roll). Farmable card (`renderFarmCard`)'s picker got the same track/★-high/off cycle
+   as Weapon Watch (was binary pick/no-pick). Both reuse the shared theme.css classes — no new CSS
+   needed beyond one `.pk.on{border-color:var(--keep)...}` rule for the "currently rolled" cyan state.
+3. **Community popularity was biased toward old perks — fixed with a real statistical measure.**
+   Diego: "the older perks are very inflated compared to the newer ones... I need your help." Root
+   cause: `pop` was a raw count of DIM wishlist roll-*lines* mentioning a perk, and the voltron list
+   accumulates many curator-submitted roll variants for the same long-lived weapons over years —
+   an ancient perk racks up dozens of near-duplicate entries for a handful of legacy weapons while a
+   perk added last season has had only months to accumulate any, regardless of how good either
+   actually is. **Fix (`vault-verdict.js`):** `parseWishlist` now tracks, per perk, the **distinct
+   weapons** (by name, reissues folded) recommended for it — not raw line count — using the
+   wishlist's `item=<hash>` field (previously ignored). `buildPerkLibrary` computes, per perk,
+   `poolN` = how many CURRENT weapons can roll it (from the existing pool-building loop) and
+   `wcount` = how many of the weapons recommending it can still roll it today (intersected with the
+   current pool, so `wcount <= poolN`). **`pop` is now the Wilson score lower bound** of
+   `wcount/poolN` (`wilsonLB`, z=1.96 — the same statistic Reddit uses for comment ranking): it ranks
+   by a genuine adoption *rate*, not raw magnitude, while pulling down perks with a tiny sample (e.g.
+   1/1 weapons) rather than letting them jump straight to "100%" over well-supported perks. Verified
+   live: Kill Clip/Rampage/Outlaw (ancient, huge legacy pools) dropped to ranks #55/#87/#81, while
+   Firing Line/Chill Clip/Frenzy (current, genuinely sought-after) now rank #1/#3/#4 — matches Diego's
+   actual read of what's popular right now. The on-disk cache (`.dim-wishlist.json`) changed shape
+   (`{weapons:[],pve:[],pvp:[]}` instead of `{total,pve,pvp}` numbers); `loadWishlist` detects the old
+   shape and forces a fresh download rather than silently degrading to 0 pop for a week.
+4. **"Most popular perk first" now applies everywhere perks are listed**, per Diego's ask, via a
+   single source of truth: `perkPopMap(e)` (perk name → `pop`) is computed once (reusing
+   `buildPerkLibrary`'s cache) and used to `.sort()` perk arrays at the three places they're built —
+   `fetchWeapons`'s `cols` (the actual roll, shown in Weapon Watch copies / Weapon Vault inspect /
+   New Drops / Perk Finder inventory card) and `pool` (the full per-weapon pool, shown in Weapon
+   Watch's tracker + Weapon Vault's watch-picker), and `buildWeaponPools`'s pool (Perk Finder
+   Farmable card). The Perk Finder library list itself was already server-sorted by `pop`; the combo
+   search dropdown (`LIB.filter(...)`) inherits that order for free. Verified live: a sample weapon's
+   Column 3/4 pool order matches strictly-descending `pop` from `/api/perks`.
 
-4. **New Drops tag + move actions — DONE.** `weapon-drops.html` (`/drops`) drop cards now have
-   **Fav / Keep / Junk** chips (`/api/tag`, DIM vocab favorite/keep/junk; active chip clears to
-   `none` on re-tap) alongside the existing **Lock + smart Equip/→Vault + Seen** buttons. Chip render
-   verified live (active state reflects `w.tag`); the `/api/tag` write path is the same one already
-   verified on the vault/weapon-watch pages — Diego confirms the live write next time he plays.
-
-**All four open issues are resolved.** Next work will come from new Diego feedback (e.g. whether he
-wants a hide-vs-dim toggle rather than the current "quick filters hide, combo/score dim" split).
+Next work will come from new Diego feedback.
 
 **Stability (fixed 2026-07-05, context for the new agent):** the app kept going offline
 (`ERR_CONNECTION_REFUSED`). Causes were (a) a "retry the port forever" EADDRINUSE handler that spawned

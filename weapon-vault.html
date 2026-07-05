@@ -217,7 +217,7 @@ const LKSVG=on=>`<svg viewBox="0 0 24 24" width="11" height="11" fill="none" str
 let WEAPONS={weapons:[],defs:{},perkIcons:{}}, PICONS={}, LIB=[];
 let PMINE={}, PPOP={}, maxMine=1, maxPop=1;   // per-perk score maps for the perk-score sorts
 let FAV={}, tileMode='score', minScore=0;      // {perkName:grade} favorites + tile mode + threshold
-let WATCH={}, pickSet=new Set();               // weapon-watch config + the inspect card's watch-perk picks
+let WATCH={}, pickPerks={};                     // weapon-watch config + the inspect card's watch-perk priorities (name -> 1 track / 2 high)
 const FAVW={1:1,2:1.5,3:2};                     // star grade -> weight (1★=1 · 2★=1.5 · 3★=2)
 const favAny=()=>Object.keys(FAV).length>0;
 let fEl=new Set(), fAmmo=new Set(), fMisc=new Set(), fTag=new Set(), q='', sortBy='power', fType='', statSort='';
@@ -382,15 +382,24 @@ let curW=null;
 function inspect(id){
   const w=WEAPONS.weapons.find(x=>x.id===id); if(!w) return;
   curW=w; const d=WEAPONS.defs[w.hash]||{};
-  pickSet=new Set(Object.keys((WATCH[w.hash]||{}).perks||{}));   // perks already watched for this weapon
+  pickPerks={...(WATCH[w.hash]||{}).perks};   // priorities already watched for this weapon (name -> 1/2)
   const col=(arr,label)=>`<div class="ispcol"><div class="ch">${label}</div>${(arr||[]).map(p=>{const g=FAV[p.n]||0;return `<span class="pk ${p.on?'on':''} ${g?'fav':''}" data-pn="${esc(p.n)}" title="${g?'★'.repeat(g)+' favorite':''}">${PICONS[p.n]?`<img src="${BN}${PICONS[p.n]}">`:''}${esc(p.n)}${p.on?' •':''}${g?' '+'★'.repeat(g):''}</span>`;}).join('')||'<span class="slotempty">—</span>'}</div>`;
   const tagBtn=(t,lbl)=>`<button class="btn sm ${w.tag===t?'act-on':'mut'}" data-act="tag" data-tag="${w.tag===t?'none':t}">${lbl}</button>`;
-  // watch-perk picker: every perk this weapon can roll, tap to track for drop alerts
+  // watch-perk picker: every perk this weapon can roll, tap to track (priority: track -> ★ high -> off),
+  // same 2-column layout + tap-cycle as Weapon Watch's tracker (shared .cols2/.pool.vert/.pk classes)
   const pool=d.pool||[[],[]], allPool=[...(pool[0]||[]),...(pool[1]||[])];
+  const trackedCount=()=>Object.keys(pickPerks).length;
+  const pickBtns=arr=>(arr||[]).map(n=>{
+    const pr=pickPerks[n]||0;
+    return `<button class="pk ${pr===1?'t1':pr===2?'t2':''}" data-pick="${esc(n)}" data-pn="${esc(n)}">${PICONS[n]?`<img src="${BN}${PICONS[n]}">`:''}${esc(n)}</button>`;
+  }).join('')||'<span class="slotempty">no random perks in this column</span>';
   const watchSec=allPool.length?`<div class="ispcol" style="border-top:1px solid var(--line);margin-top:12px;padding-top:10px">
-      <div class="ch">Watch perks — tap to track this weapon for drop alerts</div>
-      ${[[pool[0],'Col 3'],[pool[1],'Col 4']].map(([arr,cl])=>(arr&&arr.length)?`<div style="margin-bottom:3px"><span style="font-size:9px;color:var(--dim);font-family:Bahnschrift,sans-serif;letter-spacing:.06em">${cl}</span> ${arr.map(n=>`<span class="pk pick ${pickSet.has(n)?'on':''}" data-pick="${esc(n)}" data-pn="${esc(n)}">${PICONS[n]?`<img src="${BN}${PICONS[n]}">`:''}${esc(n)}</span>`).join('')}</div>`:'').join('')}
-      <div style="margin-top:7px;display:flex;align-items:center;gap:8px"><span class="count" id="wpcount">${pickSet.size} watched</span><button class="btn sm" data-act="savewatch" style="margin-left:auto">Save to Weapon Watch</button></div>
+      <div class="ch">Watch perks — tap: track → ★ high → off (<span id="wpcount">${trackedCount()}</span>/6)</div>
+      <div class="cols2">
+        <div class="pcol"><div class="colh">Column 3</div><div class="pool vert">${pickBtns(pool[0])}</div></div>
+        <div class="pcol"><div class="colh">Column 4</div><div class="pool vert">${pickBtns(pool[1])}</div></div>
+      </div>
+      <div style="margin-top:9px;display:flex;align-items:center;gap:8px"><button class="btn sm" data-act="savewatch" style="margin-left:auto">Save to Weapon Watch</button></div>
     </div>`:'';
   $('ispcard').innerHTML=`<div class="ih"><span class="it ${d.tt===6?'exotic':''}">${d.icon?`<img src="${BN}${d.icon}">`:''}</span>
     <div><div class="disp" style="font-size:16px;color:#fff">${esc(d.n||'Weapon')}</div>
@@ -414,10 +423,11 @@ const msg=(t,cls)=>{ const m=$('ispmsg'); if(m){ m.textContent=t; m.className='i
 async function doAct(act,ds){
   const w=curW; if(!w) return; const d=WEAPONS.defs[w.hash]||{};
   if(act==='savewatch'){
-    if(pickSet.size){ WATCH[w.hash]=Object.assign({name:d.n,mw:'',stats:[]},WATCH[w.hash]||{},{name:d.n,perks:Object.fromEntries([...pickSet].map(n=>[n,1]))}); }
+    const n=Object.keys(pickPerks).length;
+    if(n){ WATCH[w.hash]=Object.assign({name:d.n,mw:'',stats:[]},WATCH[w.hash]||{},{name:d.n,perks:{...pickPerks}}); }
     else delete WATCH[w.hash];
     const r=await fetch('/api/watch',{method:'POST',body:JSON.stringify(WATCH)}).then(r=>r.json()).catch(()=>({error:'network'}));
-    msg(r&&r.ok?`Saved ${pickSet.size} watch perk${pickSet.size===1?'':'s'} to Weapon Watch`:('Save failed'+(r&&r.error?': '+r.error:'')), r&&r.ok?'ok':'warn');
+    msg(r&&r.ok?`Saved ${n} watch perk${n===1?'':'s'} to Weapon Watch`:('Save failed'+(r&&r.error?': '+r.error:'')), r&&r.ok?'ok':'warn');
     return;
   }
   const post=(ep,body)=>fetch('/api/'+ep,{method:'POST',body:JSON.stringify(body)}).then(r=>r.json()).catch(()=>({error:'network'}));
@@ -459,7 +469,20 @@ $('grid').addEventListener('click',e=>{const t=e.target.closest('[data-id]');if(
 $('insp').addEventListener('click',e=>{if(e.target.id==='insp')$('insp').classList.remove('open');});
 $('ispcard').addEventListener('click',e=>{
   const pick=e.target.closest('[data-pick]');
-  if(pick){ const n=pick.dataset.pick; if(pickSet.has(n)){pickSet.delete(n);pick.classList.remove('on');}else{pickSet.add(n);pick.classList.add('on');} const c=$('wpcount'); if(c)c.textContent=pickSet.size+' watched'; return; }
+  if(pick){
+    // NOTE: mutate this button + the counter directly, don't call inspect() again — inspect()
+    // re-derives pickPerks from the SAVED WATCH config, so re-opening the card would wipe out
+    // the edit before it's ever saved.
+    const n=pick.dataset.pick, cur=pickPerks[n]||0;
+    if(cur===0){
+      if(Object.keys(pickPerks).length>=6){ const t=pick.textContent; pick.textContent='6 max!'; setTimeout(()=>{pick.textContent=t;},900); return; }
+      pickPerks[n]=1;
+    } else if(cur===1) pickPerks[n]=2;
+    else delete pickPerks[n];
+    pick.className='pk '+(pickPerks[n]===1?'t1':pickPerks[n]===2?'t2':'');
+    const c=$('wpcount'); if(c) c.textContent=Object.keys(pickPerks).length;
+    return;
+  }
   const b=e.target.closest('[data-act]');if(!b)return;if(b.dataset.act==='close'){$('insp').classList.remove('open');return;}doAct(b.dataset.act,b.dataset);
 });
 $('q').addEventListener('input',e=>{q=e.target.value.toLowerCase().trim();render();});
