@@ -390,7 +390,31 @@ Core priorities, in his words:
     (`.wgrid.eqbig`) — Diego confirmed this is correct. The character's **inventory** below it is a
     **3-column grid** (`.charside .wgrid` = `repeat(3,90px)`) to match his in-game/BrayTech character screen
     (he sent a picture; the earlier 5-column inventory was the thing he meant by "3×3", not the equipped tile).
-    The shared **vault** stays on the right, capped to 3 rows.
+    The shared **vault** stays on the right, capped to 3 rows. **NOTE (open bug):** the character
+    inventory is NOT capped, so it can show >9 tiles — see NEXT_PHASE open issue #2.
+  - **Weapon Vault manager batch (2026-07-05):** inspect card shows perks/MW/kills/element + Equip /
+    To Vault / Lock / Keep / Fav / Junk (`/api/equip|vault|lock|tag`) AND a **watch-perk picker** (all
+    pool perks → Save to Weapon Watch). **Trait Columns 3 & 4 side by side** (`.ispcols2`), perks
+    vertical. **Equip make-space:** `smartEquipWeapon` vaults an unlocked weapon from a FULL slot
+    (1 equipped + 9 stored) before pulling from the vault — the real reason equip failed; card reports
+    "vaulted X to make room". **Clean inventory** rail control (Weapons/Armor/Both) → `cleanInventory`
+    + `POST /api/clean-inventory {characterId,kind}` vaults every unequipped weapon/armor for the
+    selected guardian. **Official element icons** on tiles (`loadDamageIcons` → `DamageTypeDefinition`
+    icon, `def.dmgIcon`, `.wt .elic`). **Weapon-type filter + sort-by-stat dropdowns** (`fType`,
+    `statSort` over `statsMax`). Filters currently **dim** non-matches and float matches to top
+    (`filtersActive`+`bySort`) rather than hide — see NEXT_PHASE open issue #1 (chip clicks are also
+    double-bound and broken).
+  - **Weapon Watch + popup polish (2026-07-05):** copies within a weapon sort by **tag**
+    (favorite→keep→none→junk, then score); a **"Junk untagged"** top-bar button mass-junks every
+    untagged copy (DIM write + confirm). The perk hover popup (`perktip.js`) now waits **400ms**
+    (`HOVER_DELAY`) before showing. God-roll drop alert fires **once per drop** (`ALERTED` Set in
+    `pollDrops` — it was re-firing every 25s because a fresh drop stays flagged until acked).
+    New Drops (`/drops`) still needs Fav/Keep/Junk + Equip/To-Vault actions — NEXT_PHASE open issue #4.
+  - **Server stability (2026-07-05):** global `uncaughtException`/`unhandledRejection` handlers keep
+    the server alive on any stray error; EADDRINUSE retries are **bounded** (exit after ~20s, no zombie
+    procs); server binds **dual-stack** `listen(PORT,'::')`. The launcher (`start-vault.ps1`) restarts
+    node 5s after any exit. **Restarting the server = a ~5s offline blip; UI/HTML changes need NO
+    restart (served from disk). Don't kill-and-relaunch to deploy HTML.**
   - **`node vault-verdict.js` now honors `PORT` + `VV_CACHE_DIR` env vars** (default 8787 /
     `vault-manifest-cache/`) so a throwaway test instance can run on another port with an isolated cache
     without touching the always-on server.

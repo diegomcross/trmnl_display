@@ -3,6 +3,55 @@
 > Maintained per CLAUDE.md. When a feature ships, move it to HANDOFF.md
 > "What works now" and delete it here.
 
+## ⚠ OPEN ISSUES / BUGS — PICK UP HERE FIRST (2026-07-05, Diego's latest feedback)
+
+These are live problems on `weapon-vault.html` (+ one on `weapon-drops.html`). Verified against the
+running app (localhost:8787) unless noted. **Hard-refresh (Ctrl+Shift+R) before testing — the HTML is
+served from disk, so a stale tab shows old markup.**
+
+1. **Weapon Vault filters/sort are broken (HIGH).** Clicking an Element/Ammo/Rarity/Tag chip does
+   **not** apply the filter and the chip doesn't highlight (`.on` never sticks; no tiles dim/match).
+   **Root cause (strong):** `chipRow(el,...)` calls `el.addEventListener('click', …)` and `chipRow`
+   is re-run **every time `load()` runs** (e.g. after Clean-inventory, or any reload) → duplicate
+   listeners stack → each click toggles the Set twice (add then delete) → net no-op + `.on` toggles
+   on-then-off. **Fix:** make it idempotent — use `el.onclick = …` instead of `addEventListener`, or
+   attach the delegated handler once outside `chipRow`. Re-verify after clean-inventory (which calls
+   `load()`).
+   - **Also (design, Diego):** "I should be able to **narrow down** weapons." Current behaviour DIMS
+     non-matches and floats matches to the top (his earlier ask), so nothing is actually removed. He
+     now wants real narrowing. Add a **hide vs dim** toggle, or make the chip filters hide non-matches
+     (keep the combo/score dimming separate). Confirm with Diego which filters hide vs dim.
+   - The **sort/tile/stat** controls use `.onclick`/`addEventListener` **once** (outside `load()`), so
+     they're not double-bound — but confirm the selected sort chip highlights (Diego says "selected
+     button is not highlighted", which is the same chipRow bug for the filter chips).
+
+2. **Character inventory is not a clean 3×3 (Diego: "reverted 3x3 weapon slot count").** The grid is
+   `.charside .wgrid = repeat(3,90px)` (3 wide, correct) but it is **not capped** — a slot showed
+   **14 tiles** ("WARLOCK · 14"), which also **exceeds the in-game max of 9** per slot. Two things:
+   (a) cap the character inventory to a 3×3 (9, like `capVaultRows` caps the vault to 3 rows); (b)
+   investigate why the count is >9 — check the `w.ownCid===selCid && w.loc!=='equipped'` grouping in
+   `render()` (stale data? duplicates from the reissue merge? equipped mis-flagged?). A character
+   truly can't hold 14.
+
+3. **Card Column 3 / Column 4 layout (likely already OK — verify).** Diego says col3/col4 aren't side
+   by side with perks listed vertically, but on live the inspect card DOES render `.ispcols2`
+   (2 columns, `.ispcols2 .pk{display:flex;width:100%}` = vertical perks). This is probably a
+   **stale-cache** on his tab. Hard-refresh and confirm; if still wrong, check the `.ispcols2` CSS.
+
+4. **New Drops needs tag + move actions (Diego, new).** `weapon-drops.html` (`/drops`) should get
+   **Fav / Keep / Junk** chips + **Equip / To Vault** buttons per drop card, like the vault inspect
+   (`/api/tag`, `/api/equip` (smart, with make-space), `/api/vault` all exist and are wired elsewhere —
+   reuse that pattern; the drops page already has Lock + smart Vault/Equip + Seen).
+
+**Stability (fixed 2026-07-05, context for the new agent):** the app kept going offline
+(`ERR_CONNECTION_REFUSED`). Causes were (a) a "retry the port forever" EADDRINUSE handler that spawned
+immortal zombie node procs, (b) every restart = a 5s launcher gap (the launcher `start-vault.ps1`
+waits 5s), and **most restarts were the agent's own** kill-and-relaunch to deploy code. Fixed: global
+`uncaughtException`/`unhandledRejection` handlers, bounded EADDRINUSE retry (exits after ~20s, no
+zombies), dual-stack `listen(PORT, '::')`. **Lesson for the new agent: UI/HTML changes are served from
+disk — DO NOT restart the server for them. Only restart (once, cleanly) for server-code changes, and
+expect a ~5s offline blip when you do.**
+
 ## Where we are (2026-07-05, late — vault manager batch + equip make-space + stability)
 
 Shipped & verified on 8788: (1) **equip make-space fix** — `smartEquipWeapon` vaults an unlocked
