@@ -1278,6 +1278,14 @@ async function main() {
       res.end(JSON.stringify({ error: err.message }));
     }
   });
+  // A restart can briefly overlap the old process still holding the port. Instead of
+  // crashing (which made the launcher loop and the app flicker offline), wait + retry.
+  server.on('error', (err) => {
+    if (err.code === 'EADDRINUSE') {
+      console.warn(`Port ${PORT} still busy — retrying in 3s...`);
+      setTimeout(() => { try { server.close(); } catch {} server.listen(PORT, '0.0.0.0'); }, 3000);
+    } else { console.error('server error:', err); }
+  });
   server.listen(PORT, '0.0.0.0', () =>
     console.log(`\nVault Verdict live at  http://127.0.0.1:${PORT}\n(from your phone on the same Wi-Fi: http://<this-PC's-LAN-IP>:${PORT})\n`));
 
