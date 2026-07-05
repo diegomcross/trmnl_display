@@ -53,7 +53,7 @@ input:focus{outline:none;border-color:var(--gold)}
 .wt .bot{position:absolute;left:0;right:0;bottom:0;display:flex;align-items:center;justify-content:space-between;gap:4px;padding:3px 5px 3px;background:linear-gradient(transparent,rgba(0,0,0,.85))}
 .wt .el{width:8px;height:8px;transform:rotate(45deg);box-shadow:0 0 0 1px rgba(0,0,0,.55);flex:0 0 auto}
 .wt .p{color:#fff;font:600 11px/1 Bahnschrift,"Roboto Condensed",sans-serif;letter-spacing:.02em}
-.wt .lk{position:absolute;right:3px;top:2px;font-size:10px;color:#fff;text-shadow:0 1px 2px #000;opacity:.92}
+.wt .lk{position:absolute;right:3px;top:3px;color:#fff;opacity:.92;display:flex;filter:drop-shadow(0 1px 1px rgba(0,0,0,.85))}
 /* clipped top-left corner = the tag flag (calmer than a full bar) */
 .wt .tagc{position:absolute;left:0;top:0;width:0;height:0;border-style:solid;border-width:15px 15px 0 0;border-color:transparent transparent transparent transparent}
 .wt.tg-keep .tagc{border-top-color:var(--keep)} .wt.tg-favorite .tagc{border-top-color:var(--fav)} .wt.tg-junk .tagc{border-top-color:var(--junk)}
@@ -192,6 +192,8 @@ const esc=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'
 const BN='https://www.bungie.net';
 const ELCOL={Kinetic:'#e6e6e6',Solar:'#f1631d',Arc:'#6de8f1',Void:'#a777c5',Stasis:'#4d88ff',Strand:'#35e366'};
 const SLOTORD=['Kinetic','Energy','Power'];
+// clean stroke padlock (no emoji) — on=closed shackle, off=open
+const LKSVG=on=>`<svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">${on?'<path d="M7 10V7a5 5 0 0 1 10 0v3"/>':'<path d="M7 10V7a5 5 0 0 1 9.4-2"/>'}<rect x="4.5" y="10" width="15" height="10.5" rx="2"/></svg>`;
 
 let WEAPONS={weapons:[],defs:{},perkIcons:{}}, PICONS={}, LIB=[];
 let PMINE={}, PPOP={}, maxMine=1, maxPop=1;   // per-perk score maps for the perk-score sorts
@@ -209,17 +211,18 @@ function perkScore(w,mode){
   const cs=col=>{ let best=0; for(const pk of (col||[])){ const v=mode==='mine'?(PMINE[pk.n]||0):((PMINE[pk.n]||0)/maxMine + (PPOP[pk.n]||0)/maxPop*0.35); if(v>best)best=v; } return best; };
   return cs(w.cols&&w.cols[0])+cs(w.cols&&w.cols[1]);
 }
-// favorite-roll score: RELATIVE per weapon — 100% = the best favorite roll THIS weapon could
-// roll. achieved = best favorite weight per column on this copy's roll; achievable = best per
-// column across the weapon's full pool. Star grade sets the weight (1★=1 · 2★=1.5 · 3★=2).
-// Returns -1 when the weapon can't roll any favorite (shown as "—", excluded from threshold).
+// favorite-perk score: how much of THIS weapon's trait-perk pool you've favorited —
+// score = favorited pool perks / total pool perks (weighted by star grade so 2★/3★ count
+// more). e.g. 5 of 6 pool perks favorited → 83%. Per weapon (all copies share it).
+// Returns -1 when the weapon has no perk pool (shown as "—", excluded from the threshold).
 function favScore(w){
   if(!favAny()) return -1;
   const d=w._d||WEAPONS.defs[w.hash]||{}, pool=d.pool||[[],[]];
-  const bestW=(list,get)=>{ let b=0; for(const x of (list||[])){ const g=FAV[get(x)]; if(g&&FAVW[g]>b) b=FAVW[g]; } return b; };
-  const ach=bestW(w.cols&&w.cols[0],p=>p.n)+bestW(w.cols&&w.cols[1],p=>p.n);
-  const able=bestW(pool[0],n=>n)+bestW(pool[1],n=>n);
-  return able>0 ? Math.round(100*ach/able) : -1;
+  const names=new Set([...(pool[0]||[]),...(pool[1]||[])]);
+  if(!names.size) return -1;
+  let num=0, nonfav=0;
+  for(const n of names){ const g=FAV[n]; if(g) num+=FAVW[g]; else nonfav++; }
+  return Math.round(100*num/(num+nonfav));
 }
 const scoreClass=fs=>fs<0?'sdim':fs>=85?'sgold':fs>=60?'steal':fs>=35?'swhite':'sred';
 function cmp(a,b){
@@ -316,7 +319,7 @@ function tile(w){
   const pcls=scoreMode?('p '+scoreClass(fs)):'p';
   return `<div class="wt ${ex?'exotic':''}${tg}${w.loc==='equipped'?' equipped':''}${w._st==='match'?' match':''}${w._st==='dim'?' dim':''}" data-id="${w.id}" title="${esc(d.n||'')}${w.loc==='equipped'?' · equipped':''}${scoreMode?' · '+(fs<0?'no fav':fs+'% fav roll'):(' · ✦'+(w.pwr||'—'))}${w.tag?' · '+w.tag:''}">
     ${d.icon?`<img data-src="${BN}${d.icon}" alt="">`:''}
-    <span class="tagc"></span>${w.locked?'<span class="lk">🔒</span>':''}
+    <span class="tagc"></span>${w.locked?'<span class="lk">'+LKSVG(true)+'</span>':''}
     <span class="bot">${el}<span class="${pcls}">${num}</span></span></div>`;
 }
 // Only fetch a tile's emblem art once it scrolls near view — the vault can hold
@@ -345,11 +348,11 @@ let curW=null;
 function inspect(id){
   const w=WEAPONS.weapons.find(x=>x.id===id); if(!w) return;
   curW=w; const d=WEAPONS.defs[w.hash]||{};
-  const col=(arr,label)=>`<div class="ispcol"><div class="ch">${label}</div>${(arr||[]).map(p=>`<span class="pk ${p.on?'on':''} ${FAV.has(p.n)?'fav':''}" data-pn="${esc(p.n)}" title="${FAV.has(p.n)?'★ favorite':''}">${PICONS[p.n]?`<img src="${BN}${PICONS[p.n]}">`:''}${esc(p.n)}${p.on?' •':''}${FAV.has(p.n)?' ★':''}</span>`).join('')||'<span class="slotempty">—</span>'}</div>`;
+  const col=(arr,label)=>`<div class="ispcol"><div class="ch">${label}</div>${(arr||[]).map(p=>{const g=FAV[p.n]||0;return `<span class="pk ${p.on?'on':''} ${g?'fav':''}" data-pn="${esc(p.n)}" title="${g?'★'.repeat(g)+' favorite':''}">${PICONS[p.n]?`<img src="${BN}${PICONS[p.n]}">`:''}${esc(p.n)}${p.on?' •':''}${g?' '+'★'.repeat(g):''}</span>`;}).join('')||'<span class="slotempty">—</span>'}</div>`;
   const tagBtn=(t,lbl)=>`<button class="btn sm ${w.tag===t?'act-on':'mut'}" data-act="tag" data-tag="${w.tag===t?'none':t}">${lbl}</button>`;
   $('ispcard').innerHTML=`<div class="ih"><span class="it ${d.tt===6?'exotic':''}">${d.icon?`<img src="${BN}${d.icon}">`:''}</span>
     <div><div class="disp" style="font-size:16px;color:#fff">${esc(d.n||'Weapon')}</div>
-    <div class="count" id="ispsub">${esc(d.ty||d.slot||'')} · ✦${w.pwr||'—'} · ${LOCLABEL[w.loc]||esc(w.own||'')}${w.loc!=='vault'&&w.own?' ('+esc(w.own)+')':''}${w.locked?' · 🔒':''}${d.dmg?' · '+esc(d.dmg):''}${w.kills?' · '+w.kills.toLocaleString()+' kills':''}</div></div></div>
+    <div class="count" id="ispsub">${esc(d.ty||d.slot||'')} · ✦${w.pwr||'—'} · ${LOCLABEL[w.loc]||esc(w.own||'')}${w.loc!=='vault'&&w.own?' ('+esc(w.own)+')':''}${w.locked?' · '+LKSVG(true):''}${d.dmg?' · '+esc(d.dmg):''}${w.kills?' · '+w.kills.toLocaleString()+' kills':''}</div></div></div>
     ${col(w.cols?.[0],'Column 3')}${col(w.cols?.[1],'Column 4')}
     ${w.mw?`<div class="ispcol"><div class="ch">Masterwork</div><span class="pk">${w.mwIcon?`<img src="${BN}${w.mwIcon}">`:''}${esc(w.mw)}</span></div>`:''}
     <div class="ispacts">
@@ -397,7 +400,7 @@ async function doAct(act,ds){
 function refreshTile(w){
   const t=document.querySelector(`.wt[data-id="${w.id}"]`); if(!t) return;
   t.classList.remove('tg-keep','tg-favorite','tg-junk'); if(w.tag) t.classList.add('tg-'+w.tag);
-  const lk=t.querySelector('.lk'); if(w.locked&&!lk){ const s=document.createElement('span'); s.className='lk'; s.textContent='🔒'; t.appendChild(s); } else if(!w.locked&&lk){ lk.remove(); }
+  const lk=t.querySelector('.lk'); if(w.locked&&!lk){ const s=document.createElement('span'); s.className='lk'; s.innerHTML=LKSVG(true); t.appendChild(s); } else if(!w.locked&&lk){ lk.remove(); }
 }
 
 // ---- wire ----
@@ -415,7 +418,7 @@ $('onlyMatch').onchange=e=>{onlyMatch=e.target.checked;render();};
 $('fSort').addEventListener('click',e=>{const b=e.target.closest('[data-sort]');if(!b)return;sortBy=b.dataset.sort;[...$('fSort').children].forEach(x=>x.classList.toggle('on',x===b));render();});
 $('fTile').addEventListener('click',e=>{const b=e.target.closest('[data-tile]');if(!b)return;tileMode=b.dataset.tile;[...$('fTile').children].forEach(x=>x.classList.toggle('on',x===b));render();});
 $('minScore').addEventListener('input',e=>{ minScore=+e.target.value; $('minLbl').textContent=minScore?`≥ ${minScore}%`:''; render(); });
-function updateFavNote(){ const n=Object.keys(FAV).length; $('favnote').textContent = n ? `Scoring by ${n} favorite perk${n===1?'':'s'} (starred in Perk Finder). Relative % = best favorite roll this weapon could roll.` : 'No favorite perks yet — star perks in Perk Finder to score your vault; tiles show power until then.'; }
+function updateFavNote(){ const n=Object.keys(FAV).length; $('favnote').textContent = n ? `Scoring by ${n} favorite perk${n===1?'':'s'} (starred in Perk Finder). % = favorited perks ÷ this weapon's total perk pool (2★/3★ count more).` : 'No favorite perks yet — star perks in Perk Finder to score your vault; tiles show power until then.'; }
 
 // perk search dropdown
 $('pq').addEventListener('input',e=>{

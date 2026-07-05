@@ -128,7 +128,7 @@ function render(){
         <div class="meta">${mw}<span>${d.ty} · ${w.pwr}</span></div>
         ${stats?`<div class="meta">${stats}</div>`:''}
         <div class="acts">
-          <button class="lockb ${w.locked?'on':''}" data-lock="${w.id}" data-to="${w.locked?0:1}">${w.locked?'🔒 Locked':'🔓 Lock'}</button>
+          <button class="lockb ${w.locked?'on':''}" data-lock="${w.id}" data-to="${w.locked?0:1}">${w.locked?'Locked':'Lock'}</button>
           ${w.own==='Vault'?`<button class="lockb" data-equip="${w.id}" data-rhash="${w.rhash}" data-own="${esc(w.own)}">Equip</button>`:`<button class="lockb" data-vault="${w.id}" data-rhash="${w.rhash}" data-own="${esc(w.own)}">→ Vault</button>`}
           <button class="lockb" data-ack="${w.id}">Seen</button>
         </div>

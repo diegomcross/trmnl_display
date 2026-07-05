@@ -364,11 +364,12 @@ Core priorities, in his words:
   - **Favorite perks → whole-vault perk score (2026-07-04, weighted 2026-07-05):** Perk Finder rows have a
     **3-star grade** (tap star N → grade N, `{perkName:grade}` in `perk-favorites.json` via `/api/favorites`;
     a `★ Favorites` filter + count too). Grade weight **1★=1 · 2★=1.5 · 3★=2**. The Weapon Vault scores
-    **every** copy by `favScore` = a **RELATIVE %**: 100% = the best favorite roll THIS weapon could roll
-    (`achieved/achievable`, best favorite weight per trait column from the roll vs the weapon's full pool).
-    Tile shows the color-coded % in place of power (`≥85 gold · ≥60 teal · ≥35 white · else red · — none`);
-    `Tile shows: ★ Perk score / Power` toggle, a **Min-score slider** hides low tiles, a `Perk · Favs` sort.
-    (Uniform grade-1 favorites only yield 0/50/100%; use 2★/3★ for intermediate %s.)
+    every weapon by `favScore` = **favorited perks ÷ the weapon's total trait-perk pool** (per weapon, not
+    per copy), weighted: `100 × Σ(fav weight) / (Σ(fav weight) + count of non-favorited pool perks)`. So a
+    pool of 6 with 5 favorited (1★) ≈ 83%; 2★/3★ push it higher. (Diego's def, replacing an earlier
+    "relative best-roll %" that made almost everything 100%.) Tile shows the color-coded % in place of power
+    (`≥85 gold · ≥60 teal · ≥35 white · else red · — no pool/exotic`); `Tile shows: ★ Perk score / Power`
+    toggle, a **Min-score slider** hides low tiles, a `Perk · Favs` sort.
   - **Perk Finder weapon cards + tag filter (2026-07-05):** click a **Best-Match** weapon (Inventory) → a
     smart card (perks cols 3/4 with rolled lit, MW, kills, power/element/lock) + **Equip / To Vault / Lock /
     Keep / Fav / Junk** (ported from `weapon-vault.html` `inspect()`; same `/api/equip|vault|lock|tag`). Click

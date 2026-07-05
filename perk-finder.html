@@ -229,6 +229,7 @@ input:focus,select:focus{outline:none;border-color:var(--gold)}
 const $=id=>document.getElementById(id);
 const esc=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
 const BN='https://www.bungie.net';
+const LKSVG=on=>`<svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px">${on?'<path d="M7 10V7a5 5 0 0 1 10 0v3"/>':'<path d="M7 10V7a5 5 0 0 1 9.4-2"/>'}<rect x="4.5" y="10" width="15" height="10.5" rx="2"/></svg>`;
 
 let LIB=[], PICONS={}, PINFO={}, FAV={}, favOnly=false, WEAPONS={weapons:[],defs:{},perkIcons:{}}, COMBOS=[], OWNED=new Set();
 let TAGSEL=new Set(), WATCH={}, curW=null, curWP=null, pickSet=new Set();   // perk tag filter, watch config, open cards
@@ -563,7 +564,7 @@ function inspectInv(id){
   const col=(arr,lbl)=>`<div class="wccol"><div class="wclbl">${lbl}</div>${(arr||[]).map(p=>`<span class="wcpk ${p.on?'on':''}" data-pn="${esc(p.n)}">${PICONS[p.n]?`<img src="${BN}${PICONS[p.n]}">`:''}${esc(p.n)}${p.on?' •':''}</span>`).join('')||'<span class="count">—</span>'}</div>`;
   const tagBtn=(t,l)=>`<button class="btn sm ${w.tag===t?'act-on':'mut'}" data-wact="tag" data-tag="${w.tag===t?'none':t}">${l}</button>`;
   $('wcbox').innerHTML=`<div class="wchead"><span class="wtile ${d.tt===6?'exotic':''}">${d.icon?`<img src="${BN}${d.icon}">`:''}</span>
-    <div><div class="wcn">${esc(d.n||'Weapon')}</div><div class="count">${esc(d.ty||d.slot||'')} · ✦${w.pwr||'—'}${d.dmg?' · '+esc(d.dmg):''}${w.locked?' · 🔒':''}${w.kills?' · '+w.kills.toLocaleString()+' kills':''}</div></div></div>
+    <div><div class="wcn">${esc(d.n||'Weapon')}</div><div class="count">${esc(d.ty||d.slot||'')} · ✦${w.pwr||'—'}${d.dmg?' · '+esc(d.dmg):''}${w.locked?' · '+LKSVG(true):''}${w.kills?' · '+w.kills.toLocaleString()+' kills':''}</div></div></div>
     ${col(w.cols&&w.cols[0],'Column 3')}${col(w.cols&&w.cols[1],'Column 4')}
     ${w.mw?`<div class="wccol"><div class="wclbl">Masterwork</div><span class="wcpk">${w.mwIcon?`<img src="${BN}${w.mwIcon}">`:''}${esc(w.mw)}</span></div>`:''}
     <div class="wcacts">

@@ -178,6 +178,8 @@ const matchesQuery=d=>{const ql=q.trim().toLowerCase();return !ql||[d.n,d.ty,d.s
 const trackedNames=cfg=>Object.entries(cfg.perks||{}).sort((a,b)=>b[1]-a[1]).map(([n,pr])=>({n,hi:pr===2}));
 // BrayTech-style artwork: real weapon + perk icons rendered as square tiles.
 const BN='https://www.bungie.net';
+// clean stroke padlock (no emoji) — on=closed shackle, off=open
+const LKSVG=on=>`<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px">${on?'<path d="M7 10V7a5 5 0 0 1 10 0v3"/>':'<path d="M7 10V7a5 5 0 0 1 9.4-2"/>'}<rect x="4.5" y="10" width="15" height="10.5" rx="2"/></svg>`;
 const pIco=n=>(DATA.perkIcons&&DATA.perkIcons[n])?`<img class="pkico" src="${BN}${DATA.perkIcons[n]}" alt="" loading="lazy">`:'';
 const wTile=(d,badge)=>`<span class="wtile ${d.tt===6?'exotic':'legendary'}">${d.icon?`<img src="${BN}${d.icon}" alt="" loading="lazy">`:''}${badge?`<i class="pw">${badge}</i>`:''}</span>`;
 
@@ -274,7 +276,7 @@ function renderWatched(){
           <div class="loc">${inVault?'Vault':'on <b>'+esc(w.own)+'</b>'} · ${w.pwr}<br>MW <span class="${cfg.mw&&w.mw===cfg.mw?'hi':'cp'}">${w.mw||'—'}</span> · DIM ${w.tag||'none'}</div>
           <div class="acts">
             ${selMode?`<input type="checkbox" data-sel="${w.id}" ${sel.has(w.id)?'checked':''}>`:''}
-            <button class="lockb ${w.locked?'on':''}" data-lock="${w.id}" data-to="${w.locked?0:1}" title="${w.locked?'Unlock':'Lock'}">${w.locked?'🔒':'🔓'}</button>
+            <button class="lockb ${w.locked?'on':''}" data-lock="${w.id}" data-to="${w.locked?0:1}" title="${w.locked?'Unlock':'Lock'}">${LKSVG(!!w.locked)}</button>
             ${moveBtn}
           </div>
         </div></div>`;
@@ -298,8 +300,8 @@ function renderWatched(){
         <button class="btn sm mut" data-selnone="${hash}">Clear</button>
         <span>tag selected:</span>
         ${TAG_OPTS.map(t=>`<button class="btn sm ${t==='junk'?'red':'mut'}" data-btag="${hash}" data-t="${t}">${t}</button>`).join('')}
-        <button class="btn sm mut" data-block="${hash}" data-to="1">🔒 selected</button>
-        <button class="btn sm mut" data-block="${hash}" data-to="0">🔓 selected</button>
+        <button class="btn sm mut" data-block="${hash}" data-to="1">Lock selected</button>
+        <button class="btn sm mut" data-block="${hash}" data-to="0">Unlock selected</button>
         <button class="btn sm red" data-junkrest="${hash}">Junk all unselected</button>
       </div>`:''}
       ${copyRows||'<p class="note">No copies in the vault right now — new drops will be scored against this.</p>'}
