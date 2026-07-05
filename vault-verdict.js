@@ -972,6 +972,23 @@ function insightBullets(name) {
   return cleanClarityBullets((CLARITY && CLARITY.byName[name]) || '');
 }
 
+// Perk category tags for the Perk Finder tag filter, derived from the perk's name + in-game
+// description + cleaned insight text. Stat tags first, then Destiny element verbs.
+const TAGRULES = [
+  ['Damage', /damage|\bdmg\b/i],
+  ['Reload', /reload/i],
+  ['Stability', /stability|recoil|weapon shake|reticle/i],
+  ['Handling', /handling|swap speed|ready speed/i],
+  ['Range', /\brange\b|falloff|\bzoom\b/i],
+  ['Ability energy', /grenade|melee|super|class ability|ability energy/i],
+  ['Ammo / mag', /magazine|\bmag\b|reserves|\bammo\b|overfill|\brefill/i],
+  ['Healing', /\bheal|\bcure\b|restoration|recovery|overshield|\bhp\b|health/i],
+  ['Aim assist', /aim assist|target acqui|airborne/i],
+  ['Jolt', /\bjolt/i], ['Scorch', /\bscorch|\bignit|\bradiant\b/i], ['Slow', /\bslow\b|\bfreeze|frozen|shatter|stasis crystal/i],
+  ['Sever', /\bsever|suspend|unravel|tangle|threadling|woven mail/i], ['Volatile', /\bvolatile|suppress|weaken|devour|invisib/i],
+];
+const tagsFor = (text) => TAGRULES.filter(([, re]) => re.test(text)).map(([t]) => t);
+
 // Every trait perk (columns 3 & 4) that can roll on ANY weapon in the game, deduped by
 // name, tagged with which column(s) it appears in and its community popularity.
 async function buildPerkLibrary(e, fresh = false) {
@@ -999,7 +1016,9 @@ async function buildPerkLibrary(e, fresh = false) {
   const clarity = await loadClarity(man, fresh);
   const perks = [...byName.values()].map((p) => {
     const w = wl.perks[p.n] || { total: 0, pve: 0, pvp: 0 };
-    return { n: p.n, icon: p.icon, cols: p.cols, pop: w.total, pve: w.pve, pvp: w.pvp, dsc: p.dsc || '', insight: insightBullets(p.n) };
+    const insight = insightBullets(p.n);
+    const tags = tagsFor(`${p.n} ${p.dsc || ''} ${insight.map((b) => b.text).join(' ')}`);
+    return { n: p.n, icon: p.icon, cols: p.cols, pop: w.total, pve: w.pve, pvp: w.pvp, dsc: p.dsc || '', insight, tags };
   });
   perks.sort((a, b) => b.pop - a.pop || a.n.localeCompare(b.n));
   PERKLIB = { perks, count: perks.length, wishlistAt: wl.generatedAt };
@@ -1041,9 +1060,19 @@ const saveCombos = (c) => saveJsonSafe(COMBOS_FILE, c);
 
 // Diego's persistent FAVORITE perks — a curated list (starred in Perk Finder) used to
 // score every weapon in the vault, independent of the watch list.
-const FAV_FILE = path.join(__dirname, 'perk-favorites.json'); // [perkName, ...]
-const loadFav = () => { const f = loadJson(FAV_FILE); return Array.isArray(f) ? f : []; };
-const saveFav = (f) => saveJsonSafe(FAV_FILE, [...new Set(f)]);
+const FAV_FILE = path.join(__dirname, 'perk-favorites.json'); // { perkName: grade 1-3 }
+const loadFav = () => {
+  const f = loadJson(FAV_FILE);
+  if (Array.isArray(f)) { const o = {}; for (const n of f) o[n] = 1; return o; } // back-compat: old flat list = grade 1
+  return (f && typeof f === 'object') ? f : {};
+};
+const saveFav = (f) => {
+  const o = {};
+  if (Array.isArray(f)) { for (const n of f) o[n] = 1; }
+  else if (f && typeof f === 'object') { for (const [n, g] of Object.entries(f)) { const v = Math.max(1, Math.min(3, Math.round(+g) || 1)); if (n) o[n] = v; } }
+  saveJsonSafe(FAV_FILE, o);
+};
+const FAV_WEIGHT = { 1: 1, 2: 1.5, 3: 2 };   // star grade -> vault-score weight
 
 // ---------- probe mode for debugging ----------
 async function probe(nameLike) {
@@ -1190,7 +1219,7 @@ async function main() {
         return json(loadCombos());
       }
       if (req.url.startsWith('/api/favorites')) {
-        if (req.method === 'POST') { saveFav(JSON.parse(await readBody(req) || '[]')); return json({ ok: true }); }
+        if (req.method === 'POST') { saveFav(JSON.parse(await readBody(req) || '{}')); return json({ ok: true }); }
         return json(loadFav());
       }
       if (req.url.startsWith('/api/fashion')) return json(await fetchFashion(e));

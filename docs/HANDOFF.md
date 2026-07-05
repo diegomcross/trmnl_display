@@ -89,7 +89,7 @@ Core priorities, in his words:
 | `.clarity.json` | Gitignored cache: **Clarity community insights** (the same data DIM shows on perks) folded to `{perkName:insightText}`. Downloaded weekly from `database-clarity.github.io/Live-Clarity-Database/descriptions/dim.json`, flattened (`descriptions.en[].linesContent[].text`). Raw source for the perk **hover popup** (cleaned by `insightBullets`). |
 | `perktip.js` | **Shared perk hover popup** (served at `/perktip.js`, included by weapon-watch/perk-finder/weapon-vault). Sectioned card: element accent bar, name, **in-game description in an inset box** (same size), then **community-insight bullets**. Colouring engine: numbers **gold** (buff, shown `+11%`) / **red** (penalty `−`), **teal** seconds/time, **element-coloured keyword verbs** (Jolt=Arc, Scorch=Solar, Sever=Strand…), symbols `▸`(trigger) `▲`(ramp) `▼`(penalty) `×`(stacks) — **no emoji**. `PerkTip.init({perkDescs,perkInsights})`; auto `mouseover` on `[data-p]`/`[data-pn]`. Design + colours locked with Diego over live mockups. |
 | `.clarity-clean.json` | **Committed** curated perk bullets `{perkName:[{type,text}]}` (type ∈ trigger/ramp/penalty/buff/note → leading symbol). Hand-rewritten by Claude for the top ~34 perks, tight AND **complete** (every per-stack %, PvP split, enhanced bonus kept — Diego's rule: never drop info; numbers verbatim). English-only; other locales fall back to localised Clarity. Perks without an entry use the lossless `cleanClarityBullets` fallback. |
-| `perk-favorites.json` | Gitignored: Diego's **favorite trait perks** (a flat `[perkName,…]`), starred in Perk Finder. Used to score EVERY weapon in the Weapon Vault. `.bak` alongside (saveJsonSafe). GET/POST `/api/favorites`. |
+| `perk-favorites.json` | Gitignored: Diego's **favorite trait perks as a graded map** `{perkName: grade 1-3}` (3-star rating in Perk Finder; back-compat: an old flat array loads as grade 1). Grade → vault-score weight **1★=1 · 2★=1.5 · 3★=2**. Scores EVERY weapon in the Weapon Vault. `.bak` alongside. GET/POST `/api/favorites`. |
 | `artifacts.html` | **Artifact Mods** reference (served at `/artifacts`): all 7 Monument of Triumph artifacts × 3 columns × 7 mods, with a filter by subclass verb (Solar/Arc/Void/Stasis/Strand/Prismatic keywords) + keywords (Champions, grenade, Super, weapon types) + free text search. **Data is STATIC** (hand-transcribed from the neonlightsmedia Monument of Triumph guide) — if Bungie changes artifacts/mods, edit the `ARTIFACTS` array in this file. No API. |
 | `CLAUDE.md` | Working rules for agents: never drop features, test before push, and **mandatory upkeep of this file + `docs/NEXT_PHASE.md`**. |
 | `docs/NEXT_PHASE.md` | The pickup point: specs + open questions for upcoming features. |
@@ -361,21 +361,31 @@ Core priorities, in his words:
     Colours/symbols/layout were locked with Diego over ~8 live in-browser mockups. **TODO: localisation**
     — everything API-derived (manifest text, Clarity insight) must be pulled per-locale for pt-BR +
     future langs; see NEXT_PHASE l10n spec. Curated English bullets are en-only.
-  - **Favorite perks → whole-vault perk score (2026-07-04):** Perk Finder rows have a **★ star**
-    (favorite any perk, weapon-independent) saved to `perk-favorites.json` via GET/POST `/api/favorites`
-    (a `★ Favorites` filter + count too). The Weapon Vault scores **every** copy by `favScore` = how many
-    distinct favorite perks that copy's actual roll offers across cols 3+4, and by default shows that
-    **★ score in place of the power number** on each tile (a `Tile shows: ★ Perk score / Power` toggle;
-    a `Perk · Favs` sort; inspect popover flags favorite perks gold). Falls back to power when no favorites
-    are set. Diego's ask: "favorite perks score all weapons, even ones I'm not watching."
+  - **Favorite perks → whole-vault perk score (2026-07-04, weighted 2026-07-05):** Perk Finder rows have a
+    **3-star grade** (tap star N → grade N, `{perkName:grade}` in `perk-favorites.json` via `/api/favorites`;
+    a `★ Favorites` filter + count too). Grade weight **1★=1 · 2★=1.5 · 3★=2**. The Weapon Vault scores
+    **every** copy by `favScore` = a **RELATIVE %**: 100% = the best favorite roll THIS weapon could roll
+    (`achieved/achievable`, best favorite weight per trait column from the roll vs the weapon's full pool).
+    Tile shows the color-coded % in place of power (`≥85 gold · ≥60 teal · ≥35 white · else red · — none`);
+    `Tile shows: ★ Perk score / Power` toggle, a **Min-score slider** hides low tiles, a `Perk · Favs` sort.
+    (Uniform grade-1 favorites only yield 0/50/100%; use 2★/3★ for intermediate %s.)
+  - **Perk Finder weapon cards + tag filter (2026-07-05):** click a **Best-Match** weapon (Inventory) → a
+    smart card (perks cols 3/4 with rolled lit, MW, kills, power/element/lock) + **Equip / To Vault / Lock /
+    Keep / Fav / Junk** (ported from `weapon-vault.html` `inspect()`; same `/api/equip|vault|lock|tag`). Click
+    a **Farmable** weapon → a card of all rollable perks as checkboxes → **Save to Weapon Watch** (merges into
+    `weapon-watch.json`, keyed by the pool's weapon hash; verified it preserves existing entries). A **perk
+    tag filter** (chips: Damage/Reload/Stability/Handling/Range/Ability/Ammo/Healing + element verbs
+    Jolt/Scorch/Slow/Sever/Volatile) narrows the library; tags come from `/api/perks` (`tagsFor` classifier
+    over perk name + dsc + insight). Perks in the cards keep the `perktip.js` hover (`data-pn`).
   - **Weapon Watch top search + source filter (2026-07-04):** one search box at the **top** narrows
     **both** the watched list and the add list, matching name/type/**source** — so `crucible`, `iron banner`,
     `raid`, `trials`, `nightfall`, `dungeon`, `gambit` all work (matches the manifest `src` string;
     raid weapons read e.g. `"Vault of Glass" Raid`). Shared `matchesQuery(d)` helper over n/ty/src/slot/ammo/dmg.
-  - **Weapon Vault equipped tile (2026-07-04):** the equipped weapon in each slot renders **~1.7× the
-    inventory tile** (`.wgrid.eqbig`, Diego's chosen proportion) to echo the in-game character screen —
-    emphasized, not oversized. (Started at a literal 3×3/196px; Diego found that "out of proportion big",
-    dialled to 1.7×.)
+  - **Weapon Vault character layout (2026-07-04/05):** the equipped weapon renders **~1.7× the tile**
+    (`.wgrid.eqbig`) — Diego confirmed this is correct. The character's **inventory** below it is a
+    **3-column grid** (`.charside .wgrid` = `repeat(3,90px)`) to match his in-game/BrayTech character screen
+    (he sent a picture; the earlier 5-column inventory was the thing he meant by "3×3", not the equipped tile).
+    The shared **vault** stays on the right, capped to 3 rows.
   - **`node vault-verdict.js` now honors `PORT` + `VV_CACHE_DIR` env vars** (default 8787 /
     `vault-manifest-cache/`) so a throwaway test instance can run on another port with an isolated cache
     without touching the always-on server.

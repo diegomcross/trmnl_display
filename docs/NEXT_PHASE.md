@@ -3,6 +3,27 @@
 > Maintained per CLAUDE.md. When a feature ships, move it to HANDOFF.md
 > "What works now" and delete it here.
 
+## Where we are (2026-07-05, later — Perk Finder cards + weighted favorites + vault % shipped)
+
+Shipped & verified on 8788 (details → HANDOFF). Five features:
+1. **Perk Finder inventory smart card** — click a Best-Match weapon → card with perks/MW/kills +
+   Equip / To Vault / Lock / Keep / Fav / Junk (ported from `weapon-vault.html` `inspect()`).
+2. **Perk Finder farmable card** — click a farmable weapon → all rollable perks as checkboxes →
+   **Save to Weapon Watch** (merges into `weapon-watch.json`; verified it preserves existing entries).
+3. **Perk tag filter** — chips (Damage/Reload/Stability/Handling/Range/Ability/Ammo/Healing +
+   element verbs Jolt/Scorch/Slow/Sever/Volatile), tags derived server-side (`tagsFor` in
+   vault-verdict.js), `/api/perks` returns `tags`.
+4. **3-star weighted favorites** — `/api/favorites` is now `{perkName: grade 1-3}` (back-compat:
+   old array → grade 1); rating widget in Perk Finder. Weights 1★=1 · 2★=1.5 · 3★=2.
+5. **Weapon Vault score = relative %** (100% = best favorite roll this weapon could roll), tile
+   shows color-coded % (≥85 gold/≥60 teal/≥35 white/else red / — none), **Min-score slider** hides
+   low tiles. Also **character inventory is now a 3-column grid** (Diego's in-game/BrayTech picture;
+   the big equipped tile was already correct — only the inventory below it changed from 5→3 cols).
+
+**Note:** Diego already has **87 favorites** (starred on his live server), all grade 1 — regrade in
+Perk Finder to get intermediate %s (uniform grade 1 only yields 0/50/100%). Open follow-up unchanged:
+farmable→watch for UNOWNED weapons drives drop alerts but the Weapon Watch UI only renders owned.
+
 ## Where we are (2026-07-05 — perk popup REDESIGN shipped)
 
 Redesigned perk hover popup (locked design + Diego's decisions). Details in HANDOFF. Key points:

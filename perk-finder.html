@@ -107,10 +107,31 @@ input:focus,select:focus{outline:none;border-color:var(--gold)}
 .wsrc{font-size:10px;color:var(--dim)}
 .big{text-align:center;color:var(--mut);padding:26px 12px;font-size:13px}
 :focus-visible{outline:2px solid var(--gold);outline-offset:2px}
-/* favorite star — favorites score every weapon in the vault */
-.favstar{flex:0 0 auto;background:none;border:none;cursor:pointer;font-size:17px;line-height:1;color:var(--dim);padding:2px 3px;font-family:inherit}
-.favstar:hover{color:var(--gold)}
-.favstar.on{color:var(--gold);text-shadow:0 0 6px rgba(207,174,66,.6)}
+/* 3-star favorite grade — favorites score every weapon in the vault */
+.favstars{flex:0 0 auto;display:inline-flex;gap:1px;cursor:pointer;line-height:1}
+.favstars .s{font-size:14px;color:var(--dim);padding:1px}
+.favstars:hover .s{color:var(--mut)}
+.favstars .s.on{color:var(--gold);text-shadow:0 0 5px rgba(207,174,66,.55)}
+/* weapon card (inventory smart card + farmable watch-perk card) */
+#wcard{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;z-index:30;padding:16px}
+#wcard.open{display:flex}
+.wcbox{background:var(--panel);border:1px solid var(--line);max-width:420px;width:100%;max-height:88vh;overflow:auto;padding:14px}
+.wchead{display:flex;gap:10px;align-items:center;margin-bottom:6px}
+.wchead .wtile{width:52px;height:52px;flex:0 0 auto}
+.wcn{font-family:Bahnschrift,"Roboto Condensed",sans-serif;text-transform:uppercase;letter-spacing:.04em;font-size:16px;color:#fff}
+.wccol{margin-top:9px}
+.wccol .wclbl{font-family:Bahnschrift,sans-serif;text-transform:uppercase;font-size:10px;color:var(--dim);letter-spacing:.06em;margin-bottom:4px}
+.wcpk{display:inline-flex;align-items:center;gap:5px;border:1px solid var(--line);padding:2px 7px 2px 3px;font-size:11.5px;margin:0 5px 5px 0}
+.wcpk img{width:20px;height:20px}
+.wcpk.on{border-color:var(--keep);color:var(--keep)}
+.wcpk.pick{cursor:pointer}
+.wcpk.pick.on{border-color:var(--gold);color:var(--gold);background:rgba(207,174,66,.12)}
+.wcacts{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px;padding-top:10px;border-top:1px solid var(--line);align-items:center}
+.wcacts .wcsep{width:1px;height:18px;background:var(--line);margin:0 2px}
+.wcacts .btn.act-on{background:var(--gold);color:#000}
+.wcmsg{font-size:11px;color:var(--mut);margin-top:8px;min-height:14px}
+.wcmsg.warn{color:var(--junk)} .wcmsg.ok{color:var(--keep)}
+.match.clk{cursor:pointer} .match.clk:hover{border-color:var(--dim)}
 @media(min-width:1200px){body{max-width:1180px;margin:0 auto}}
 </style>
 <link rel="stylesheet" href="/theme.css">
@@ -118,7 +139,7 @@ input:focus,select:focus{outline:none;border-color:var(--gold)}
 <body>
 <div id="gbanner"></div>
 <h1 class="disp">Perk <span>Finder</span></h1>
-<p class="sub">Pick trait perks, save role-tagged combos, and see which of your weapons best match. Tap the <b style="color:var(--gold)">★</b> to <b>favorite</b> a perk — favorites score <b>every</b> weapon in your Vault (watched or not). Rank by <b>Mine</b> (how often you track a perk), <b>Community</b> (DIM wishlists), or <b>Blend</b>. <span id="wlmeta" class="count"></span></p>
+<p class="sub">Pick trait perks, save combos, and see which weapons best match. Tap <b style="color:var(--gold)">1–3 ★</b> to <b>favorite</b> a perk (more stars = more weight); favorites score <b>every</b> weapon in your Vault. Click a matched weapon for a card. Rank by <b>Mine</b>, <b>Community</b>, or <b>Blend</b>. <span id="wlmeta" class="count"></span></p>
 
 <div class="bar">
   <input id="q" placeholder="Search perks…" style="min-width:180px">
@@ -137,6 +158,7 @@ input:focus,select:focus{outline:none;border-color:var(--gold)}
   <button class="btn sm mut" id="favOnly">★ Favorites</button>
   <span class="count" id="libcount"></span>
 </div>
+<div class="bar" id="tagbar" style="margin:-6px 0 12px"></div>
 
 <div class="wrap">
   <div>
@@ -201,12 +223,16 @@ input:focus,select:focus{outline:none;border-color:var(--gold)}
   </div>
 </div>
 
+<div id="wcard"><div class="wcbox" id="wcbox"></div></div>
+
 <script>
 const $=id=>document.getElementById(id);
 const esc=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
 const BN='https://www.bungie.net';
 
-let LIB=[], PICONS={}, PINFO={}, FAV=new Set(), favOnly=false, WEAPONS={weapons:[],defs:{},perkIcons:{}}, COMBOS=[], OWNED=new Set();
+let LIB=[], PICONS={}, PINFO={}, FAV={}, favOnly=false, WEAPONS={weapons:[],defs:{},perkIcons:{}}, COMBOS=[], OWNED=new Set();
+let TAGSEL=new Set(), WATCH={}, curW=null, curWP=null, pickSet=new Set();   // perk tag filter, watch config, open cards
+const favCount=()=>Object.keys(FAV).length;
 let WPOOLS=null, OWNEDW=new Set(), matchMode='inv';   // farmable-pool cache, owned weapon names, match mode
 // SLOTS[0], SLOTS[1] = the two combo slots (each a Set of perk names, "any of these").
 let SLOTS=[new Set(),new Set()], activeSlot=0, ROLE='', source='mine', azMode=false, colFilter='all', ownedOnly=false, popOnly=false, q='';
@@ -214,6 +240,25 @@ let bmode='perks', SEL=new Set();   // bmode: 'perks' (flat pick) | 'combo' (2-s
 
 const iconFor=n=>PICONS[n]?`<img class="pkico" src="${BN}${PICONS[n]}" alt="" loading="lazy">`:'<span class="pkico"></span>';
 const slotOf=n=>SLOTS[0].has(n)?0:SLOTS[1].has(n)?1:-1;   // which slot a perk sits in (-1 = none)
+
+// 3-star favorite grade: tap star N → grade N (1★=1× · 2★=1.5× · 3★=2× weight in the Vault score)
+function starWidget(n){
+  const g=FAV[n]||0;
+  return `<span class="favstars" data-fav="${esc(n)}" title="Favorite — tap 1–3 stars (more = more weight in your Vault score)">`
+    +[1,2,3].map(i=>`<b class="s ${g>=i?'on':''}" data-g="${i}">★</b>`).join('')+`</span>`;
+}
+// perk tag filter chips (built from the tags the library actually has)
+const TAGORDER=['Damage','Reload','Stability','Handling','Range','Ability energy','Ammo / mag','Healing','Aim assist','Jolt','Scorch','Slow','Sever','Volatile'];
+const TAGCOL={Jolt:'#6de8f1',Scorch:'#f1631d',Slow:'#4d88ff',Sever:'#35e366',Volatile:'#a777c5'};
+function renderTags(){
+  const present=new Set(LIB.flatMap(p=>p.tags||[]));
+  const tags=TAGORDER.filter(t=>present.has(t));
+  $('tagbar').innerHTML=tags.length
+    ? `<span class="count" style="align-self:center">Tags:</span>`
+      +tags.map(t=>{const on=TAGSEL.has(t),c=TAGCOL[t];return `<button class="btn sm ${on?'on':'mut'}" data-tag="${esc(t)}"${on&&c?` style="border-color:${c};color:${c}"`:''}>${esc(t)}</button>`;}).join('')
+      +(TAGSEL.size?`<button class="btn sm mut" id="tagClear">clear</button>`:'')
+    : '';
+}
 
 function renderLib(){
   const maxMine=Math.max(1,...LIB.map(p=>p.mine||0));
@@ -225,11 +270,12 @@ function renderLib(){
     if(colFilter!=='all' && !p.cols[+colFilter]) return false;
     if(ownedOnly && !OWNED.has(p.n)) return false;
     if(popOnly && !val(p)) return false;
-    if(favOnly && !FAV.has(p.n)) return false;
+    if(favOnly && !FAV[p.n]) return false;
+    if(TAGSEL.size && !(p.tags||[]).some(t=>TAGSEL.has(t))) return false;
     return true;
   });
   list.sort(azMode ? (a,b)=>a.n.localeCompare(b.n) : (a,b)=>val(b)-val(a)||a.n.localeCompare(b.n));
-  $('libcount').textContent=`${list.length} of ${LIB.length} · ★ ${FAV.size}`;
+  $('libcount').textContent=`${list.length} of ${LIB.length} · ★ ${favCount()}`;
   $('plib').innerHTML=list.length?list.map(p=>{
     const cols=(p.cols[0]?'3':'')+(p.cols[1]?'4':'');
     const picked=bmode==='perks'&&SEL.has(p.n);
@@ -256,7 +302,7 @@ function renderLib(){
         <div class="popwrap">${bar}<span class="popn">${num}</span></div>
       </div>
       ${sl>=0?`<span class="slotbadge">${sl+1}</span>`:(picked?'<span class="slotbadge">✓</span>':(OWNED.has(p.n)?'<span class="own">✓</span>':''))}
-      <button class="favstar ${FAV.has(p.n)?'on':''}" data-fav="${esc(p.n)}" title="${FAV.has(p.n)?'Unfavorite':'Favorite — scores every weapon in your Vault'}">★</button>
+      ${starWidget(p.n)}
     </div>`;
   }).join(''):'<div class="big">No perks match.</div>';
 }
@@ -355,7 +401,7 @@ async function renderMatches(){
       const tile=`<span class="wtile ${exotic?'exotic':''}">${d.icon?`<img src="${BN}${d.icon}" loading="lazy">`:''}</span>`;
       const hits=r.sc.marks.map(m=>`<span class="${m.on?'on':''}">${PICONS[m.n]?`<img src="${BN}${PICONS[m.n]}">`:''}${esc(m.n)}${m.on?' •':''}</span>`).join('');
       const tag=r.w.tag?` · <span class="tags">${esc(r.w.tag)}</span>`:'';
-      return `<div class="match ${r.sc.hit===SEL.size?'full':''}">${tile}
+      return `<div class="match clk ${r.sc.hit===SEL.size?'full':''}" data-id="${r.w.id}">${tile}
         <div class="mx"><div class="wn">${esc(d.n||'Weapon')}</div>
           <div class="wsub">${esc(d.ty||d.slot||'')}${r.w.pwr?' · '+r.w.pwr:''}${tag}</div>
           <div class="mhit">${hits}</div></div>
@@ -376,7 +422,7 @@ async function renderMatches(){
     const tag=r.w.tag?` · <span class="tags">${esc(r.w.tag)}</span>`:'';
     const pill=r.sc.rolled?'<span class="pill">rolled now</span>':'';
     const label=SLOTS[1].size?(r.sc.full?'✓':'½'):(r.sc.full?'✓':'');
-    return `<div class="match ${r.sc.rolled?'rolled':(r.sc.full?'full':'')}">${tile}
+    return `<div class="match clk ${r.sc.rolled?'rolled':(r.sc.full?'full':'')}" data-id="${r.w.id}">${tile}
       <div class="mx"><div class="wn">${esc(d.n||'Weapon')}</div>
         <div class="wsub">${esc(d.ty||d.slot||'')}${r.w.pwr?' · '+r.w.pwr:''}${tag}</div>
         <div class="mhit">${hits}</div>${pill}</div>
@@ -397,7 +443,7 @@ async function renderFarmable(){
       const tile=`<span class="wtile ${exotic?'exotic':''}">${wp.icon?`<img src="${BN}${wp.icon}" loading="lazy">`:''}</span>`;
       const hits=r.sc.marks.map(m=>`<span>${PICONS[m.n]?`<img src="${BN}${PICONS[m.n]}">`:''}${esc(m.n)}</span>`).join('');
       const src=wp.src?`<div class="wsub" style="opacity:.7">${esc(wp.src)}</div>`:'';
-      return `<div class="match ${r.owned?'':'full'}">${tile}<div class="mx"><div class="wn">${esc(wp.n)}</div><div class="wsub">${esc(wp.ty||wp.slot||'')}</div><div class="mhit">${hits}</div>${src}</div>${r.owned?'<span class="owned">owned</span>':`<span class="score full">${r.sc.hit}/${SEL.size}</span>`}</div>`;
+      return `<div class="match clk ${r.owned?'':'full'}" data-wp="${esc(wp.n)}">${tile}<div class="mx"><div class="wn">${esc(wp.n)}</div><div class="wsub">${esc(wp.ty||wp.slot||'')}</div><div class="mhit">${hits}</div>${src}</div>${r.owned?'<span class="owned">owned</span>':`<span class="score full">${r.sc.hit}/${SEL.size}</span>`}</div>`;
     }).join(''):'<div class="big">No weapon can roll these perks.</div>';
     return;
   }
@@ -411,7 +457,7 @@ async function renderFarmable(){
     const tile=`<span class="wtile ${exotic?'exotic':''}">${wp.icon?`<img src="${BN}${wp.icon}" alt="" loading="lazy">`:''}</span>`;
     const hits=r.sc.marks.map(m=>`<span><i class="mslot">S${m.slot}</i>${PICONS[m.n]?`<img src="${BN}${PICONS[m.n]}" alt="">`:''}${esc(m.n)}</span>`).join('');
     const src=wp.src?`<div class="wsrc">${esc(wp.src)}</div>`:'';
-    return `<div class="match ${r.owned?'':'full'}">${tile}
+    return `<div class="match clk ${r.owned?'':'full'}" data-wp="${esc(wp.n)}">${tile}
       <div class="mx"><div class="wn">${esc(wp.n)}</div>
         <div class="wsub">${esc(wp.ty||wp.slot||'')}</div>
         <div class="mhit">${hits}</div>${src}</div>
@@ -435,10 +481,11 @@ function comboSlots(c){ if(Array.isArray(c.slots)) return [c.slots[0]||[], c.slo
 // ---- interactions ----
 document.querySelectorAll('[data-bmode]').forEach(b=>b.onclick=()=>{ bmode=b.dataset.bmode; renderCombo(); renderLib(); });
 $('perksSel').addEventListener('click',e=>{ const t=e.target.closest('[data-rm]'); if(!t) return; SEL.delete(t.dataset.rm); renderCombo(); renderLib(); });
-const saveFav=()=>fetch('/api/favorites',{method:'POST',body:JSON.stringify([...FAV])});
+const saveFav=()=>fetch('/api/favorites',{method:'POST',body:JSON.stringify(FAV)});
 $('plib').addEventListener('click',e=>{
-  const fav=e.target.closest('[data-fav]');
-  if(fav){ e.stopPropagation(); const n=fav.dataset.fav; FAV.has(n)?FAV.delete(n):FAV.add(n); saveFav(); renderLib(); return; }
+  const star=e.target.closest('.favstars [data-g]');
+  if(star){ e.stopPropagation(); const n=star.closest('[data-fav]').dataset.fav, g=+star.dataset.g;
+    if(FAV[n]===g) delete FAV[n]; else FAV[n]=g; saveFav(); renderLib(); return; }
   const row=e.target.closest('[data-p]'); if(!row) return;
   const n=row.dataset.p;
   if(bmode==='perks'){ SEL.has(n)?SEL.delete(n):SEL.add(n); }
@@ -492,6 +539,11 @@ document.querySelectorAll('[data-col]').forEach(b=>b.onclick=()=>{ colFilter=b.d
 $('ownedOnly').onclick=()=>{ ownedOnly=!ownedOnly; $('ownedOnly').classList.toggle('on',ownedOnly); $('ownedOnly').classList.toggle('mut',!ownedOnly); renderLib(); };
 $('popOnly').onclick=()=>{ popOnly=!popOnly; $('popOnly').classList.toggle('on',popOnly); $('popOnly').classList.toggle('mut',!popOnly); renderLib(); };
 $('favOnly').onclick=()=>{ favOnly=!favOnly; $('favOnly').classList.toggle('on',favOnly); $('favOnly').classList.toggle('mut',!favOnly); renderLib(); };
+$('tagbar').addEventListener('click',e=>{
+  if(e.target.id==='tagClear'){ TAGSEL.clear(); renderTags(); renderLib(); return; }
+  const b=e.target.closest('[data-tag]'); if(!b) return;
+  const t=b.dataset.tag; TAGSEL.has(t)?TAGSEL.delete(t):TAGSEL.add(t); renderTags(); renderLib();
+});
 document.querySelectorAll('[data-mode]').forEach(b=>b.onclick=()=>{
   matchMode=b.dataset.mode;
   $('modeInv').classList.toggle('on',matchMode==='inv'); $('modeInv').classList.toggle('mut',matchMode!=='inv');
@@ -502,6 +554,73 @@ document.querySelectorAll('[data-mode]').forEach(b=>b.onclick=()=>{
   renderMatches();
 });
 
+// ---- weapon cards: inventory smart card + farmable watch-perk card ----
+const closeCard=()=>$('wcard').classList.remove('open');
+const wcmsg=(t,c)=>{const m=$('wcmsg'); if(m){m.textContent=t;m.className='wcmsg'+(c?' '+c:'');}};
+function inspectInv(id){
+  const w=WEAPONS.weapons.find(x=>x.id===id); if(!w) return; curW=w; curWP=null;
+  const d=WEAPONS.defs[w.hash]||{};
+  const col=(arr,lbl)=>`<div class="wccol"><div class="wclbl">${lbl}</div>${(arr||[]).map(p=>`<span class="wcpk ${p.on?'on':''}" data-pn="${esc(p.n)}">${PICONS[p.n]?`<img src="${BN}${PICONS[p.n]}">`:''}${esc(p.n)}${p.on?' •':''}</span>`).join('')||'<span class="count">—</span>'}</div>`;
+  const tagBtn=(t,l)=>`<button class="btn sm ${w.tag===t?'act-on':'mut'}" data-wact="tag" data-tag="${w.tag===t?'none':t}">${l}</button>`;
+  $('wcbox').innerHTML=`<div class="wchead"><span class="wtile ${d.tt===6?'exotic':''}">${d.icon?`<img src="${BN}${d.icon}">`:''}</span>
+    <div><div class="wcn">${esc(d.n||'Weapon')}</div><div class="count">${esc(d.ty||d.slot||'')} · ✦${w.pwr||'—'}${d.dmg?' · '+esc(d.dmg):''}${w.locked?' · 🔒':''}${w.kills?' · '+w.kills.toLocaleString()+' kills':''}</div></div></div>
+    ${col(w.cols&&w.cols[0],'Column 3')}${col(w.cols&&w.cols[1],'Column 4')}
+    ${w.mw?`<div class="wccol"><div class="wclbl">Masterwork</div><span class="wcpk">${w.mwIcon?`<img src="${BN}${w.mwIcon}">`:''}${esc(w.mw)}</span></div>`:''}
+    <div class="wcacts">
+      <button class="btn sm" data-wact="equip">Equip</button>
+      ${w.own==='Vault'?'':'<button class="btn sm mut" data-wact="vault">To Vault</button>'}
+      <button class="btn sm mut" data-wact="lock">${w.locked?'Unlock':'Lock'}</button>
+      <span class="wcsep"></span>
+      ${tagBtn('keep','Keep')}${tagBtn('favorite','Fav')}${tagBtn('junk','Junk')}
+    </div>
+    <div class="wcmsg" id="wcmsg"></div>
+    <div style="text-align:right;margin-top:8px"><button class="btn sm mut" data-wact="close">Close</button></div>`;
+  $('wcard').classList.add('open');
+}
+function renderFarmCard(){
+  const wp=curWP; if(!wp) return;
+  const col=(arr,ci)=>`<div class="wccol"><div class="wclbl">Column ${ci+3}</div>${(arr||[]).map(n=>`<span class="wcpk pick ${pickSet.has(n)?'on':''}" data-pick="${esc(n)}" data-pn="${esc(n)}">${PICONS[n]?`<img src="${BN}${PICONS[n]}">`:''}${esc(n)}${pickSet.has(n)?' ✓':''}</span>`).join('')||'<span class="count">—</span>'}</div>`;
+  $('wcbox').innerHTML=`<div class="wchead"><span class="wtile ${wp.tt===6?'exotic':''}">${wp.icon?`<img src="${BN}${wp.icon}">`:''}</span>
+    <div><div class="wcn">${esc(wp.n)}</div><div class="count">${esc(wp.ty||wp.slot||'')}${wp.src?' · '+esc(wp.src):''}</div></div></div>
+    <div class="count" style="margin:6px 0 2px">Tap perks to <b style="color:var(--gold)">watch</b> — saved to Weapon Watch.</div>
+    ${col(wp.pool[0],0)}${col(wp.pool[1],1)}
+    <div class="wcacts"><span class="count">${pickSet.size} selected</span><button class="btn sm" data-wact="savewatch" style="margin-left:auto">Save to Weapon Watch</button></div>
+    <div class="wcmsg" id="wcmsg"></div>
+    <div style="text-align:right;margin-top:8px"><button class="btn sm mut" data-wact="close">Close</button></div>`;
+}
+function farmCard(name){
+  const wp=(WPOOLS||[]).find(x=>x.n===name); if(!wp) return; curWP=wp; curW=null;
+  pickSet=new Set(Object.keys((WATCH[wp.hash]||{}).perks||{}));
+  renderFarmCard(); $('wcard').classList.add('open');
+}
+async function doWact(act,ds){
+  if(act==='close'){ closeCard(); return; }
+  const post=(ep,body)=>fetch('/api/'+ep,{method:'POST',body:JSON.stringify(body)}).then(r=>r.json()).catch(()=>({error:'network'}));
+  if(act==='savewatch'){
+    const wp=curWP; if(!wp) return;
+    if(pickSet.size){ WATCH[wp.hash]=Object.assign({name:wp.n,mw:'',stats:[]},WATCH[wp.hash]||{},{name:wp.n,perks:Object.fromEntries([...pickSet].map(n=>[n,1]))}); }
+    else delete WATCH[wp.hash];
+    const r=await post('watch',WATCH);
+    wcmsg(r&&r.ok?`Saved ${pickSet.size} perk${pickSet.size===1?'':'s'} to Weapon Watch`:('Save failed'+(r.error?': '+r.error:'')), r&&r.ok?'ok':'warn');
+    return;
+  }
+  const w=curW; if(!w) return;
+  if(act==='equip'){ wcmsg('Equipping…'); const r=await post('equip',{id:w.id,hash:w.rhash,own:w.own}); if(r.error){wcmsg(r.error,'warn');return;} w.own=r.own||w.own; let t=`Equipped on ${w.own}`; if(r.swap&&r.swap.added)t+=` — swapped ${r.swap.removed}→${r.swap.added}`; wcmsg(t,'ok'); }
+  else if(act==='vault'){ wcmsg('Sending…'); const r=await post('vault',{id:w.id,hash:w.rhash,own:w.own}); if(r.error){wcmsg(r.error,'warn');return;} w.own='Vault'; wcmsg('Sent to vault','ok'); inspectInv(w.id); }
+  else if(act==='lock'){ const nl=!w.locked; wcmsg(nl?'Locking…':'Unlocking…'); const r=await post('lock',{id:w.id,locked:nl}); if(r.error){wcmsg(r.error,'warn');return;} w.locked=!!r.locked; wcmsg(w.locked?'Locked':'Unlocked','ok'); inspectInv(w.id); }
+  else if(act==='tag'){ wcmsg('Tagging…'); const r=await post('tag',{id:w.id,tag:ds.tag}); if(r.error){wcmsg(r.error,'warn');return;} w.tag=(r.tag&&r.tag!=='none')?r.tag:''; wcmsg(w.tag?`Tagged ${w.tag}`:'Tag cleared','ok'); inspectInv(w.id); }
+}
+$('matches').addEventListener('click',e=>{
+  const inv=e.target.closest('[data-id]'); if(inv){ inspectInv(inv.dataset.id); return; }
+  const fw=e.target.closest('[data-wp]'); if(fw){ farmCard(fw.dataset.wp); }
+});
+$('wcbox').addEventListener('click',e=>{
+  const pick=e.target.closest('[data-pick]');
+  if(pick){ const n=pick.dataset.pick; pickSet.has(n)?pickSet.delete(n):pickSet.add(n); renderFarmCard(); return; }
+  const b=e.target.closest('[data-wact]'); if(b){ doWact(b.dataset.wact,b.dataset); }
+});
+$('wcard').addEventListener('click',e=>{ if(e.target.id==='wcard') closeCard(); });
+
 async function load(){
   try{
     const [pk,cb,fv]=await Promise.all([
@@ -509,17 +628,21 @@ async function load(){
       fetch('/api/combos').then(r=>r.json()).catch(()=>[]),
       fetch('/api/favorites').then(r=>r.json()).catch(()=>[]),
     ]);
-    LIB=pk.perks||[]; COMBOS=Array.isArray(cb)?cb:[]; FAV=new Set(Array.isArray(fv)?fv:[]);
+    LIB=pk.perks||[]; COMBOS=Array.isArray(cb)?cb:[];
+    FAV = (fv && !Array.isArray(fv) && typeof fv==='object') ? fv : {};
+    if(Array.isArray(fv)) fv.forEach(n=>FAV[n]=1);   // back-compat: old flat list = grade 1
     const pd={}, pi={}; LIB.forEach(p=>{ if(p.dsc) pd[p.n]=p.dsc; if(p.insight&&p.insight.length) pi[p.n]=p.insight; });
     if(window.PerkTip) PerkTip.init({perkDescs:pd,perkInsights:pi});
-    $('wlmeta').textContent=`${LIB.length} trait perks · ${FAV.size} favorited · you track perks across ${pk.watchedWeapons||0} weapons`;
-    renderCombos();
+    $('wlmeta').textContent=`${LIB.length} trait perks · ${favCount()} favorited · you track perks across ${pk.watchedWeapons||0} weapons`;
+    renderTags(); renderCombos();
     // weapons (for icons + inventory matching) — may be a beat slower
     const w=await fetch('/api/weapons').then(r=>r.json());
     WEAPONS=w; PICONS=w.perkIcons||{};
+    if(window.PerkTip) PerkTip.init({perkDescs:w.perkDescs,perkInsights:w.perkInsights});
     OWNED=new Set(); OWNEDW=new Set();
     for(const wp of w.weapons) for(const col of (wp.cols||[])) for(const pk of col) OWNED.add(pk.n);
     for(const d of Object.values(w.defs||{})) if(d.n) OWNEDW.add(d.n);
+    WATCH=await fetch('/api/watch').then(r=>r.json()).catch(()=>({}))||{};   // for farmable → save watch perks
     renderLib(); renderCombo();
   }catch(err){ $('plib').innerHTML=`<div class="big">Error: ${esc(err.message)}</div>`; }
 }
