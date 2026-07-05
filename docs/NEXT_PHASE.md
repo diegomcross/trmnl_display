@@ -14,9 +14,16 @@ untagged weapon copy (writes to DIM, confirm dialog); (3) **god-roll alert fires
 (5) **Vault filters now dim non-matches and sort matches to the top** instead of hiding them
 (`filtersActive` + `bySort` in `render()`; `.wt.dim` opacity .34).
 
-**STILL PENDING — Fashion ghost + sparrow:** add ghost shell + vehicle (sparrow) equipment and
-their shaders to the Fashion save/apply (`vault-verdict.js` fetchFashion/applyLook + `fashion.html`).
-Ghost bucket `4023510869`, Vehicle bucket `2025709351`; shader/ornament sockets like armor.
+(6) **Fashion now includes Ghost shell + Vehicle (sparrow) + their shaders.** `fetchFashion`
+manages `COSMETIC_BUCKETS` = armor + **Ghost `4023194814`** + **Vehicle `2025709351`** (verified
+live — my first ghost hash `4023510869` was wrong; found the real one by dumping equipment buckets).
+Ghost/vehicle item defs aren't in the slim manifest, so slot = `it.bucketHash` and name/icon come
+from an on-demand `itemDefLite` (cached). Ghost ornament = its **hologram/projection** socket
+(pc `hologram`); vehicles have shader only. `fashion.html` is generic over `FASH.order`, so both
+sections render + save/apply automatically. Verified live: Ghost "Soloist Shell" (No Projection +
+Capering Harlequin), Vehicle "Old Rancor" (Capering Harlequin).
+
+**All six of Diego's 2026-07-05 batch requests are shipped.**
 
 ## Where we are (2026-07-05, later — Perk Finder cards + weighted favorites + vault % shipped)
 

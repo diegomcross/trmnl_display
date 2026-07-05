@@ -282,11 +282,15 @@ Core priorities, in his words:
     if in the vault, pull to the default character first, then equip. `LOCK_CTX` now also
     carries `byClass`/`clsById` maps (class↔characterId) to resolve source/target. Same
     write scope as Lock (MoveEquipDestinyItems — confirmed working).
-  - **Fashion loadouts (`/fashion`, shipped):** `fetchFashion` reads each character's
-    equipped armor and pulls the cosmetic plugs — **shader** = socket whose plug
-    `plugCategory` is `shader`; **ornament** = plug category starts with `armor_skins_`
-    (e.g. `armor_skins_warlock_head`); both carry `icon`. Save a named look (the ornament
-    + shader plug hashes per slot) to `fashion.json`; **apply** = `InsertSocketPlugFree`
+  - **Fashion loadouts (`/fashion`, shipped; +Ghost/Vehicle 2026-07-05):** `fetchFashion` reads each
+    character's equipped **armor + Ghost shell + Vehicle** (`COSMETIC_BUCKETS`: armor + Ghost
+    `4023194814` + Vehicle `2025709351`) and pulls the cosmetic plugs — **shader** = plug
+    `plugCategory` `shader`; **ornament** = `armor_skins_*` for armor, the **`hologram` (projection)**
+    socket for Ghost (vehicles have shader only). Ghost/Vehicle item defs aren't in the slim manifest,
+    so slot = the equipment item's `bucketHash` and name/icon come from a cached on-demand
+    `itemDefLite(hash)`. `fashion.html` renders generically over `FASH.order`, so the Ghost/Vehicle
+    rows + save/apply come for free. Save a named look (ornament + shader plug hashes per slot) to
+    `fashion.json`; **apply** = `InsertSocketPlugFree`
     each saved plug into the equipped piece's cosmetic socket (skips already-set). No
     re-auth was needed — the token already has `AdvancedWriteActions` (confirmed: a no-op
     re-insert returned `1634 DestinyCharacterNotInTower`, a location error, not a scope

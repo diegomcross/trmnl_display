@@ -517,7 +517,21 @@ async function smartEquipWeapon(e, itemId, hash, ownClass, dryRun) {
 // Cosmetic sockets on equipped armor: the shader plug has plugCategory 'shader';
 // the ornament plug's category starts with 'armor_skins_' (e.g. armor_skins_warlock_head).
 const ARMOR_BUCKETS = { 3448274439: 'Helmet', 3551918588: 'Gauntlets', 14239492: 'Chest', 20886954: 'Legs', 1585787867: 'Class' };
-const SLOT_ORDER = ['Helmet', 'Gauntlets', 'Chest', 'Legs', 'Class'];
+// cosmetic slots we manage: armor + ghost shell + vehicle (sparrow). Their equipped item's
+// shader socket (plug pc 'shader') and ornament socket are captured for save/apply.
+const COSMETIC_BUCKETS = { ...ARMOR_BUCKETS, 4023194814: 'Ghost', 2025709351: 'Vehicle' };
+const SLOT_ORDER = ['Helmet', 'Gauntlets', 'Chest', 'Legs', 'Class', 'Ghost', 'Vehicle'];
+// ornament plug category by slot (verified live): armor = armor_skins_*, ghost = its
+// hologram/projection socket. Vehicles/sparrows have only a shader (no visual ornament).
+const isOrnPc = (pc, slot) => !!pc && (pc.startsWith('armor_skins_') || (slot === 'Ghost' && pc === 'hologram'));
+// ghost/vehicle item defs aren't in the slim manifest — fetch name/icon on demand (cached).
+const ITEMDEF_CACHE = {};
+async function itemDefLite(hash, e) {
+  if (ITEMDEF_CACHE[hash]) return ITEMDEF_CACHE[hash];
+  try { const r = await bungie(`${BASE}/Destiny2/Manifest/DestinyInventoryItemDefinition/${hash}/`, e); ITEMDEF_CACHE[hash] = { n: r?.displayProperties?.name || '', icon: r?.displayProperties?.icon || '' }; }
+  catch { ITEMDEF_CACHE[hash] = { n: '', icon: '' }; }
+  return ITEMDEF_CACHE[hash];
+}
 
 async function fetchFashion(e) {
   const { prof, man, m } = await fetchProfile(e);
@@ -526,17 +540,19 @@ async function fetchFashion(e) {
   for (const [cid, c] of Object.entries(prof.characters?.data || {})) {
     const slots = {};
     for (const it of prof.characterEquipment?.data?.[cid]?.items || []) {
-      const def = man.items[it.itemHash];
-      const slot = ARMOR_BUCKETS[def?.b];
+      const def = man.items[it.itemHash];   // ghost/vehicle item defs aren't in the slim manifest
+      const slot = COSMETIC_BUCKETS[it.bucketHash] || COSMETIC_BUCKETS[def?.b];
       if (!slot || !it.itemInstanceId) continue;
+      let name = def?.n || '', icon = def?.icon || '';
+      if (!def) { const idf = await itemDefLite(it.itemHash, e); name = idf.n || slot; icon = idf.icon; }
       let orn = null, shd = null;
       (sockets[it.itemInstanceId]?.sockets || []).forEach((s, idx) => {
         if (!s.plugHash) return;
         const p = man.items[s.plugHash]; if (!p) return;
         if (p.pc === 'shader') shd = { hash: s.plugHash, name: p.n, icon: p.icon || '', idx };
-        else if (p.pc && p.pc.startsWith('armor_skins_')) orn = { hash: s.plugHash, name: p.n, icon: p.icon || '', idx };
+        else if (isOrnPc(p.pc, slot)) orn = { hash: s.plugHash, name: p.n, icon: p.icon || '', idx };
       });
-      slots[slot] = { itemId: it.itemInstanceId, name: def.n, icon: def.icon || '', orn, shd };
+      slots[slot] = { itemId: it.itemInstanceId, hash: it.itemHash, name, icon, orn, shd };
     }
     chars[cid] = { cls: CLASS[c.classType] || 'Unknown', slots };
   }
