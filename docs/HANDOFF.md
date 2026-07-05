@@ -77,7 +77,7 @@ Core priorities, in his words:
 | `vault-verdict.js` | **Vault Verdict** server (port **8787**): live Armor 3.0 vault triage + weapons API. Reuses `.env` + `tokens.json`. Slims the manifest to `vault-manifest-cache/slim3-<version>.json` (armor + weapons + trait plug sets + drop sources). `node vault-verdict.js probe "name"` dumps one item for debugging. |
 | `vault-verdict.html` | Vault Verdict frontend (served at `/`): verdict engine, set-bonus 4pc/2pc rating panel with drop locations, exotic favorite-stat tuning panel (per-class filter, primary›secondary), DIM query export. |
 | `weapon-watch.html` | **Weapon Watch** god-roll tracker UI (served at `/weapons`): pick weapons, tag up to 6 perks (normal/★high priority), wanted masterwork + watched stats; scores every copy in the vault. Full-width copy rows, direct tag chips, Select-multiple batch mode, smart Vault/Equip, no-jump perk selection. Config → `weapon-watch.json`, tags → `weapon-tags.json` (gitignored). |
-| `weapon-drops.html` | **New Drops dashboard** (served at `/drops`): visual cards for *fresh* drops of watched weapons — weapon art, rolled perk icons, masterwork icon, stats, score/🎯. Backed by `weapon-seen.json` (gitignored) + `/api/drops/ack`. |
+| `weapon-drops.html` | **New Drops dashboard** (served at `/drops`): visual cards for *fresh* drops of watched weapons — weapon art, rolled perk icons, masterwork icon, stats, score/🎯. Per-card actions: **Fav / Keep / Junk** tag chips (`/api/tag`, DIM vocab, active chip clears on re-tap) + Lock + smart Equip/→Vault + Seen. Backed by `weapon-seen.json` (gitignored) + `/api/drops/ack`. |
 | `dim-probe.js` | One-off DIM Sync API check (gitignored). Diego runs `node dim-probe.js` to confirm two-way DIM sync works before it's built. |
 | `fashion.html` | **Fashion loadouts** (served at `/fashion`): each character's equipped armor ornaments + shaders with icons; save named looks (`fashion.json`, gitignored) and re-apply them in one click. Apply requires the character to be in orbit. |
 | `theme.css` | **Shared visual theme** for all four Vault Verdict pages (served at `/theme.css`, linked after each page's inline `<style>`). BrayTech/in-game look: ground `#101312`, hairline white borders, square tiles, Destiny rarity/energy colors, self-hosted **Arimo** (Helvetica/Neue-Haas twin) type, tabular numbers. Pages share CSS-var names so this one file re-skins everything — **edit design tokens here, once.** Also styles the **item tiles** (`.wtile` weapon art, `.pkico` perk-icon tiles) that Weapon Watch renders from `/api/weapons` art — a token repaint alone did NOT read as BrayTech; the real look needed the actual weapon/perk artwork as rarity-framed square tiles. The e-ink display (`server.js`, 1-bit) is separate and unaffected. |
@@ -227,8 +227,8 @@ Core priorities, in his words:
   - **New Drops dashboard (`/drops`, weapon-drops.html):** visual cards for *fresh* drops
     of watched weapons — weapon art background, rolled perk icons per column (wishlist
     matches highlighted gold, `.on` roll perks emphasized), masterwork icon, live stats,
-    score/🎯 badge, and Lock / smart Vault-or-Equip / Seen actions + "Mark all seen" +
-    "god rolls only" filter. New-drop detection: `weapon-seen.json` (gitignored) seeds
+    score/🎯 badge, and **Fav/Keep/Junk tag chips** (`/api/tag`) + Lock / smart Vault-or-Equip / Seen
+    actions + "Mark all seen" + "god rolls only" filter. New-drop detection: `weapon-seen.json` (gitignored) seeds
     every current instance id on first fetch (nothing false-positive), then `fetchWeapons`
     flags any unseen copy `fresh:true`; `POST /api/drops/ack {ids?}` moves ids into seen
     (empty ids = ack all current).

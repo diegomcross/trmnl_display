@@ -27,12 +27,14 @@ old markup.**
    `.ispcols2` as a 2-col grid (Column 3 | Column 4, perks stacked). Confirmed; Diego just needs a
    hard-refresh.
 
-**Still open:**
+4. **New Drops tag + move actions — DONE.** `weapon-drops.html` (`/drops`) drop cards now have
+   **Fav / Keep / Junk** chips (`/api/tag`, DIM vocab favorite/keep/junk; active chip clears to
+   `none` on re-tap) alongside the existing **Lock + smart Equip/→Vault + Seen** buttons. Chip render
+   verified live (active state reflects `w.tag`); the `/api/tag` write path is the same one already
+   verified on the vault/weapon-watch pages — Diego confirms the live write next time he plays.
 
-4. **New Drops needs tag + move actions (Diego, new).** `weapon-drops.html` (`/drops`) should get
-   **Fav / Keep / Junk** chips + **Equip / To Vault** buttons per drop card, like the vault inspect
-   (`/api/tag`, `/api/equip` (smart, with make-space), `/api/vault` all exist and are wired elsewhere —
-   reuse that pattern; the drops page already has Lock + smart Vault/Equip + Seen).
+**All four open issues are resolved.** Next work will come from new Diego feedback (e.g. whether he
+wants a hide-vs-dim toggle rather than the current "quick filters hide, combo/score dim" split).
 
 **Stability (fixed 2026-07-05, context for the new agent):** the app kept going offline
 (`ERR_CONNECTION_REFUSED`). Causes were (a) a "retry the port forever" EADDRINUSE handler that spawned
