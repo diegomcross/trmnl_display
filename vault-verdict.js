@@ -27,6 +27,12 @@ const HTML_FILE = path.join(__dirname, 'vault-verdict.html');
 const BASE = 'https://www.bungie.net/Platform';
 const PORT = process.env.PORT || 8787;
 
+// Stay up no matter what: a stray error in a request, the drop poller, or a Bungie call must
+// never take the whole server down. Log it and keep serving (each request already has its own
+// try/catch; this is the last-resort net for async errors outside it).
+process.on('uncaughtException', (err) => console.error('[uncaughtException]', (err && err.stack) || err));
+process.on('unhandledRejection', (err) => console.error('[unhandledRejection]', (err && err.stack) || err));
+
 // Stat hashes kept their pre-rename identities (Mobility->Weapons etc.)
 const STAT = { 2996146975: 'w', 392767087: 'h', 1943323491: 'c', 1735777505: 'g', 144602215: 's', 4244567218: 'm' };
 const BUCKET = { 3448274439: 'Helmet', 3551918588: 'Gauntlets', 14239492: 'Chest', 20886954: 'Leg', 1585787867: 'Class Item' };
@@ -1333,12 +1339,16 @@ async function main() {
       res.end(JSON.stringify({ error: err.message }));
     }
   });
-  // A restart can briefly overlap the old process still holding the port. Instead of
-  // crashing (which made the launcher loop and the app flicker offline), wait + retry.
+  // A restart can briefly overlap the previous process still holding the port (TIME_WAIT).
+  // Retry for a bounded window, then EXIT — never loop forever (that spawned immortal zombie
+  // node processes that kept fighting for the port). If we're a duplicate, exiting is correct;
+  // if we're the launcher's instance, the launcher relaunches us once the port is free.
+  let bindTries = 0;
   server.on('error', (err) => {
     if (err.code === 'EADDRINUSE') {
-      console.warn(`Port ${PORT} still busy — retrying in 3s...`);
-      setTimeout(() => { try { server.close(); } catch {} server.listen(PORT, '0.0.0.0'); }, 3000);
+      if (++bindTries > 20) { console.error(`Port ${PORT} held by another process after ${bindTries} tries — exiting.`); process.exit(1); }
+      console.warn(`Port ${PORT} busy (try ${bindTries}/20) — retrying in 1s...`);
+      setTimeout(() => { try { server.close(); } catch {} server.listen(PORT, '0.0.0.0'); }, 1000);
     } else { console.error('server error:', err); }
   });
   server.listen(PORT, '0.0.0.0', () =>
