@@ -735,9 +735,13 @@ async function fetchWeapons(e) {
 
   const weapons = [], defsOut = {}, perkIcons = {}, perkDescs = {}; // perk name -> icon path / in-game description
   const px = (n, h) => { const it = man.items[h]; if (!it) return; if (it.icon && !perkIcons[n]) perkIcons[n] = it.icon; if (it.dsc && !perkDescs[n]) perkDescs[n] = it.dsc; };
-  for (const { it, own, loc, cid } of raw) {
+  for (const { it, own, loc: rawLoc, cid } of raw) {
     const def = man.items[it.itemHash];
     if (!def || def.it !== 3 || !it.itemInstanceId || !WBUCKET[def.b]) continue;
+    // Postmaster items live in characterInventories (so raw marks them 'char'), but the
+    // def bucket still reads as the weapon slot. Tag them 'postmaster' so a character's
+    // real inventory stays <=9 (the "14 tiles" bug) and the UI can show them separately.
+    const loc = it.bucketHash === 215593132 ? 'postmaster' : rawLoc;
     const id = it.itemInstanceId;
     const inst = instances[id] || {};
     const socks = sockets[id]?.sockets || [];

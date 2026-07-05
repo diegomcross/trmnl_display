@@ -401,9 +401,16 @@ Core priorities, in his words:
     + `POST /api/clean-inventory {characterId,kind}` vaults every unequipped weapon/armor for the
     selected guardian. **Official element icons** on tiles (`loadDamageIcons` → `DamageTypeDefinition`
     icon, `def.dmgIcon`, `.wt .elic`). **Weapon-type filter + sort-by-stat dropdowns** (`fType`,
-    `statSort` over `statsMax`). Filters currently **dim** non-matches and float matches to top
-    (`filtersActive`+`bySort`) rather than hide — see NEXT_PHASE open issue #1 (chip clicks are also
-    double-bound and broken).
+    `statSort` over `statsMax`). **Filter fix (2026-07-05 late):** `chipRow` uses `el.onclick=` (not
+    `addEventListener`) so re-running it on every `load()` no longer stacks duplicate handlers (that
+    double-bind was why chips did nothing / didn't highlight). **Quick filters now HIDE non-matches**
+    (name/type/element/ammo/rarity/tag → `passQuick` fail = `continue` in `render()`, real narrowing);
+    the **combo + min-score** overlay still dims/floats matches (`softActive`), with `only matches`
+    to hard-hide those. `capVaultRows`→ generalized `capRows(sel)`, applied to both the vault and the
+    character inventory (`.invcap`, capped to a 3×3). **Postmaster split out:** `fetchWeapons` tags
+    `loc:'postmaster'` when live `it.bucketHash===215593132` (postmaster lives in
+    `characterInventories`, so it used to inflate the char inventory to >9 — the "14 tiles" bug); the
+    UI shows a separate **"Postmaster · N"** subcol so the real inventory is a true ≤9 (3×3).
   - **Weapon Watch + popup polish (2026-07-05):** copies within a weapon sort by **tag**
     (favorite→keep→none→junk, then score); a **"Junk untagged"** top-bar button mass-junks every
     untagged copy (DIM write + confirm). The perk hover popup (`perktip.js`) now waits **400ms**

@@ -5,38 +5,29 @@
 
 ## ⚠ OPEN ISSUES / BUGS — PICK UP HERE FIRST (2026-07-05, Diego's latest feedback)
 
-These are live problems on `weapon-vault.html` (+ one on `weapon-drops.html`). Verified against the
-running app (localhost:8787) unless noted. **Hard-refresh (Ctrl+Shift+R) before testing — the HTML is
-served from disk, so a stale tab shows old markup.**
+**Hard-refresh (Ctrl+Shift+R) before testing — the HTML is served from disk, so a stale tab shows
+old markup.**
 
-1. **Weapon Vault filters/sort are broken (HIGH).** Clicking an Element/Ammo/Rarity/Tag chip does
-   **not** apply the filter and the chip doesn't highlight (`.on` never sticks; no tiles dim/match).
-   **Root cause (strong):** `chipRow(el,...)` calls `el.addEventListener('click', …)` and `chipRow`
-   is re-run **every time `load()` runs** (e.g. after Clean-inventory, or any reload) → duplicate
-   listeners stack → each click toggles the Set twice (add then delete) → net no-op + `.on` toggles
-   on-then-off. **Fix:** make it idempotent — use `el.onclick = …` instead of `addEventListener`, or
-   attach the delegated handler once outside `chipRow`. Re-verify after clean-inventory (which calls
-   `load()`).
-   - **Also (design, Diego):** "I should be able to **narrow down** weapons." Current behaviour DIMS
-     non-matches and floats matches to the top (his earlier ask), so nothing is actually removed. He
-     now wants real narrowing. Add a **hide vs dim** toggle, or make the chip filters hide non-matches
-     (keep the combo/score dimming separate). Confirm with Diego which filters hide vs dim.
-   - The **sort/tile/stat** controls use `.onclick`/`addEventListener` **once** (outside `load()`), so
-     they're not double-bound — but confirm the selected sort chip highlights (Diego says "selected
-     button is not highlighted", which is the same chipRow bug for the filter chips).
+**✅ RESOLVED 2026-07-05 (late night) — issues 1–3 fixed & verified live on 8787:**
+1. **Weapon Vault filters/sort — FIXED.** `chipRow` now uses `el.onclick=` (idempotent) instead of
+   `addEventListener`, so re-running it on every `load()` no longer stacks duplicate handlers. Chips
+   highlight and toggle cleanly. **Design change:** the quick filters (name/type/element/ammo/rarity/
+   tag) now **HIDE non-matches** (real narrowing, Diego's ask) — `passQuick` fail → `continue` in
+   `render()`. The **combo + min-score** overlay still DIMS/floats matches (with the `only matches`
+   toggle to hard-hide those). Verified: Solar chip 661→129 tiles, all visible tiles Solar, second
+   click restores + un-highlights (no double-toggle).
+2. **Character inventory 3×3 — FIXED at the source.** Root cause was the **postmaster**: `fetchWeapons`
+   marked everything in `characterInventories` as `loc:'char'`, but the postmaster (bucket `215593132`)
+   lives there too, so postmaster weapons inflated a slot to 14. Now `vault-verdict.js` tags
+   `loc:'postmaster'` when the live `it.bucketHash===215593132`; the UI renders a separate labeled
+   **"Postmaster · N"** subcol (nothing hidden) and the real inventory grid (`.invcap`) is capped to
+   3 rows via the generalized `capRows(sel)` (was `capVaultRows`). Verified: no char slot >9 (max 9),
+   7 postmaster weapons split out into their own groups.
+3. **Card Col 3 / Col 4 layout — no change needed (was stale cache).** Live inspect card renders
+   `.ispcols2` as a 2-col grid (Column 3 | Column 4, perks stacked). Confirmed; Diego just needs a
+   hard-refresh.
 
-2. **Character inventory is not a clean 3×3 (Diego: "reverted 3x3 weapon slot count").** The grid is
-   `.charside .wgrid = repeat(3,90px)` (3 wide, correct) but it is **not capped** — a slot showed
-   **14 tiles** ("WARLOCK · 14"), which also **exceeds the in-game max of 9** per slot. Two things:
-   (a) cap the character inventory to a 3×3 (9, like `capVaultRows` caps the vault to 3 rows); (b)
-   investigate why the count is >9 — check the `w.ownCid===selCid && w.loc!=='equipped'` grouping in
-   `render()` (stale data? duplicates from the reissue merge? equipped mis-flagged?). A character
-   truly can't hold 14.
-
-3. **Card Column 3 / Column 4 layout (likely already OK — verify).** Diego says col3/col4 aren't side
-   by side with perks listed vertically, but on live the inspect card DOES render `.ispcols2`
-   (2 columns, `.ispcols2 .pk{display:flex;width:100%}` = vertical perks). This is probably a
-   **stale-cache** on his tab. Hard-refresh and confirm; if still wrong, check the `.ispcols2` CSS.
+**Still open:**
 
 4. **New Drops needs tag + move actions (Diego, new).** `weapon-drops.html` (`/drops`) should get
    **Fav / Keep / Junk** chips + **Equip / To Vault** buttons per drop card, like the vault inspect
