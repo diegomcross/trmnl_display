@@ -86,6 +86,8 @@ Core priorities, in his words:
 | `banner.js` | **Shared in-game nameplate + section nav** (served at `/banner.js`, included by every page via `<script src="/banner.js">` into a `<div id="gbanner">`). Renders your equipped **emblem art as the banner background**, Bungie name, power (✦light) + class, character-switch dots, and the right-aligned section tabs (Armor Vault · Weapon Vault · Fashion · Perk Finder · New Drops · Artifacts). Data from `/api/account`. Replaces the old per-page `<nav class="nav">` — edit nav/banner in this one file. |
 | `perk-finder.html` | **Perk Finder** (served at `/perks`): pickable list of *all* trait perks in the game, ranked by community popularity (PvE/PvP split bar), with search + column/owned/ranked filters. Two builder modes: **Pick perks** (default, flat — click any perks, column/order irrelevant; weapons ranked by how many they can roll) and **Combo** (Slot 1 + Slot 2; a **full match only when a weapon can roll one perk from each slot in *different columns***). Both feed the Inventory/Farmable match panel; saved as `{perks:[]}` (flat) or `{slots:[[],[]]}` (combo), auto-detected on load. Perk list ranks by **Mine** (how often you track a perk across your watched weapons, priority-weighted — default), **Community** (DIM wishlist), or **Blend** (Mine full weight + Community ×0.35 → surfaces sleeper rolls). Save role-tagged combos (ad-clear/pve/pvp/dps) to `perk-combos.json` (gitignored). Backed by `/api/perks` (which overlays `mine` from `weapon-watch.json`) + `/api/combos`. |
 | `.dim-wishlist.json` | Gitignored cache: the parsed DIM community wishlist folded to `{perkName:{total,pve,pvp}}` — the "popularity" behind Perk Finder. Re-downloaded weekly from the voltron list. |
+| `.clarity.json` | Gitignored cache: **Clarity community insights** (the same data DIM shows on perks) folded to `{perkName:insightText}`. Downloaded weekly from `database-clarity.github.io/Live-Clarity-Database/descriptions/dim.json`, flattened (`descriptions.en[].linesContent[].text`). Powers the perk **hover popup**. |
+| `perk-favorites.json` | Gitignored: Diego's **favorite trait perks** (a flat `[perkName,…]`), starred in Perk Finder. Used to score EVERY weapon in the Weapon Vault. `.bak` alongside (saveJsonSafe). GET/POST `/api/favorites`. |
 | `artifacts.html` | **Artifact Mods** reference (served at `/artifacts`): all 7 Monument of Triumph artifacts × 3 columns × 7 mods, with a filter by subclass verb (Solar/Arc/Void/Stasis/Strand/Prismatic keywords) + keywords (Champions, grenade, Super, weapon types) + free text search. **Data is STATIC** (hand-transcribed from the neonlightsmedia Monument of Triumph guide) — if Bungie changes artifacts/mods, edit the `ARTIFACTS` array in this file. No API. |
 | `CLAUDE.md` | Working rules for agents: never drop features, test before push, and **mandatory upkeep of this file + `docs/NEXT_PHASE.md`**. |
 | `docs/NEXT_PHASE.md` | The pickup point: specs + open questions for upcoming features. |
@@ -343,6 +345,33 @@ Core priorities, in his words:
     real equip/transfer writes on his account in testing). `hash` must be the copy's REAL hash
     (`rhash`). Verified via dry-run: Khvostov (Kinetic) equipped → equip an Energy exotic plans remove
     Khvostov → add Seventh Seraph Carbine (on-character Kinetic legendary, no vault transfer).
+  - **Perk hover popup + DIM community insights (2026-07-04):** hovering any perk (in Weapon
+    Watch pools/rolls, and Perk Finder rows) pops a tooltip with the perk's **in-game description**
+    and, where available, its **Clarity community insight** — the exact crowd-sourced, numbers-accurate
+    text DIM shows. `loadClarity` downloads `database-clarity.github.io/Live-Clarity-Database/descriptions/dim.json`
+    weekly, flattens `descriptions.en[].linesContent[].text`, folds hash→our perk NAME, caches to
+    `.clarity.json`. The slim manifest now stores each plug's `dsc` (in-game description) — this **bumped
+    slim5→slim6** (one-time full manifest re-download; ~1169 Clarity perks, 307 perk descriptions live).
+    `/api/weapons` returns `perkDescs` + `perkInsights` maps; `/api/perks` adds `dsc` + `insight` per perk.
+    Tooltip is a single floating `#ptip` div, shown on `[data-p]`/`[data-pn]` mouseover.
+  - **Favorite perks → whole-vault perk score (2026-07-04):** Perk Finder rows have a **★ star**
+    (favorite any perk, weapon-independent) saved to `perk-favorites.json` via GET/POST `/api/favorites`
+    (a `★ Favorites` filter + count too). The Weapon Vault scores **every** copy by `favScore` = how many
+    distinct favorite perks that copy's actual roll offers across cols 3+4, and by default shows that
+    **★ score in place of the power number** on each tile (a `Tile shows: ★ Perk score / Power` toggle;
+    a `Perk · Favs` sort; inspect popover flags favorite perks gold). Falls back to power when no favorites
+    are set. Diego's ask: "favorite perks score all weapons, even ones I'm not watching."
+  - **Weapon Watch top search + source filter (2026-07-04):** one search box at the **top** narrows
+    **both** the watched list and the add list, matching name/type/**source** — so `crucible`, `iron banner`,
+    `raid`, `trials`, `nightfall`, `dungeon`, `gambit` all work (matches the manifest `src` string;
+    raid weapons read e.g. `"Vault of Glass" Raid`). Shared `matchesQuery(d)` helper over n/ty/src/slot/ammo/dmg.
+  - **Weapon Vault equipped tile (2026-07-04):** the equipped weapon in each slot renders **~1.7× the
+    inventory tile** (`.wgrid.eqbig`, Diego's chosen proportion) to echo the in-game character screen —
+    emphasized, not oversized. (Started at a literal 3×3/196px; Diego found that "out of proportion big",
+    dialled to 1.7×.)
+  - **`node vault-verdict.js` now honors `PORT` + `VV_CACHE_DIR` env vars** (default 8787 /
+    `vault-manifest-cache/`) so a throwaway test instance can run on another port with an isolated cache
+    without touching the always-on server.
   - DIM overlay (armor): optional `dim-data.json` (tags + loadouts) merges into verdicts.
   - **DIM two-way tag sync (weapons, shipped):** Weapon Watch keep/favorite/junk tags are
     synced live with DIM's cloud. `vault-verdict.js` holds a small DIM Sync API client:

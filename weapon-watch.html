@@ -95,6 +95,12 @@ input[type=checkbox]{accent-color:var(--gold);width:15px;height:15px;flex-shrink
 .hperks .hp2{color:var(--gold)}
 .hperks{overflow:hidden;text-overflow:ellipsis}
 :focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+/* perk hover popup */
+#ptip{position:fixed;z-index:9999;max-width:340px;background:#080a0e;border:1px solid var(--gold);clip-path:var(--clip);padding:9px 11px;font-size:12px;line-height:1.5;color:var(--ink);display:none;pointer-events:none;box-shadow:0 8px 24px rgba(0,0,0,.65)}
+#ptip .ptn{font-weight:700;color:var(--gold);margin-bottom:4px;font-size:12.5px}
+#ptip .ptlab{font-size:9.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--keep);font-family:Bahnschrift,"Roboto Condensed",sans-serif;margin:5px 0 2px}
+#ptip .ptc{color:var(--ink)}
+#ptip .ptd{color:var(--mut);font-size:11.5px}
 @media(min-width:760px){body{max-width:880px;margin:0 auto}}
 @media(max-width:520px){
   .copy{grid-template-columns:1fr;gap:9px}
@@ -110,6 +116,7 @@ input[type=checkbox]{accent-color:var(--gold);width:15px;height:15px;flex-shrink
 <div id="gbanner"></div>
 <h1 class="disp">Weapon <span>Watch</span></h1>
 <p class="sub">God-roll tracker · tap a card to expand</p>
+<div class="bar"><input type="search" id="q" placeholder="Search name / type / source — crucible, raid, iron banner, trials…"></div>
 <div class="bar"><button class="btn" id="refreshBtn">Refresh from Bungie</button><span class="count" id="status" style="margin:0"></span></div>
 
 <div class="bar" id="wBar">
@@ -124,8 +131,7 @@ input[type=checkbox]{accent-color:var(--gold);width:15px;height:15px;flex-shrink
 <div id="watched"></div>
 
 <div class="panel">
-  <h2 class="disp">Add weapons to the watchlist</h2>
-  <div class="bar"><input type="search" id="q" placeholder="Search weapon name / type…"></div>
+  <h2 class="disp">Add weapons to the watchlist <span class="count" style="font-weight:400;text-transform:none;letter-spacing:0">— uses the search box at the top</span></h2>
   <div id="allList"></div>
 </div>
 
@@ -171,6 +177,9 @@ const MWS=['range','stability','handling','reload','accuracy','blast_radius','ve
 const STAT_PICK=['Range','Stability','Handling','Reload Speed','Aim Assistance','Airborne Effectiveness','Zoom','Recoil Direction','Magazine','Blast Radius','Velocity','Impact','Accuracy','Charge Time','Draw Time'];
 const TAG_OPTS=['none','keep','favorite','junk'];
 const copiesByHash=()=>{const m={};DATA.weapons.forEach(w=>{(m[w.hash]=m[w.hash]||[]).push(w);});return m;};
+// Single search box (top of page) narrows BOTH lists: name, type, and SOURCE (crucible,
+// iron banner, raid, trials…) plus slot/ammo/damage. Matches the manifest src string.
+const matchesQuery=d=>{const ql=q.trim().toLowerCase();return !ql||[d.n,d.ty,d.src,d.slot,d.ammo,d.dmg].some(x=>x&&String(x).toLowerCase().includes(ql));};
 // tracked perk names for the collapsed header, high-priority (★) first
 const trackedNames=cfg=>Object.entries(cfg.perks||{}).sort((a,b)=>b[1]-a[1]).map(([n,pr])=>({n,hi:pr===2}));
 // BrayTech-style artwork: real weapon + perk icons rendered as square tiles.
@@ -212,7 +221,7 @@ function renderWatched(){
     return {hash,cfg,d,rankOf,copies,best:copies[0]?.sc.pct??0,hasGod:copies.some(c=>c.sc.god)};
   });
   const totalWatched=entries.length;
-  entries=entries.filter(en=>en.d && (!wAmmo||en.d.slot===wAmmo) && (!wOnlyHits||en.best>0));
+  entries=entries.filter(en=>en.d && matchesQuery(en.d) && (!wAmmo||en.d.slot===wAmmo) && (!wOnlyHits||en.best>0));
   entries.sort((a,b)=> wSort==='score' ? (b.best-a.best || a.d.n.localeCompare(b.d.n)) : a.d.n.localeCompare(b.d.n));
   $('wCount').textContent=totalWatched?`showing ${entries.length} of ${totalWatched}`:'';
   $('selModeBtn').classList.toggle('on',selMode);
@@ -243,7 +252,7 @@ function renderWatched(){
     const copyRows=copies.map(({w,sc})=>{
       const col=ci=>w.cols[ci].map(p=>{
         const pr=(cfg.perks||{})[p.n]||0;
-        return `<span class="rperk ${pr===2?'hi':pr===1?'hit':'cp'} ${p.on?'act':''}">${pIco(p.n)}${esc(p.n)}</span>`;
+        return `<span class="rperk ${pr===2?'hi':pr===1?'hit':'cp'} ${p.on?'act':''}" data-pn="${esc(p.n)}">${pIco(p.n)}${esc(p.n)}</span>`;
       }).join('')||'—';
       const stats=(cfg.stats||[]).map(s=>{
         const v=w.statsMax[s];
@@ -308,9 +317,9 @@ function renderWatched(){
 
 function renderAdd(){
   const copiesOf=copiesByHash();
-  const ql=q.toLowerCase();
+  const ql=q.trim().toLowerCase();
   const rows=Object.entries(DATA.defs)
-    .filter(([h,d])=>!WATCH[h]&&(!ql||d.n.toLowerCase().includes(ql)||d.ty.toLowerCase().includes(ql)))
+    .filter(([h,d])=>!WATCH[h]&&matchesQuery(d))
     .sort((a,b)=>a[1].n.localeCompare(b[1].n));
   $('allList').innerHTML=rows.slice(0,ql?200:30).map(([h,d])=>`<div class="row">
     <div><div class="rn">${esc(d.n)}</div><div class="ri">${esc(d.ty)} · ${d.slot} · ${d.ammo} · ${d.dmg} · ${(copiesOf[h]||[]).length} in vault${d.src?` · ${esc(d.src)}`:''}</div></div>
@@ -387,7 +396,30 @@ document.body.addEventListener('change',e=>{
   const cb=e.target.closest('input[data-sel]');
   if(cb){ cb.checked?sel.add(cb.dataset.sel):sel.delete(cb.dataset.sel); }
 });
-$('q').oninput=e=>{q=e.target.value;renderAdd();};
+// ---- perk hover popup: manifest description + DIM/Clarity community insight ----
+const ptip=document.createElement('div'); ptip.id='ptip'; document.body.appendChild(ptip);
+function showTip(el){
+  const n=el.dataset.p||el.dataset.pn; if(!n) return;
+  const d=(DATA.perkDescs||{})[n]||'', c=(DATA.perkInsights||{})[n]||'';
+  if(!d && !c){ hideTip(); return; }
+  const html=s=>esc(s).replace(/\n/g,'<br>');
+  ptip.innerHTML=`<div class="ptn">${esc(n)}</div>`
+    +(c?`<div class="ptlab">Community insight (Clarity)</div><div class="ptc">${html(c)}</div>`:'')
+    +(d?`<div class="ptlab">In-game</div><div class="ptd">${html(d)}</div>`:'');
+  ptip.style.display='block'; positionTip(el);
+}
+function positionTip(el){
+  const r=el.getBoundingClientRect(), t=ptip.getBoundingClientRect();
+  let left=Math.min(r.left, window.innerWidth-8-t.width); if(left<8) left=8;
+  let top=r.bottom+8; if(top+t.height>window.innerHeight-8) top=r.top-8-t.height; if(top<8) top=8;
+  ptip.style.left=left+'px'; ptip.style.top=top+'px';
+}
+const hideTip=()=>{ptip.style.display='none';};
+document.body.addEventListener('mouseover',e=>{const el=e.target.closest('[data-p],[data-pn]'); if(el) showTip(el);});
+document.body.addEventListener('mouseout',e=>{const el=e.target.closest('[data-p],[data-pn]'); if(el&&!el.contains(e.relatedTarget)) hideTip();});
+window.addEventListener('scroll',hideTip,{passive:true});
+
+$('q').oninput=e=>{q=e.target.value;render();};
 $('refreshBtn').onclick=()=>load(true);
 $('wSort').onchange=e=>{wSort=e.target.value;renderWatched();};
 $('wOnlyHits').onchange=e=>{wOnlyHits=e.target.checked;renderWatched();};

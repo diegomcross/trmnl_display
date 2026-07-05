@@ -22,10 +22,10 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ENV_FILE = path.join(__dirname, '.env');
 const TOKENS_FILE = path.join(__dirname, 'tokens.json');
 const DIM_FILE = path.join(__dirname, 'dim-data.json');
-const CACHE_DIR = path.join(__dirname, 'vault-manifest-cache');
+const CACHE_DIR = process.env.VV_CACHE_DIR || path.join(__dirname, 'vault-manifest-cache');
 const HTML_FILE = path.join(__dirname, 'vault-verdict.html');
 const BASE = 'https://www.bungie.net/Platform';
-const PORT = 8787;
+const PORT = process.env.PORT || 8787;
 
 // Stat hashes kept their pre-rename identities (Mobility->Weapons etc.)
 const STAT = { 2996146975: 'w', 392767087: 'h', 1943323491: 'c', 1735777505: 'g', 144602215: 's', 4244567218: 'm' };
@@ -121,7 +121,7 @@ async function loadManifest(e) {
   const meta = await bungie(`${BASE}/Destiny2/Manifest/`, e);
   const version = meta.version;
   fs.mkdirSync(CACHE_DIR, { recursive: true });
-  const cacheFile = path.join(CACHE_DIR, `slim5-${version}.json`);
+  const cacheFile = path.join(CACHE_DIR, `slim6-${version}.json`);
   if (MANIFEST?.version === version) return MANIFEST;
   if (fs.existsSync(cacheFile)) {
     MANIFEST = JSON.parse(fs.readFileSync(cacheFile, 'utf8'));
@@ -181,6 +181,8 @@ async function loadManifest(e) {
       inv: Object.keys(inv).length ? inv : undefined,
       wi: Object.keys(wi).length ? wi : undefined,
       src: srcOfItem[hash] || undefined,
+      // perk/plug description (in-game text) — powers the hover popup on perks
+      dsc: (isPlug && d.displayProperties?.description) ? d.displayProperties.description : undefined,
     };
     if (isWeapon) {
       slim.ty = d.itemTypeDisplayName || '';
@@ -652,6 +654,7 @@ const DMG = { 1: 'Kinetic', 2: 'Arc', 3: 'Solar', 4: 'Void', 6: 'Stasis', 7: 'St
 async function fetchWeapons(e) {
   const { prof, man, m, raw } = await fetchProfile(e);
   const tags = await dimTagsFresh(e);   // live DIM tags (id -> tag), source of truth
+  const clarity = await loadClarity(man);   // community insights for the perk hover popup
 
   const instances = prof.itemComponents?.instances?.data || {};
   const liveStats = prof.itemComponents?.stats?.data || {};
@@ -659,8 +662,8 @@ async function fetchWeapons(e) {
   const reusable = prof.itemComponents?.reusablePlugs?.data || {};
   const plugObj = prof.itemComponents?.plugObjectives?.data || {};
 
-  const weapons = [], defsOut = {}, perkIcons = {}; // perkIcons: perk name -> bungie.net icon path
-  const px = (n, h) => { const ic = man.items[h]?.icon; if (ic && !perkIcons[n]) perkIcons[n] = ic; };
+  const weapons = [], defsOut = {}, perkIcons = {}, perkDescs = {}; // perk name -> icon path / in-game description
+  const px = (n, h) => { const it = man.items[h]; if (!it) return; if (it.icon && !perkIcons[n]) perkIcons[n] = it.icon; if (it.dsc && !perkDescs[n]) perkDescs[n] = it.dsc; };
   for (const { it, own, loc, cid } of raw) {
     const def = man.items[it.itemHash];
     if (!def || def.it !== 3 || !it.itemInstanceId || !WBUCKET[def.b]) continue;
@@ -780,7 +783,11 @@ async function fetchWeapons(e) {
   if (!seen.seeded) { for (const w of weapons) seen.ids.add(w.id); seen.seeded = true; saveSeen(seen); }
   for (const w of weapons) w.fresh = !seen.ids.has(w.id);
 
-  return { weapons, defs: mergedDefs, perkIcons, fetchedAt: new Date().toISOString(), account: `${m.membershipType}/${m.membershipId}` };
+  const perkInsights = {};   // name -> Clarity community insight, only for perks we actually show
+  for (const n of new Set([...Object.keys(perkIcons), ...Object.keys(perkDescs)])) {
+    const c = clarity.byName[n]; if (c) perkInsights[n] = c;
+  }
+  return { weapons, defs: mergedDefs, perkIcons, perkDescs, perkInsights, fetchedAt: new Date().toISOString(), account: `${m.membershipType}/${m.membershipId}` };
 }
 
 // ---------- god-roll watch config + local tag overlay ----------
@@ -873,6 +880,52 @@ async function loadWishlist(man, fresh = false) {
   return WISHLIST;
 }
 
+// ---------- Clarity community insights (the same data DIM shows on perks) ----------
+// Clarity (github.com/Database-Clarity) publishes crowd-sourced, numbers-accurate perk
+// descriptions as open JSON. DIM surfaces these as "Community Insights". We download the
+// DIM-formatted file, flatten each perk's text, and fold hash -> our manifest perk NAME
+// so the tooltip can look it up the same way it looks up icons.
+const CLARITY_URL = 'https://database-clarity.github.io/Live-Clarity-Database/descriptions/dim.json';
+const CLARITY_FILE = path.join(__dirname, '.clarity.json');
+const CLARITY_MAX_AGE = 7 * 864e5; // re-download weekly
+let CLARITY = null;
+
+function flattenClarity(entry) {
+  const en = entry?.descriptions?.en;
+  if (!Array.isArray(en)) return '';
+  return en.map((b) => (b.linesContent || []).map((l) => l.text || '').join('\n').trim())
+    .filter(Boolean).join('\n\n').trim();
+}
+
+async function loadClarity(man, fresh = false) {
+  if (CLARITY && !fresh) return CLARITY;
+  if (!fresh) {
+    try {
+      const st = fs.statSync(CLARITY_FILE);
+      if (Date.now() - st.mtimeMs < CLARITY_MAX_AGE) return (CLARITY = JSON.parse(fs.readFileSync(CLARITY_FILE, 'utf8')));
+    } catch {}
+  }
+  try {
+    console.log('Downloading Clarity community insights (one-time / weekly)...');
+    const raw = await fetch(CLARITY_URL).then((r) => r.json());
+    const byName = {};
+    for (const [h, entry] of Object.entries(raw)) {
+      const nm = man.items[h]?.n || entry?.name;
+      if (!nm) continue;
+      const txt = flattenClarity(entry);
+      if (txt && !byName[nm]) byName[nm] = txt;   // first (usually base) wins; enhanced shares the name
+    }
+    CLARITY = { generatedAt: new Date().toISOString(), byName };
+    fs.writeFileSync(CLARITY_FILE, JSON.stringify(CLARITY));
+    console.log(`Clarity insights: ${Object.keys(byName).length} perks.`);
+  } catch (err) {
+    console.warn('clarity download failed:', err.message);
+    try { CLARITY = JSON.parse(fs.readFileSync(CLARITY_FILE, 'utf8')); }
+    catch { CLARITY = { generatedAt: null, byName: {} }; }
+  }
+  return CLARITY;
+}
+
 // Every trait perk (columns 3 & 4) that can roll on ANY weapon in the game, deduped by
 // name, tagged with which column(s) it appears in and its community popularity.
 async function buildPerkLibrary(e, fresh = false) {
@@ -893,12 +946,14 @@ async function buildPerkLibrary(e, fresh = false) {
         if (!o) { o = { n: it.n, icon: it.icon || '', cols: [false, false] }; byName.set(it.n, o); }
         o.cols[ci] = true;
         if (!o.icon && it.icon) o.icon = it.icon;
+        if (!o.dsc && it.dsc) o.dsc = it.dsc;
       }
     });
   }
+  const clarity = await loadClarity(man, fresh);
   const perks = [...byName.values()].map((p) => {
     const w = wl.perks[p.n] || { total: 0, pve: 0, pvp: 0 };
-    return { n: p.n, icon: p.icon, cols: p.cols, pop: w.total, pve: w.pve, pvp: w.pvp };
+    return { n: p.n, icon: p.icon, cols: p.cols, pop: w.total, pve: w.pve, pvp: w.pvp, dsc: p.dsc || '', insight: clarity.byName[p.n] || '' };
   });
   perks.sort((a, b) => b.pop - a.pop || a.n.localeCompare(b.n));
   PERKLIB = { perks, count: perks.length, wishlistAt: wl.generatedAt };

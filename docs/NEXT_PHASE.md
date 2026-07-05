@@ -3,6 +3,27 @@
 > Maintained per CLAUDE.md. When a feature ships, move it to HANDOFF.md
 > "What works now" and delete it here.
 
+## Where we are (2026-07-04, night — perk insights + favorites + search)
+
+Just shipped & verified live on 8787 (details in HANDOFF "What works now"):
+1. **Perk hover popup** with in-game description + **DIM community insight (Clarity)** — on Weapon
+   Watch and Perk Finder. Server: `loadClarity` + `.clarity.json`, slim manifest bumped **slim5→slim6**
+   (perk `dsc`), `/api/weapons` → `perkDescs`/`perkInsights`, `/api/perks` → `dsc`/`insight`.
+2. **Favorite perks (★)** in Perk Finder → saved to `perk-favorites.json` (`/api/favorites`), used to
+   **score every weapon in the Vault**; the vault tile shows the **★ perk score in place of power**
+   (toggle + `Perk · Favs` sort).
+3. **Weapon Watch search bar moved to the top**, narrows watched + add lists, **searches by source**
+   (crucible/iron banner/raid/trials/…).
+4. **Weapon Vault equipped tile ~1.7×** the inventory tile (Diego's chosen proportion).
+
+All tested on an isolated 8788 instance (new `PORT`/`VV_CACHE_DIR` env vars) then the always-on
+8787 server was restarted onto the new build (its supervisor auto-restarts on kill; slim6 cache was
+pre-placed so no re-download). Diego confirmed the 1.7× equipped size live.
+
+**Possible follow-ups (surface, no commitment):** favorite-perk score could weight ★ vs normal, or
+count only currently-equipped perks; add the hover tooltip to the Weapon Vault inspect + Perk Finder
+match rows; a "source alias" map if Diego wants `raid`/`nightfall` synonyms broadened.
+
 ## Where we are (2026-07-04, evening — LOOK / BrayTech pass)
 
 Diego wants the app to look like his BrayTech character page

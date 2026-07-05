@@ -44,8 +44,11 @@ drop-alert.json
 fashion.json
 fashion.json.bak
 .dim-wishlist.json
+.clarity.json
 perk-combos.json
 perk-combos.json.bak
+perk-favorites.json
+perk-favorites.json.bak
 
 # vault-verdict server log + ad-hoc test dumps
 vault.log

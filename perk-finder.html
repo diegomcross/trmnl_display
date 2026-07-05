@@ -107,6 +107,16 @@ input:focus,select:focus{outline:none;border-color:var(--gold)}
 .wsrc{font-size:10px;color:var(--dim)}
 .big{text-align:center;color:var(--mut);padding:26px 12px;font-size:13px}
 :focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+/* favorite star — favorites score every weapon in the vault */
+.favstar{flex:0 0 auto;background:none;border:none;cursor:pointer;font-size:17px;line-height:1;color:var(--dim);padding:2px 3px;font-family:inherit}
+.favstar:hover{color:var(--gold)}
+.favstar.on{color:var(--gold);text-shadow:0 0 6px rgba(207,174,66,.6)}
+/* perk hover popup */
+#ptip{position:fixed;z-index:9999;max-width:340px;background:#080a0e;border:1px solid var(--gold);clip-path:var(--clip);padding:9px 11px;font-size:12px;line-height:1.5;color:var(--ink);display:none;pointer-events:none;box-shadow:0 8px 24px rgba(0,0,0,.65)}
+#ptip .ptn{font-weight:700;color:var(--gold);margin-bottom:4px;font-size:12.5px}
+#ptip .ptlab{font-size:9.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--keep);font-family:Bahnschrift,"Roboto Condensed",sans-serif;margin:5px 0 2px}
+#ptip .ptc{color:var(--ink)}
+#ptip .ptd{color:var(--mut);font-size:11.5px}
 @media(min-width:1200px){body{max-width:1180px;margin:0 auto}}
 </style>
 <link rel="stylesheet" href="/theme.css">
@@ -114,7 +124,7 @@ input:focus,select:focus{outline:none;border-color:var(--gold)}
 <body>
 <div id="gbanner"></div>
 <h1 class="disp">Perk <span>Finder</span></h1>
-<p class="sub">Pick trait perks, save role-tagged combos, and see which of your weapons best match. Rank by <b>Mine</b> (how often you track a perk), <b>Community</b> (DIM wishlists), or <b>Blend</b> (yours + community at low weight → sleeper rolls). <span id="wlmeta" class="count"></span></p>
+<p class="sub">Pick trait perks, save role-tagged combos, and see which of your weapons best match. Tap the <b style="color:var(--gold)">★</b> to <b>favorite</b> a perk — favorites score <b>every</b> weapon in your Vault (watched or not). Rank by <b>Mine</b> (how often you track a perk), <b>Community</b> (DIM wishlists), or <b>Blend</b>. <span id="wlmeta" class="count"></span></p>
 
 <div class="bar">
   <input id="q" placeholder="Search perks…" style="min-width:180px">
@@ -130,6 +140,7 @@ input:focus,select:focus{outline:none;border-color:var(--gold)}
   <span style="width:1px;height:20px;background:var(--line)"></span>
   <button class="btn sm mut" id="ownedOnly">In my inventory</button>
   <button class="btn sm mut" id="popOnly">Hide unranked</button>
+  <button class="btn sm mut" id="favOnly">★ Favorites</button>
   <span class="count" id="libcount"></span>
 </div>
 
@@ -201,7 +212,7 @@ const $=id=>document.getElementById(id);
 const esc=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
 const BN='https://www.bungie.net';
 
-let LIB=[], PICONS={}, WEAPONS={weapons:[],defs:{},perkIcons:{}}, COMBOS=[], OWNED=new Set();
+let LIB=[], PICONS={}, PINFO={}, FAV=new Set(), favOnly=false, WEAPONS={weapons:[],defs:{},perkIcons:{}}, COMBOS=[], OWNED=new Set();
 let WPOOLS=null, OWNEDW=new Set(), matchMode='inv';   // farmable-pool cache, owned weapon names, match mode
 // SLOTS[0], SLOTS[1] = the two combo slots (each a Set of perk names, "any of these").
 let SLOTS=[new Set(),new Set()], activeSlot=0, ROLE='', source='mine', azMode=false, colFilter='all', ownedOnly=false, popOnly=false, q='';
@@ -220,10 +231,11 @@ function renderLib(){
     if(colFilter!=='all' && !p.cols[+colFilter]) return false;
     if(ownedOnly && !OWNED.has(p.n)) return false;
     if(popOnly && !val(p)) return false;
+    if(favOnly && !FAV.has(p.n)) return false;
     return true;
   });
   list.sort(azMode ? (a,b)=>a.n.localeCompare(b.n) : (a,b)=>val(b)-val(a)||a.n.localeCompare(b.n));
-  $('libcount').textContent=`${list.length} of ${LIB.length}`;
+  $('libcount').textContent=`${list.length} of ${LIB.length} · ★ ${FAV.size}`;
   $('plib').innerHTML=list.length?list.map(p=>{
     const cols=(p.cols[0]?'3':'')+(p.cols[1]?'4':'');
     const picked=bmode==='perks'&&SEL.has(p.n);
@@ -250,6 +262,7 @@ function renderLib(){
         <div class="popwrap">${bar}<span class="popn">${num}</span></div>
       </div>
       ${sl>=0?`<span class="slotbadge">${sl+1}</span>`:(picked?'<span class="slotbadge">✓</span>':(OWNED.has(p.n)?'<span class="own">✓</span>':''))}
+      <button class="favstar ${FAV.has(p.n)?'on':''}" data-fav="${esc(p.n)}" title="${FAV.has(p.n)?'Unfavorite':'Favorite — scores every weapon in your Vault'}">★</button>
     </div>`;
   }).join(''):'<div class="big">No perks match.</div>';
 }
@@ -428,7 +441,10 @@ function comboSlots(c){ if(Array.isArray(c.slots)) return [c.slots[0]||[], c.slo
 // ---- interactions ----
 document.querySelectorAll('[data-bmode]').forEach(b=>b.onclick=()=>{ bmode=b.dataset.bmode; renderCombo(); renderLib(); });
 $('perksSel').addEventListener('click',e=>{ const t=e.target.closest('[data-rm]'); if(!t) return; SEL.delete(t.dataset.rm); renderCombo(); renderLib(); });
+const saveFav=()=>fetch('/api/favorites',{method:'POST',body:JSON.stringify([...FAV])});
 $('plib').addEventListener('click',e=>{
+  const fav=e.target.closest('[data-fav]');
+  if(fav){ e.stopPropagation(); const n=fav.dataset.fav; FAV.has(n)?FAV.delete(n):FAV.add(n); saveFav(); renderLib(); return; }
   const row=e.target.closest('[data-p]'); if(!row) return;
   const n=row.dataset.p;
   if(bmode==='perks'){ SEL.has(n)?SEL.delete(n):SEL.add(n); }
@@ -481,6 +497,28 @@ $('sortAz').onclick=()=>{ azMode=!azMode; $('sortAz').classList.toggle('on',azMo
 document.querySelectorAll('[data-col]').forEach(b=>b.onclick=()=>{ colFilter=b.dataset.col; document.querySelectorAll('[data-col]').forEach(x=>{x.classList.toggle('on',x===b);x.classList.toggle('mut',x!==b);}); renderLib(); });
 $('ownedOnly').onclick=()=>{ ownedOnly=!ownedOnly; $('ownedOnly').classList.toggle('on',ownedOnly); $('ownedOnly').classList.toggle('mut',!ownedOnly); renderLib(); };
 $('popOnly').onclick=()=>{ popOnly=!popOnly; $('popOnly').classList.toggle('on',popOnly); $('popOnly').classList.toggle('mut',!popOnly); renderLib(); };
+$('favOnly').onclick=()=>{ favOnly=!favOnly; $('favOnly').classList.toggle('on',favOnly); $('favOnly').classList.toggle('mut',!favOnly); renderLib(); };
+
+// ---- perk hover popup: in-game description + DIM/Clarity community insight ----
+const ptip=document.createElement('div'); ptip.id='ptip'; document.body.appendChild(ptip);
+function showTip(el){
+  const n=el.dataset.p||el.dataset.pn; if(!n) return;
+  const info=PINFO[n]||{}; const d=info.d||'', c=info.c||'';
+  if(!d && !c){ ptip.style.display='none'; return; }
+  const html=s=>esc(s).replace(/\n/g,'<br>');
+  ptip.innerHTML=`<div class="ptn">${esc(n)}</div>`
+    +(c?`<div class="ptlab">Community insight (Clarity)</div><div class="ptc">${html(c)}</div>`:'')
+    +(d?`<div class="ptlab">In-game</div><div class="ptd">${html(d)}</div>`:'');
+  ptip.style.display='block';
+  const r=el.getBoundingClientRect(), t=ptip.getBoundingClientRect();
+  let left=Math.min(r.left, window.innerWidth-8-t.width); if(left<8) left=8;
+  let top=r.bottom+8; if(top+t.height>window.innerHeight-8) top=r.top-8-t.height; if(top<8) top=8;
+  ptip.style.left=left+'px'; ptip.style.top=top+'px';
+}
+const hideTip=()=>{ptip.style.display='none';};
+document.body.addEventListener('mouseover',e=>{const el=e.target.closest('[data-p]'); if(el) showTip(el);});
+document.body.addEventListener('mouseout',e=>{const el=e.target.closest('[data-p]'); if(el&&!el.contains(e.relatedTarget)) hideTip();});
+window.addEventListener('scroll',hideTip,{passive:true,capture:true});
 document.querySelectorAll('[data-mode]').forEach(b=>b.onclick=()=>{
   matchMode=b.dataset.mode;
   $('modeInv').classList.toggle('on',matchMode==='inv'); $('modeInv').classList.toggle('mut',matchMode!=='inv');
@@ -493,12 +531,14 @@ document.querySelectorAll('[data-mode]').forEach(b=>b.onclick=()=>{
 
 async function load(){
   try{
-    const [pk,cb]=await Promise.all([
+    const [pk,cb,fv]=await Promise.all([
       fetch('/api/perks').then(r=>r.json()),
-      fetch('/api/combos').then(r=>r.json()).catch(()=>[])
+      fetch('/api/combos').then(r=>r.json()).catch(()=>[]),
+      fetch('/api/favorites').then(r=>r.json()).catch(()=>[]),
     ]);
-    LIB=pk.perks||[]; COMBOS=Array.isArray(cb)?cb:[];
-    $('wlmeta').textContent=`${LIB.length} trait perks · you track perks across ${pk.watchedWeapons||0} weapons`;
+    LIB=pk.perks||[]; COMBOS=Array.isArray(cb)?cb:[]; FAV=new Set(Array.isArray(fv)?fv:[]);
+    PINFO={}; LIB.forEach(p=>{ PINFO[p.n]={d:p.dsc||'',c:p.insight||''}; });
+    $('wlmeta').textContent=`${LIB.length} trait perks · ${FAV.size} favorited · you track perks across ${pk.watchedWeapons||0} weapons`;
     renderCombos();
     // weapons (for icons + inventory matching) — may be a beat slower
     const w=await fetch('/api/weapons').then(r=>r.json());
