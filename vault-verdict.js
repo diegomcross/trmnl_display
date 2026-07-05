@@ -1348,10 +1348,10 @@ async function main() {
     if (err.code === 'EADDRINUSE') {
       if (++bindTries > 20) { console.error(`Port ${PORT} held by another process after ${bindTries} tries — exiting.`); process.exit(1); }
       console.warn(`Port ${PORT} busy (try ${bindTries}/20) — retrying in 1s...`);
-      setTimeout(() => { try { server.close(); } catch {} server.listen(PORT, '0.0.0.0'); }, 1000);
+      setTimeout(() => { try { server.close(); } catch {} server.listen(PORT, '::'); }, 1000);
     } else { console.error('server error:', err); }
   });
-  server.listen(PORT, '0.0.0.0', () =>
+  server.listen(PORT, '::', () =>
     console.log(`\nVault Verdict live at  http://127.0.0.1:${PORT}\n(from your phone on the same Wi-Fi: http://<this-PC's-LAN-IP>:${PORT})\n`));
 
   // Live god-roll drop watcher: only works while Destiny is running (saves API calls
