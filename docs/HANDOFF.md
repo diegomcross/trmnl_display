@@ -328,7 +328,15 @@ Core priorities, in his words:
     `perkPopMap(e)` (reuses `buildPerkLibrary`'s cache) sorts `fetchWeapons`'s `cols` (the actual
     roll — shown in Weapon Watch copies, Weapon Vault inspect, New Drops, Perk Finder inventory
     card) and `pool` (full per-weapon pool — Weapon Watch tracker, Weapon Vault watch-picker), and
-    `buildWeaponPools`'s pool (Perk Finder Farmable card), all most-popular-first. Endpoints:
+    `buildWeaponPools`'s pool (Perk Finder Farmable card), all most-popular-first.
+    **Enhanced/base perk folding — `foldPerkName()` (2026-07-06):** every perk list dedupes by exact
+    manifest name (enhanced + base normally share one) — Bungie's manifest breaks that for **Golden
+    Tricorn** specifically (the enhanced version's name is literally "Golden Tricorn Enhanced", the
+    only trait perk with a trailing "Enhanced" in the name). `foldPerkName()` strips that suffix;
+    applied everywhere a perk is keyed by name (`buildPerkLibrary`, `fetchWeapons`'s roll/pool
+    building, `buildWeaponPools`, `parseWishlist`, `loadClarity`). If a future season introduces
+    another perk with this same manifest quirk, it folds automatically — no per-perk list to maintain.
+    Endpoints:
     `GET /api/perks` (`?fresh=1` rebuilds) → `{perks,count,
     wishlistAt}`; `GET/POST /api/combos` → the user's saved combos (`perk-combos.json`,
     saveJsonSafe + `.bak`; stored `{name,role,slots:[[...],[...]]}`, back-compat for old flat
@@ -411,6 +419,12 @@ Core priorities, in his words:
     **both** the watched list and the add list, matching name/type/**source** — so `crucible`, `iron banner`,
     `raid`, `trials`, `nightfall`, `dungeon`, `gambit` all work (matches the manifest `src` string;
     raid weapons read e.g. `"Vault of Glass" Raid`). Shared `matchesQuery(d)` helper over n/ty/src/slot/ammo/dmg.
+    **Punctuation-insensitive (2026-07-06):** search is normalized through `normQ()` (strips `'`/`'`)
+    on both the query and the target string, so typing `archons thunder` (no apostrophe — how most
+    people type) still finds `Archon's Thunder`. Diego reported the weapon as "not present"; it was
+    always in the data (owned + all-weapons lists both had it) — only the search was punctuation-
+    sensitive. Same `normQ()` pattern applied to `weapon-vault.html`'s tile-grid search and
+    `vault-verdict.html`'s Armor Vault search (both had the identical latent bug).
   - **Weapon Vault character layout (2026-07-04/05):** the equipped weapon renders **~1.7× the tile**
     (`.wgrid.eqbig`) — Diego confirmed this is correct. The character's **inventory** below it is a
     **3-column grid** (`.charside .wgrid` = `repeat(3,90px)`) to match his in-game/BrayTech character screen

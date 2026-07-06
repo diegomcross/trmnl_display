@@ -3,6 +3,58 @@
 > Maintained per CLAUDE.md. When a feature ships, move it to HANDOFF.md
 > "What works now" and delete it here.
 
+## Where we are (2026-07-06 — Weapon Watch redesign mockups + two data bugs fixed)
+
+**Weapon Watch full redesign — 3 mockups presented, BLOCKED: awaiting Diego's pick.** Diego: "weapon
+watch / weapon copies -- we need to redesign this... not organized... not following the organization
+seen in other sections... I need 3 mockups." Built 3 self-contained, interactive Artifact mockups
+(sample data, not live) sharing one common skeleton (banner, controls, card header, the perk-tracker
+— unchanged, Diego hadn't complained about that piece) but differing in how COPY ROWS render:
+- **A — Smart cards**: each copy is its own roomy card (perks side-by-side, full stat row, action row).
+- **B — Organized table**: explicit column-headered grid (Score | Col3 | Col4 | Stats | Location | Actions).
+- **C — Tile grid + drill-in**: compact tiles (mirrors Weapon Vault's `.wt` tiles), tap opens the exact
+  `.ispcard` smart-card modal already used in Weapon Vault — closest match to "the organization seen
+  in other sections."
+All 3 are genuinely interactive (perk tap-cycle, tag toggle, expand/collapse) with cross-links between
+them. Scratch files (not committed): `scratchpad/weapon-watch-mockup-{a,b,c}-*.html` — see the plan at
+`.claude/plans/weapon-watch-weapon-distributed-sundae.md`. **Next step once Diego picks a direction:**
+port it into the real `weapon-watch.html`, replacing the `.copy`/`renderWatched` copy-row block.
+
+**Two data bugs fixed & verified live (2026-07-06), from Diego's report ("archon's thunder not present,
+question what else is missing" + "golden tricorn / golden tricorn enhanced duplicated"):**
+1. **Golden Tricorn duplicate — real manifest quirk, now folded.** Every perk list in this app dedupes
+   enhanced/base perk variants by exact manifest display-name match (they normally share the SAME
+   name) — but Bungie's manifest literally names the enhanced version "Golden Tricorn Enhanced" for
+   this one perk (checked: it's the *only* trait perk with a literal trailing "Enhanced" in the current
+   manifest). Added `foldPerkName()` (strips a trailing " Enhanced") and applied it at all 6 places
+   perks are keyed by name in `vault-verdict.js` (`buildPerkLibrary`, `fetchWeapons`'s roll + pool
+   building, `buildWeaponPools`'s `nameCol`, `parseWishlist`, `loadClarity`). Verified: Perk Finder now
+   shows one "Golden Tricorn" entry (pop 83, wcount 93/103) instead of two.
+2. **Archon's Thunder "not present" — NOT missing data, a punctuation-sensitive search bug.**
+   Investigated: the weapon IS in `/api/weapons` (owned), `/api/weapon-pools` (all-weapons), sits at
+   position 18/321 alphabetically among unwatched weapons — well inside the Add list's default
+   30-row cap. Root cause: `matchesQuery`-style search did a plain `.includes()`, so typing "archons
+   thunder" (no apostrophe, how most people type) against "Archon's Thunder" never matched — the
+   weapon was always there, just unfindable by search. Fixed with a `normQ()` helper (strips
+   `'`/`'`) in `weapon-watch.html`, `weapon-vault.html`, and `vault-verdict.html` (the three weapon/
+   armor name search boxes). Verified live: searching "archons thunder" now returns "Archon's Thunder".
+   **Reassurance for Diego:** this was never a case of missing weapons — the full weapon list (343
+   owned / 1272+ in the game) was always complete; only the search box was punctuation-sensitive.
+
+**NEW FEATURE REQUEST (Diego, 2026-07-06) — Director/featured-activity weapon tracking, BLOCKED:
+awaiting research + Diego's confirmation.** Diego wants to pick specific weapons and get notified +
+see a dedicated page when they're the FEATURED loot in rotating activities (Arena, Solo Ops, Sparrow
+Racing League, etc.) — cites light.gg's "The Director" section as the reference. Not started —
+needs research into whether Bungie's API actually exposes per-activity featured-loot rotation data
+(likely candidates: `DestinyMilestoneDefinition` for weekly featured activities/Nightfalls,
+`DestinyVendorDefinition`/vendor sale-item "featured" flags for rotating vendor foundries — needs
+verification per activity Diego cares about) before committing to a design. Also flag to Diego:
+Sparrow Racing League has not been a regular live playlist in years (only brief anniversary-event
+returns) — worth confirming it's still relevant to him, or whether he means whatever the CURRENT
+rotating-activity roster is. Scope: a new poller (mirrors the existing `pollDrops` god-roll alert
+pattern) + a new page (mirrors `weapon-drops.html`) — same shape as work already in this app, so
+feasible, but a real new feature, not a quick add.
+
 ## Where we are (2026-07-05, night — watch-perk picker rebuild + community popularity fix)
 
 Diego's three asks, all shipped & verified live on 8787:

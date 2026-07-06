@@ -300,14 +300,16 @@ let F={cls:'',v:'',slot:'',set:'',q:'',a:'',ter:'',pend:false}, shown=60;
 const $=id=>document.getElementById(id);
 const opts=()=>({hp:$('oHp').checked,fav:$('oFav').checked,lo:$('oLo').checked,syn:$('oSyn').checked});
 
+// strip apostrophes so a search like "wormgods caress" still finds "Wormgod's Caress"
+const normQ=s=>String(s).toLowerCase().replace(/['’]/g,'');
 function filtered(){
-  const q=F.q.toLowerCase();
+  const q=normQ(F.q);
   return ITEMS.filter(i=>
     (!F.cls||i.cls===F.cls)&&(!F.v||i.v===F.v)&&(!F.pend||i.pend)&&
     (!F.slot||(isClassItem(i.slot)?'Class Item':i.slot)===F.slot)&&
     (!F.set||i.sb===F.set)&&
     (!F.a||i.a===F.a)&&(!F.ter||i.ter===F.ter)&&
-    (!q||i.n.toLowerCase().includes(q)||i.note.toLowerCase().includes(q)));
+    (!q||normQ(i.n).includes(q)||normQ(i.note).includes(q)));
 }
 
 function render(){

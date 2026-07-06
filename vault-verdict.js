@@ -766,7 +766,7 @@ async function fetchWeapons(e) {
       const opts = reuse[si]?.map((p) => p.plugItemHash) || (socks[si]?.plugHash ? [socks[si].plugHash] : []);
       const byName = new Map();
       for (const h of opts) {
-        const n = man.items[h]?.n || `#${h}`;
+        const n = foldPerkName(man.items[h]?.n) || `#${h}`;
         if (!byName.has(n)) byName.set(n, { n, on: false });
         if (socks[si]?.plugHash === h) byName.get(n).on = true;
         px(n, h);
@@ -815,7 +815,7 @@ async function fetchWeapons(e) {
         icon: def.icon || '', shot: def.shot || '',
         pool: (def.tr || []).map((ps) => {
           const names = new Set();
-          for (const h of (man.plugSets[ps] || [])) { const n = man.items[h]?.n || `#${h}`; names.add(n); px(n, h); }
+          for (const h of (man.plugSets[ps] || [])) { const n = foldPerkName(man.items[h]?.n) || `#${h}`; names.add(n); px(n, h); }
           return [...names].sort(byPop(POP));   // most-popular perk first
         }),
       };
@@ -903,6 +903,13 @@ const WISHLIST_FILE = path.join(__dirname, '.dim-wishlist.json');
 const WISHLIST_MAX_AGE = 7 * 864e5; // re-download weekly
 let WISHLIST = null, PERKLIB = null;
 
+// Enhanced and base perks normally share the EXACT SAME manifest display name (that's how
+// every perk list in this file folds them together into one entry) — but at least one perk
+// (Golden Tricorn) breaks that convention and literally has "Enhanced" baked into its name,
+// so it was showing up as a separate, near-empty duplicate everywhere perks are listed.
+// Strip a trailing " Enhanced" so this perk folds like every other enhanced/base pair.
+const foldPerkName = (n) => (n || '').replace(/\s+Enhanced$/, '');
+
 // Track which DISTINCT WEAPONS (by name, reissues folded together) each perk is recommended
 // for, rather than a raw count of curated roll-lines. Raw roll-line counts badly inflate old
 // perks: the voltron list accumulates roll variants for the same long-lived weapons over many
@@ -935,7 +942,7 @@ function parseWishlist(text, man) {
   }
   const byName = {};
   for (const [h, set] of Object.entries(weapons)) {
-    const n = man.items[h]?.n; if (!n) continue;
+    const n = foldPerkName(man.items[h]?.n); if (!n) continue;
     const b = byName[n] || (byName[n] = { weapons: new Set(), pve: new Set(), pvp: new Set() });
     for (const wn of set) b.weapons.add(wn);
     for (const wn of (pve[h] || [])) b.pve.add(wn);
@@ -1015,7 +1022,7 @@ async function loadClarity(man, fresh = false) {
     const raw = await fetch(CLARITY_URL).then((r) => r.json());
     const byName = {};
     for (const [h, entry] of Object.entries(raw)) {
-      const nm = man.items[h]?.n || entry?.name;
+      const nm = foldPerkName(man.items[h]?.n) || entry?.name;
       if (!nm) continue;
       const txt = flattenClarity(entry);
       if (txt && !byName[nm]) byName[nm] = txt;   // first (usually base) wins; enhanced shares the name
@@ -1110,8 +1117,9 @@ async function buildPerkLibrary(e, fresh = false) {
         // pc==='frames' is the trait perks (Kill Clip, Incandescent…); everything else in
         // these columns is barrel/mag/stock/grip filler or empty sockets — not roll-defining.
         if (!it || !it.n || it.pc !== 'frames') continue;
-        let o = byName.get(it.n);
-        if (!o) { o = { n: it.n, icon: it.icon || '', cols: [false, false], weapons: new Set() }; byName.set(it.n, o); }
+        const pn = foldPerkName(it.n);
+        let o = byName.get(pn);
+        if (!o) { o = { n: pn, icon: it.icon || '', cols: [false, false], weapons: new Set() }; byName.set(pn, o); }
         o.cols[ci] = true;
         o.weapons.add(d.n);   // which CURRENT weapons can roll this perk — the Wilson denominator
         if (!o.icon && it.icon) o.icon = it.icon;
@@ -1159,7 +1167,7 @@ async function buildWeaponPools(e) {
   const POP = await perkPopMap(e);   // most-popular perk first, same ordering as fetchWeapons
   const nameCol = (ps) => {
     const s = new Set();
-    for (const h of (man.plugSets[ps] || [])) { const it = man.items[h]; if (it && it.n && it.pc === 'frames') s.add(it.n); }
+    for (const h of (man.plugSets[ps] || [])) { const it = man.items[h]; if (it && it.n && it.pc === 'frames') s.add(foldPerkName(it.n)); }
     return [...s].sort(byPop(POP));
   };
   const groups = {};

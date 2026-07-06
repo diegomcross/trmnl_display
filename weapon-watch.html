@@ -175,7 +175,10 @@ const TAG_OPTS=['none','keep','favorite','junk'];
 const copiesByHash=()=>{const m={};DATA.weapons.forEach(w=>{(m[w.hash]=m[w.hash]||[]).push(w);});return m;};
 // Single search box (top of page) narrows BOTH lists: name, type, and SOURCE (crucible,
 // iron banner, raid, trials…) plus slot/ammo/damage. Matches the manifest src string.
-const matchesQuery=d=>{const ql=q.trim().toLowerCase();return !ql||[d.n,d.ty,d.src,d.slot,d.ammo,d.dmg].some(x=>x&&String(x).toLowerCase().includes(ql));};
+// strip apostrophes so a search like "archons thunder" still finds "Archon's Thunder" —
+// punctuation-sensitive search was making present weapons look absent
+const normQ=s=>String(s).toLowerCase().replace(/['’]/g,'');
+const matchesQuery=d=>{const ql=normQ(q.trim());return !ql||[d.n,d.ty,d.src,d.slot,d.ammo,d.dmg].some(x=>x&&normQ(x).includes(ql));};
 // tracked perk names for the collapsed header, high-priority (★) first
 const trackedNames=cfg=>Object.entries(cfg.perks||{}).sort((a,b)=>b[1]-a[1]).map(([n,pr])=>({n,hi:pr===2}));
 // BrayTech-style artwork: real weapon + perk icons rendered as square tiles.

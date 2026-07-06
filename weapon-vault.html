@@ -276,8 +276,10 @@ function renderSlots(){
 }
 
 // ---- main grid ----
+// strip apostrophes so a search like "archons thunder" still finds "Archon's Thunder"
+const normQ=s=>String(s).toLowerCase().replace(/['’]/g,'');
 function passQuick(w,d){
-  if(q && !d.n.toLowerCase().includes(q)) return false;
+  if(q && !normQ(d.n).includes(normQ(q))) return false;
   if(fType && d.ty!==fType) return false;
   if(fEl.size && !fEl.has(d.dmg)) return false;
   if(fAmmo.size && !fAmmo.has(d.ammo)) return false;
