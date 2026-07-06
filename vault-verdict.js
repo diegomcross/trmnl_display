@@ -1244,6 +1244,95 @@ function scoreWeaponCopy(w, cfg, rankOf) {
   return { pct, god, hit };
 }
 
+// ---------- phase-3: auto inventory manager ----------
+// Runs while Destiny is up AND you're safely OUT of an activity (orbit / social space).
+// It auto-tags weapon copies keep/favorite/junk by score, stages a few junk-tagged
+// weapons on a character so you can dismantle them in-game, and beeps on high-score
+// finds. Diego's rules (2026-07-06):
+//   - LEGENDARIES ONLY — exotics are never touched.
+//   - Watched weapons (you picked tracked perks): score = perk-match %; junk < god bar (75%).
+//   - Unwatched weapons: score = ★-favorite coverage of the copy's ACTUAL rolled perks;
+//     junk < 60%, leave 60-80 untouched, keep >= 80, favorite (+lock+beep) >= 90.
+//   - A brand-new watched drop that beats your best kept copy → keep + a DIFFERENT sound.
+//   - Never touch locked / equipped / postmaster copies, and never junk a keep/favorite tag.
+// There is no Bungie dismantle API — "stage for dismantling" just moves junk onto a
+// character so YOU dismantle it. Every decision is recorded in AUTO_LOG for the /auto UI.
+const AUTO_FILE = path.join(__dirname, 'auto-manage.json');
+const AUTO_DRYRUN = process.env.AUTO_DRYRUN === '1';   // force decide-only (no writes) for testing
+const FAVW = { 1: 1, 2: 1.5, 3: 2 };                   // ★ grade -> weight (mirrors weapon-vault.html)
+const STAGE_SLOT_CAP = 9;                              // unequipped weapons per slot on a character
+const AUTO_DEFAULTS = {
+  enabled: true,           // Diego chose "go fully live"
+  junkStage: 3,            // keep this many junk-tagged weapons staged on a character
+  stageCid: null,          // character to stage junk on (null = default / Warlock main)
+  maxJunkPerRun: 25,       // safety cap: never junk-tag more than this in one pass
+  maxMovesPerRun: 8,       // safety cap on item transfers per pass
+  thr: { unwatchedJunk: 60, keep: 80, fav: 90, watchedJunk: 75 },
+};
+function loadAuto() {
+  const f = loadJson(AUTO_FILE); const o = (f && typeof f === 'object' && !Array.isArray(f)) ? f : {};
+  return { ...AUTO_DEFAULTS, ...o, thr: { ...AUTO_DEFAULTS.thr, ...(o.thr || {}) } };
+}
+function saveAuto(patch) {
+  const cur = loadAuto();
+  saveJsonSafe(AUTO_FILE, { ...cur, ...patch, thr: { ...cur.thr, ...(patch.thr || {}) } });
+}
+let AUTO_LOG = { at: null, safe: null, activity: null, dryRun: AUTO_DRYRUN, actions: [], counts: {}, note: 'not run yet' };
+
+const rolledNames = (w) => [...(w.cols[0] || []), ...(w.cols[1] || [])].map((p) => p.n);
+// Unwatched roll quality: how much of THIS copy's actual rolled perks you've favorited
+// (★-weighted). Returns -1 when there are no favorites / no rolled perks (→ leave it).
+function favRollScore(w, fav) {
+  if (!fav || !Object.keys(fav).length) return -1;
+  const names = new Set(rolledNames(w));
+  if (!names.size) return -1;
+  let num = 0, nonfav = 0;
+  for (const n of names) { const g = fav[n]; if (g) num += (FAVW[g] || 1); else nonfav++; }
+  return Math.round(100 * num / (num + nonfav));
+}
+// Decide ONE copy's action. Returns {tag,score,isWatched,reason,notify?} or null (leave it).
+function autoDecide(w, def, watch, fav, thr, rankOfByHash) {
+  if (!def || def.tt !== 5) return null;                       // legendaries only (skip exotics/rares)
+  if (w.loc === 'equipped' || w.loc === 'postmaster') return null;
+  if (w.locked) return null;                                  // respect locks (god-rolls auto-lock)
+  const cur = w.tag || '';
+  if (cur === 'infuse' || cur === 'archive') return null;     // leave DIM's other tags alone
+  const cfg = watch[w.hash];
+  const isWatched = !!(cfg && Object.keys(cfg.perks || {}).length);
+  const score = isWatched ? scoreWeaponCopy(w, cfg, rankOfByHash[w.hash] || {}).pct : favRollScore(w, fav);
+  if (score < 0) return null;                                 // no signal — leave it
+  if (score >= thr.fav)  return cur === 'favorite' ? null : { tag: 'favorite', score, isWatched, notify: 'high', reason: `${score}% >= ${thr.fav}` };
+  if (score >= thr.keep) return (cur === 'keep' || cur === 'favorite') ? null : { tag: 'keep', score, isWatched, reason: `${score}% >= ${thr.keep}` };
+  const junkBar = isWatched ? thr.watchedJunk : thr.unwatchedJunk;
+  if (score < junkBar && cur !== 'keep' && cur !== 'favorite') return cur === 'junk' ? null : { tag: 'junk', score, isWatched, reason: `${score}% < ${junkBar}` };
+  return null;                                                // in the "leave untouched" band
+}
+// A distinct rising chime (vs the god-roll beep()) for a new watched drop that beats your best.
+function beepUpgrade() { exec('powershell -NoProfile -c "[console]::beep(660,150); [console]::beep(990,150); [console]::beep(1320,260)"', { windowsHide: true }, () => {}); }
+
+// Are we safely OUT of an activity? Component 204 (characterActivities) on the most recently
+// played character. We only auto-manage in orbit (currentActivityHash 0) or a social space
+// (mode 40 — Tower / landing zones). Matchmaking for most playlists reports orbit until the
+// activity actually loads, so it's covered. Anything else = we're in an activity → skip.
+async function fetchActivity(e) {
+  const tok = await accessToken(e);
+  const msr = await bungie(`${BASE}/User/GetMembershipsById/${tok.membership_id}/254/`, e, tok.access_token);
+  const primary = msr.primaryMembershipId;
+  const m = (msr.destinyMemberships || []).find((x) => x.membershipId === primary)
+    || (msr.destinyMemberships || []).find((x) => x.crossSaveOverride === 0 || x.crossSaveOverride === x.membershipType)
+    || msr.destinyMemberships[0];
+  const prof = await bungie(`${BASE}/Destiny2/${m.membershipType}/Profile/${m.membershipId}/?components=200,204`, e, tok.access_token);
+  const chars = prof.characters?.data || {};
+  let cid = null, newest = '';
+  for (const [id, c] of Object.entries(chars)) if ((c.dateLastPlayed || '') > newest) { newest = c.dateLastPlayed; cid = id; }
+  const act = prof.characterActivities?.data?.[cid] || {};
+  const hash = act.currentActivityHash || 0;
+  const mode = (act.currentActivityModeType ?? -1);
+  const modes = act.currentActivityModeTypes || [];
+  const safe = hash === 0 || mode === 40 || modes.includes(40);
+  return { safe, hash, mode, activeCid: cid };
+}
+
 // ---------- server ----------
 const readBody = (req) => new Promise((ok) => {
   let b = ''; req.on('data', (c) => b += c); req.on('end', () => ok(b));
@@ -1265,6 +1354,15 @@ async function main() {
         const fresh = req.url.includes('fresh=1');
         if (!wcache || fresh) wcache = await fetchWeapons(e);
         return json(wcache);
+      }
+      if (req.url.startsWith('/api/auto/run') && req.method === 'POST') {
+        const { dryRun } = JSON.parse(await readBody(req) || '{}');
+        const log = await autoManage({ force: true, dryRun: dryRun !== false });   // preview (dry) by default
+        return json({ ok: true, last: log });
+      }
+      if (req.url.startsWith('/api/auto')) {
+        if (req.method === 'POST') { saveAuto(JSON.parse(await readBody(req) || '{}')); return json({ ok: true, cfg: loadAuto() }); }
+        return json({ cfg: loadAuto(), last: AUTO_LOG, gameUp });
       }
       if (req.url.startsWith('/api/watch')) {
         if (req.method === 'POST') {
@@ -1392,6 +1490,7 @@ async function main() {
       if (req.url.startsWith('/vault')) return res.end(fs.readFileSync(path.join(__dirname, 'weapon-vault.html')));
       if (req.url.startsWith('/perks')) return res.end(fs.readFileSync(path.join(__dirname, 'perk-finder.html')));
       if (req.url.startsWith('/drops')) return res.end(fs.readFileSync(path.join(__dirname, 'weapon-drops.html')));
+      if (req.url.startsWith('/auto')) return res.end(fs.readFileSync(path.join(__dirname, 'auto-manager.html')));
       if (req.url.startsWith('/fashion')) return res.end(fs.readFileSync(path.join(__dirname, 'fashion.html')));
       if (req.url.startsWith('/artifacts')) return res.end(fs.readFileSync(path.join(__dirname, 'artifacts.html')));
       return res.end(fs.readFileSync(HTML_FILE));
@@ -1444,8 +1543,100 @@ async function main() {
       }
     } catch (err) { console.warn('drop poll error:', err.message); }
   }
+
+  // Auto inventory manager pass. Gated by: game running (unless forced), enabled, and safely
+  // out of an activity. force=true (the /auto "run now" button) skips the game/enabled gate;
+  // dryRun forces decide-only. Populates AUTO_LOG for the UI either way.
+  let managing = false;
+  async function autoManage({ force = false, dryRun = AUTO_DRYRUN } = {}) {
+    if (managing) return AUTO_LOG;
+    const cfg = loadAuto();
+    if (!force && (!gameUp || !cfg.enabled)) return AUTO_LOG;
+    managing = true;
+    const log = { at: new Date().toISOString(), safe: null, activity: null, dryRun, actions: [], counts: { favorite: 0, keep: 0, junk: 0, staged: 0, spilled: 0 }, note: '' };
+    try {
+      const act = await fetchActivity(e).catch((err) => ({ safe: false, hash: -1, mode: -1, err: err.message }));
+      log.safe = act.safe; log.activity = { hash: act.hash, mode: act.mode };
+      // A live pass ONLY runs when safely out of an activity. A dry-run preview still shows
+      // what it WOULD do (it writes nothing), so Diego can see the plan even mid-activity.
+      if (!act.safe && !dryRun) { log.note = 'skipped — in an activity'; return log; }
+
+      wcache = await fetchWeapons(e);
+      const fav = loadFav(), watch = loadWatch(), defs = wcache.defs, thr = cfg.thr;
+      const byHash = {};
+      for (const w of wcache.weapons) (byHash[w.hash] = byHash[w.hash] || []).push(w);
+      // per-watched-weapon stat rank fns (for scoreWeaponCopy) + best currently-kept score
+      const rankOfByHash = {}, bestKept = {};
+      for (const [h, copies] of Object.entries(byHash)) {
+        const c = watch[h]; if (!(c && Object.keys(c.perks || {}).length)) continue;
+        const r = {};
+        for (const s of (c.stats || [])) { const vals = [...new Set(copies.map((x) => x.statsMax[s] ?? -1))].sort((a, b) => b - a); r[s] = (v) => { const i = vals.indexOf(v); return i === 0 ? 's1' : i === 1 ? 's2' : i === 2 ? 's3' : ''; }; }
+        rankOfByHash[h] = r;
+        let best = -1;
+        for (const w of copies) if (w.tag === 'keep' || w.tag === 'favorite') best = Math.max(best, scoreWeaponCopy(w, c, r).pct);
+        bestKept[h] = best;
+      }
+
+      let junked = 0, moves = 0;
+      for (const w of wcache.weapons) {
+        const dec = autoDecide(w, defs[w.hash], watch, fav, thr, rankOfByHash);
+        if (!dec) continue;
+        if (dec.tag === 'junk' && junked >= cfg.maxJunkPerRun) continue;
+        const name = defs[w.hash]?.n || String(w.hash);
+        const upgrade = dec.isWatched && w.fresh && (dec.tag === 'keep' || dec.tag === 'favorite') && dec.score > (bestKept[w.hash] ?? -1);
+        const line = { id: w.id, name, from: w.tag || 'none', to: dec.tag, score: dec.score, watched: dec.isWatched, upgrade, reason: dec.reason };
+        if (dec.tag === 'junk') junked++;
+        log.counts[dec.tag]++;
+        w.tag = dec.tag;   // reflect in memory (ephemeral wcache) so staging below sees it — even in dry-run
+        if (!dryRun) {
+          try {
+            await dimWriteTag(e, w.id, dec.tag);
+            if (dec.tag === 'favorite') { try { await setLock(e, w.id, true); w.locked = true; } catch {} }
+            // Only chime for genuinely NEW drops — never for the bulk re-tagging of your existing vault.
+            if (w.fresh) { if (upgrade) beepUpgrade(); else if (dec.notify === 'high') beep(); }
+          } catch (err) { line.error = err.message; }
+        }
+        log.actions.push(line);
+      }
+
+      // Stage junk-tagged weapons on a character so Diego can dismantle them in-game.
+      const stageCid = cfg.stageCid || LOCK_CTX?.characterId;
+      if (stageCid) {
+        const onChar = wcache.weapons.filter((w) => w.tag === 'junk' && !w.locked && w.loc === 'char' && w.ownCid === stageCid && defs[w.hash]?.tt === 5);
+        let need = cfg.junkStage - onChar.length;
+        const slotCount = {};
+        for (const w of wcache.weapons) if (w.ownCid === stageCid && (w.loc === 'char' || w.loc === 'equipped')) { const s = defs[w.hash]?.slot; if (s) slotCount[s] = (slotCount[s] || 0) + 1; }
+        const pool = wcache.weapons
+          .filter((w) => w.tag === 'junk' && !w.locked && w.loc === 'vault' && defs[w.hash]?.tt === 5)
+          .sort((a, b) => (a.pwr || 0) - (b.pwr || 0));   // stage the lowest-power junk first
+        for (const w of pool) {
+          if (need <= 0 || moves >= cfg.maxMovesPerRun) break;
+          const slot = defs[w.hash]?.slot; if (!slot) continue;
+          if ((slotCount[slot] || 0) >= STAGE_SLOT_CAP + 1) {   // slot full (1 equipped + 9) → make space
+            const spill = wcache.weapons.find((x) => x.ownCid === stageCid && x.loc === 'char' && defs[x.hash]?.slot === slot && !x.locked && x.tag !== 'junk' && x.tag !== 'keep' && x.tag !== 'favorite');
+            if (!spill) { log.actions.push({ stage: 'skip', name: defs[w.hash]?.n, reason: `${slot} full, nothing safe to vault` }); continue; }
+            log.actions.push({ stage: 'spill', name: defs[spill.hash]?.n, slot }); log.counts.spilled++;
+            if (!dryRun) { try { await transferItem(e, spill.id, spill.rhash, stageCid, true); spill.loc = 'vault'; spill.own = 'Vault'; spill.ownCid = null; moves++; } catch (err) { log.actions.push({ stage: 'error', name: defs[spill.hash]?.n, error: err.message }); continue; } }
+            slotCount[slot]--;
+          }
+          log.actions.push({ stage: 'add', name: defs[w.hash]?.n, slot }); log.counts.staged++;
+          if (!dryRun) { try { await transferItem(e, w.id, w.rhash, stageCid, false); w.loc = 'char'; w.ownCid = stageCid; w.own = LOCK_CTX?.clsById?.[stageCid] || w.own; moves++; } catch (err) { log.actions.push({ stage: 'error', name: defs[w.hash]?.n, error: err.message }); continue; } }
+          slotCount[slot] = (slotCount[slot] || 0) + 1; need--;
+        }
+      }
+
+      const c = log.counts;
+      log.note = `fav ${c.favorite} · keep ${c.keep} · junk ${c.junk} · staged ${c.staged}`;
+      console.log(`[auto] ${dryRun ? 'DRY ' : ''}safe=${act.safe} ${log.note}`);
+    } catch (err) { log.note = 'error: ' + err.message; console.warn('auto-manage error:', err.message); }
+    finally { AUTO_LOG = log; managing = false; }
+    return log;
+  }
+
   checkGame(); setInterval(checkGame, 30000);
   setInterval(pollDrops, 25000);
+  setTimeout(() => autoManage(), 45000);        // first pass shortly after start
+  setInterval(() => autoManage(), 120000);      // then every 2 min while in game + out of activity
 }
 
 main().catch((err) => { console.error(err.message); process.exit(1); });

@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Auto-Manager — Weapon Watch</title>
+<style>
+:root{
+  --bg:#0c0e12; --panel:#151821; --panel2:#1b1f2b; --line:#2a2f3d;
+  --ink:#e9ebf2; --mut:#8b93a7; --dim:#5c6375;
+  --gold:#cfae42; --keep:#5fd0dd; --junk:#ff6a52;
+  --clip:polygon(10px 0,100% 0,100% calc(100% - 10px),calc(100% - 10px) 100%,0 100%,0 10px);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--ink);font:15px/1.45 "Segoe UI",Roboto,system-ui,sans-serif;padding:12px;padding-bottom:48px}
+h1{font-size:22px;font-weight:600}
+h1 span{color:var(--gold)}
+.sub{color:var(--mut);font-size:12px;margin:2px 0 12px;max-width:820px}
+.wrap{max-width:900px;margin:0 auto}
+.card{background:var(--panel);border:1px solid var(--line);clip-path:var(--clip);padding:14px 16px;margin-bottom:14px}
+.card h2{font-size:13px;text-transform:uppercase;letter-spacing:.08em;color:var(--mut);font-weight:600;margin-bottom:10px}
+.btn{background:var(--panel2);border:1px solid var(--gold);color:var(--gold);padding:9px 15px;font-size:13px;cursor:pointer;clip-path:var(--clip);font-family:inherit}
+.btn:active{background:var(--gold);color:#000}
+.btn.mut{border-color:var(--line);color:var(--mut)}
+.btn:disabled{opacity:.5;cursor:default}
+.row{display:flex;gap:14px;flex-wrap:wrap;align-items:center}
+.row.sp{justify-content:space-between}
+label.f{display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--mut);text-transform:uppercase;letter-spacing:.05em}
+label.f input{background:var(--panel2);border:1px solid var(--line);color:var(--ink);padding:7px 9px;width:88px;font:14px/1 inherit;font-variant-numeric:tabular-nums}
+.state{display:flex;align-items:center;gap:12px}
+.pill{font-size:12px;font-weight:700;padding:5px 12px;clip-path:var(--clip);text-transform:uppercase;letter-spacing:.05em}
+.pill.on{background:rgba(95,208,221,.16);border:1px solid var(--keep);color:var(--keep)}
+.pill.off{background:rgba(255,106,82,.12);border:1px solid var(--junk);color:var(--junk)}
+.toggle{position:relative;width:56px;height:28px;background:var(--panel2);border:1px solid var(--line);border-radius:16px;cursor:pointer;transition:.15s}
+.toggle.on{background:rgba(95,208,221,.25);border-color:var(--keep)}
+.toggle .knob{position:absolute;top:2px;left:2px;width:22px;height:22px;border-radius:50%;background:var(--mut);transition:.15s}
+.toggle.on .knob{left:31px;background:var(--keep)}
+.mini{color:var(--mut);font-size:12px}
+.mini b{color:var(--ink)}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{text-align:left;color:var(--dim);font-size:10px;text-transform:uppercase;letter-spacing:.07em;padding:6px 8px;border-bottom:1px solid var(--line);font-weight:600}
+td{padding:6px 8px;border-bottom:1px solid var(--panel2);vertical-align:middle}
+.tg{font-size:10px;font-weight:700;padding:2px 8px;clip-path:var(--clip);text-transform:uppercase;letter-spacing:.04em}
+.tg.keep{background:rgba(95,208,221,.14);color:var(--keep)}
+.tg.favorite{background:rgba(207,174,66,.16);color:var(--gold)}
+.tg.junk{background:rgba(255,106,82,.14);color:var(--junk)}
+.tg.stage{background:rgba(139,147,167,.14);color:var(--mut)}
+.sc{font-variant-numeric:tabular-nums;font-weight:700}
+.up{color:var(--gold);font-size:11px;font-weight:700}
+.err{color:var(--junk);font-size:11px}
+.empty{color:var(--dim);font-size:13px;padding:14px 4px}
+.note{font-size:13px;color:var(--ink)}
+.warn{color:var(--junk)}
+.thresh-help{font-size:11px;color:var(--dim);margin-top:8px;line-height:1.6}
+.thresh-help b{color:var(--mut)}
+</style>
+</head>
+<body>
+<link rel="stylesheet" href="/theme.css">
+<div id="gbanner"></div>
+<div class="wrap">
+  <h1>Auto-<span>Manager</span></h1>
+  <p class="sub">Automatically tags weapons keep / favorite / junk by score and stages junk on a character
+  to dismantle — but only while Destiny is running and you're in orbit, a social space, or matchmaking
+  (never mid-activity). Exotics, locked, and equipped weapons are never touched. There's no dismantle API,
+  so it moves junk onto a character for <b>you</b> to dismantle in-game.</p>
+
+  <div class="card">
+    <h2>Status</h2>
+    <div class="row sp">
+      <div class="state">
+        <div id="toggle" class="toggle"><div class="knob"></div></div>
+        <span id="enPill" class="pill off">Off</span>
+        <span id="gameState" class="mini"></span>
+      </div>
+      <div class="row">
+        <button id="previewBtn" class="btn mut">Preview next run (no writes)</button>
+        <button id="runBtn" class="btn">Run now (live)</button>
+      </div>
+    </div>
+    <p id="lastNote" class="mini" style="margin-top:12px"></p>
+  </div>
+
+  <div class="card">
+    <h2>Rules &amp; thresholds</h2>
+    <div class="row">
+      <label class="f">Junk below (unwatched %)<input id="thUnwatched" type="number" min="0" max="100"></label>
+      <label class="f">Junk below (watched %)<input id="thWatched" type="number" min="0" max="100"></label>
+      <label class="f">Keep at / above %<input id="thKeep" type="number" min="0" max="100"></label>
+      <label class="f">Favorite at / above %<input id="thFav" type="number" min="0" max="100"></label>
+    </div>
+    <div class="row" style="margin-top:12px">
+      <label class="f">Junk staged on character<input id="junkStage" type="number" min="0" max="9"></label>
+      <label class="f">Max junk-tags / run<input id="maxJunk" type="number" min="1" max="200"></label>
+      <label class="f">Max moves / run<input id="maxMoves" type="number" min="1" max="30"></label>
+      <button id="saveBtn" class="btn" style="align-self:flex-end">Save settings</button>
+    </div>
+    <p class="thresh-help">
+      <b>Watched weapons</b> (you picked tracked perks) score by perk-match %; copies under the watched-junk
+      bar get junked. <b>Unwatched weapons</b> score by how many of the copy's rolled perks are your
+      ★ Perk-Finder favorites. A brand-new watched drop that beats your best kept copy is auto-kept with a
+      different chime. Favorited copies are also locked.
+    </p>
+  </div>
+
+  <div class="card">
+    <h2>Last run <span id="runKind" class="mini"></span></h2>
+    <div id="log"></div>
+  </div>
+</div>
+
+<script src="/banner.js"></script>
+<script>
+const $=id=>document.getElementById(id);
+let CFG=null;
+function fmtActivity(a){ if(!a) return ''; if(a.hash===0) return 'orbit'; if(a.mode===40) return 'social'; if(a.hash<0) return '—'; return 'activity #'+a.hash; }
+function tagCell(t){ if(!t||t==='none') return '<span class="mini">—</span>'; return `<span class="tg ${t}">${t}</span>`; }
+
+function renderLog(last){
+  $('runKind').textContent = last && last.at ? (last.dryRun?'· preview '+ago(last.at):'· live '+ago(last.at)) : '';
+  if(!last || !last.at){ $('log').innerHTML='<div class="empty">No run yet. Press “Preview next run” to see what it would do without changing anything.</div>'; return; }
+  const c=last.counts||{};
+  const head=`<p class="note">${last.note||''} ${last.safe===false?`<span class="warn">— ${last.activity?'in '+fmtActivity(last.activity):'in an activity'}, nothing done</span>`:''}</p>`;
+  const acts=(last.actions||[]);
+  if(!acts.length){ $('log').innerHTML=head+'<div class="empty">No changes needed — everything already sorted.</div>'; return; }
+  const rows=acts.map(a=>{
+    if(a.stage){
+      const lbl=a.stage==='add'?'stage junk →char':a.stage==='spill'?'vault to make room':a.stage==='skip'?'skip':'error';
+      return `<tr><td><span class="tg stage">${lbl}</span></td><td>${a.name||''}</td><td class="mini">${a.slot||''}</td><td colspan="2" class="${a.error?'err':'mini'}">${a.error||a.reason||''}</td></tr>`;
+    }
+    return `<tr>
+      <td>${tagCell(a.from)} → ${tagCell(a.to)}</td>
+      <td>${a.name}${a.upgrade?' <span class="up">▲ new best</span>':''}</td>
+      <td class="mini">${a.watched?'watched':'favorites'}</td>
+      <td class="sc">${a.score}%</td>
+      <td class="${a.error?'err':'mini'}">${a.error||a.reason||''}</td></tr>`;
+  }).join('');
+  $('log').innerHTML=head+`<div style="overflow-x:auto"><table>
+    <tr><th>Action</th><th>Weapon</th><th>Basis</th><th>Score</th><th>Why</th></tr>${rows}</table></div>`;
+}
+function ago(iso){ const s=Math.round((Date.now()-new Date(iso))/1000); if(s<60)return s+'s ago'; if(s<3600)return Math.round(s/60)+'m ago'; return Math.round(s/3600)+'h ago'; }
+
+function paintState(){
+  const on=!!(CFG&&CFG.enabled);
+  $('toggle').classList.toggle('on',on);
+  $('enPill').className='pill '+(on?'on':'off'); $('enPill').textContent=on?'On — auto-managing':'Off';
+}
+function fillForm(){
+  const t=CFG.thr||{};
+  $('thUnwatched').value=t.unwatchedJunk; $('thWatched').value=t.watchedJunk; $('thKeep').value=t.keep; $('thFav').value=t.fav;
+  $('junkStage').value=CFG.junkStage; $('maxJunk').value=CFG.maxJunkPerRun; $('maxMoves').value=CFG.maxMovesPerRun;
+}
+async function loadAll(){
+  const d=await fetch('/api/auto').then(r=>r.json());
+  CFG=d.cfg; paintState(); fillForm();
+  $('gameState').textContent=d.gameUp?'Destiny is running':'Destiny not detected — auto passes are paused';
+  $('lastNote').textContent = d.last&&d.last.at ? `Last automatic check ${ago(d.last.at)} — ${d.last.note||d.last.note===''?d.last.note:''}` : 'No automatic check has run yet this session.';
+  renderLog(d.last);
+}
+async function postCfg(patch){ const d=await fetch('/api/auto',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(patch)}).then(r=>r.json()); CFG=d.cfg; paintState(); fillForm(); }
+
+$('toggle').onclick=async()=>{ const next=!(CFG&&CFG.enabled); if(next && !confirm('Turn auto-manager ON? It will tag and move weapons on your live account whenever you are out of an activity.'))return; await postCfg({enabled:next}); };
+$('saveBtn').onclick=async()=>{
+  await postCfg({ junkStage:+$('junkStage').value, maxJunkPerRun:+$('maxJunk').value, maxMovesPerRun:+$('maxMoves').value,
+    thr:{ unwatchedJunk:+$('thUnwatched').value, watchedJunk:+$('thWatched').value, keep:+$('thKeep').value, fav:+$('thFav').value } });
+  $('saveBtn').textContent='Saved ✓'; setTimeout(()=>$('saveBtn').textContent='Save settings',1200);
+};
+async function run(dryRun){
+  const btn=dryRun?$('previewBtn'):$('runBtn');
+  if(!dryRun && !confirm('Run a LIVE pass now? This tags and moves weapons on your account immediately.'))return;
+  btn.disabled=true; const old=btn.textContent; btn.textContent='Working…';
+  try{ const d=await fetch('/api/auto/run',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({dryRun})}).then(r=>r.json()); renderLog(d.last); }
+  catch(e){ $('log').innerHTML='<div class="err">Run failed: '+e.message+'</div>'; }
+  btn.disabled=false; btn.textContent=old;
+}
+$('previewBtn').onclick=()=>run(true);
+$('runBtn').onclick=()=>run(false);
+loadAll();
+</script>
+</body>
+</html>
