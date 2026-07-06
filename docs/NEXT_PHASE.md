@@ -3,22 +3,19 @@
 > Maintained per CLAUDE.md. When a feature ships, move it to HANDOFF.md
 > "What works now" and delete it here.
 
-## Where we are (2026-07-06 — Weapon Watch redesign mockups + two data bugs fixed)
+## Where we are (2026-07-06 — Weapon Watch copy-table redesign SHIPPED + two data bugs fixed)
 
-**Weapon Watch full redesign — 3 mockups presented, BLOCKED: awaiting Diego's pick.** Diego: "weapon
-watch / weapon copies -- we need to redesign this... not organized... not following the organization
-seen in other sections... I need 3 mockups." Built 3 self-contained, interactive Artifact mockups
-(sample data, not live) sharing one common skeleton (banner, controls, card header, the perk-tracker
-— unchanged, Diego hadn't complained about that piece) but differing in how COPY ROWS render:
-- **A — Smart cards**: each copy is its own roomy card (perks side-by-side, full stat row, action row).
-- **B — Organized table**: explicit column-headered grid (Score | Col3 | Col4 | Stats | Location | Actions).
-- **C — Tile grid + drill-in**: compact tiles (mirrors Weapon Vault's `.wt` tiles), tap opens the exact
-  `.ispcard` smart-card modal already used in Weapon Vault — closest match to "the organization seen
-  in other sections."
-All 3 are genuinely interactive (perk tap-cycle, tag toggle, expand/collapse) with cross-links between
-them. Scratch files (not committed): `scratchpad/weapon-watch-mockup-{a,b,c}-*.html` — see the plan at
-`.claude/plans/weapon-watch-weapon-distributed-sundae.md`. **Next step once Diego picks a direction:**
-port it into the real `weapon-watch.html`, replacing the `.copy`/`renderWatched` copy-row block.
+**Weapon Watch copy display redesigned — ✅ SHIPPED & verified live.** Diego: "weapon watch / weapon
+copies -- we need to redesign this... not organized... not following the organization seen in other
+sections." Presented 3 mockups (Smart cards / Organized table / Tile grid+drill-in) as Artifacts;
+Diego picked **Direction B (Organized Table)**, then asked for corrections before final approval:
+full stat names (no abbreviating), the masterwork badge riding next to its actual stat, a kill
+tracker, current→best-possible stat display, and confirmation that ranking always uses the best
+achievable stat (barrel/mag swap considered). All built into the mockup, verified via a Node harness
+(sort order, MW placement, stat display all checked programmatically against the rendered HTML), then
+**ported into the real `weapon-watch.html`** replacing the old cramped `.copy` 3-column grid. Full
+details in HANDOFF's "What works now". Mockup scratch files were never committed (scratchpad only) —
+gone once the session ends, no cleanup needed.
 
 **Two data bugs fixed & verified live (2026-07-06), from Diego's report ("archon's thunder not present,
 question what else is missing" + "golden tricorn / golden tricorn enhanced duplicated"):**

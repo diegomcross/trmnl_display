@@ -76,7 +76,7 @@ Core priorities, in his words:
 | `manifest-cache.json` | Cached Bungie manifest defs (gitignored). `CACHE_SCHEMA` const invalidates it when the stored shape changes. |
 | `vault-verdict.js` | **Vault Verdict** server (port **8787**): live Armor 3.0 vault triage + weapons API. Reuses `.env` + `tokens.json`. Slims the manifest to `vault-manifest-cache/slim3-<version>.json` (armor + weapons + trait plug sets + drop sources). `node vault-verdict.js probe "name"` dumps one item for debugging. |
 | `vault-verdict.html` | Vault Verdict frontend (served at `/`): verdict engine, set-bonus 4pc/2pc rating panel with drop locations, exotic favorite-stat tuning panel (per-class filter, primary›secondary), DIM query export. |
-| `weapon-watch.html` | **Weapon Watch** god-roll tracker UI (served at `/weapons`): pick weapons, tag up to 6 perks (normal/★high priority), wanted masterwork + watched stats; scores every copy in the vault. Full-width copy rows, direct tag chips, Select-multiple batch mode, smart Vault/Equip, no-jump perk selection. Config → `weapon-watch.json`, tags → `weapon-tags.json` (gitignored). |
+| `weapon-watch.html` | **Weapon Watch** god-roll tracker UI (served at `/weapons`): pick weapons, tag up to 6 perks (normal/★high priority), wanted masterwork + watched stats; scores every copy in the vault. Copies render as an **organized table** (score, columns 3/4, full stat names + MW badge, kills, location, actions — redesigned 2026-07-06, see "What works now"), direct tag chips, Select-multiple batch mode, smart Vault/Equip, no-jump perk selection. Config → `weapon-watch.json`, tags → `weapon-tags.json` (gitignored). |
 | `weapon-drops.html` | **New Drops dashboard** (served at `/drops`): visual cards for *fresh* drops of watched weapons — weapon art, rolled perk icons, masterwork icon, stats, score/🎯. Per-card actions: **Fav / Keep / Junk** tag chips (`/api/tag`, DIM vocab, active chip clears on re-tap) + Lock + smart Equip/→Vault + Seen. Backed by `weapon-seen.json` (gitignored) + `/api/drops/ack`. |
 | `dim-probe.js` | One-off DIM Sync API check (gitignored). Diego runs `node dim-probe.js` to confirm two-way DIM sync works before it's built. |
 | `fashion.html` | **Fashion loadouts** (served at `/fashion`): each character's equipped armor ornaments + shaders with icons; save named looks (`fashion.json`, gitignored) and re-apply them in one click. Apply requires the character to be in orbit. |
@@ -462,7 +462,33 @@ Core priorities, in his words:
     untagged copy (DIM write + confirm). The perk hover popup (`perktip.js`) now waits **400ms**
     (`HOVER_DELAY`) before showing. God-roll drop alert fires **once per drop** (`ALERTED` Set in
     `pollDrops` — it was re-firing every 25s because a fresh drop stays flagged until acked).
-    New Drops (`/drops`) still needs Fav/Keep/Junk + Equip/To-Vault actions — NEXT_PHASE open issue #4.
+  - **Weapon Watch copy table redesign (2026-07-06, Diego's ask — "it's small, not organized, not
+    following the organization seen in other sections"):** the old copy row was a cramped 3-column
+    grid at 10-12px font packing 10+ fields together. Presented 3 mockup directions as Artifacts
+    (sample data); Diego picked **the organized table** (explicit column headers: Score | Column 3 |
+    Column 4 | Stats | Location/Kills | Actions), then asked for corrections, all shipped:
+    - **Full stat names, never abbreviated** (Range/Stability/Handling, not RNG/STB/HND).
+    - **MW badge rides inline with its actual stat**, not a disconnected line. Gotcha: the copy's
+      real masterwork (`w.mw`) is a lowercase plug identifier (`"charge_time"`, `"reload"`) while
+      watched-stat names are Title Case (`"Charge Time"`, `"Reload Speed"`) — they don't match as
+      plain strings, and a couple don't even follow a simple case-conversion rule. Checked directly
+      against the manifest (every `weapons.masterworks.stat.*` plug's display name) rather than
+      guessed: `MW_STAT_NAME` maps `reload→"Reload Speed"`, `projectile_speed→"Velocity"`,
+      `damage→"Impact"`, `accuracy→"Accuracy"` (the plug's own tier text says "Target Acquisition",
+      but the actual stat key used by `w.stats`/`w.statsMax` is "Accuracy" — don't trust tier-text
+      flavor strings for this mapping). If the copy's real MW stat isn't in the watched-stats list,
+      it falls back to its own "MW <name>" line so it's never silently dropped. Computed **per copy**
+      (each copy can have a different real masterwork), not per weapon.
+    - **Current → best-possible per stat** (`46 → 52`) when a barrel/mag swap could push it higher;
+      just the number when already at the ceiling. Verified: ranking (gold/teal/red) and the god-roll
+      criteria check both key off `statsMax` (the best-achievable value across every barrel/mag
+      option in both sockets, summed — confirmed equivalent to trying every combination since barrel
+      and magazine stat contributions are independent), never the live/current value alone.
+    - **Kill tracker** added per copy (was missing entirely before).
+    - Tag-priority sort (already shipped 2026-07-05, confirmed unchanged: favorite→keep→none→junk).
+    Body widened to 1080px to give the table room. Verified against live data via direct DOM
+    inspection (not just visually): MW badge landed on the correct per-copy stat, fallback line fired
+    correctly when the real MW wasn't a watched stat, sort order held for a 4-tag-variety weapon.
   - **Server stability (2026-07-05):** global `uncaughtException`/`unhandledRejection` handlers keep
     the server alive on any stray error; EADDRINUSE retries are **bounded** (exit after ~20s, no zombie
     procs); server binds **dual-stack** `listen(PORT,'::')`. The launcher (`start-vault.ps1`) restarts

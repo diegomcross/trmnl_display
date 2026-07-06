@@ -50,36 +50,49 @@ input[type=checkbox]{accent-color:var(--gold);width:15px;height:15px;flex-shrink
 .pk.t2{background:rgba(207,174,66,.22);color:var(--gold);border-color:var(--gold);font-weight:600}
 .pk.t2::before{content:"★ "}
 .tools{display:flex;gap:5px;flex-wrap:wrap;align-items:center;border-top:1px solid var(--line);padding:7px 0;font-size:11px;color:var(--dim)}
-.copy{display:grid;grid-template-columns:82px minmax(0,1fr) minmax(155px,auto);gap:16px;border-top:1px dashed var(--line);padding:10px 0;font-size:12px;align-items:start}
-.copy .cA{display:flex;flex-direction:column;gap:6px;align-items:flex-start}
-.copy .cB{min-width:0}
-.copy .cC{display:flex;flex-direction:column;gap:7px;align-items:flex-end;text-align:right}
-.copy .rollline{line-height:1.5}
-.copy .statline{margin-top:4px}
-.copy .cp{color:var(--mut)}
-.copy .hit{color:var(--keep)}
-.copy .hi{color:var(--gold);font-weight:600}
-.copy .act{text-decoration:underline}
+/* organized copy table (2026-07-06 redesign — Diego's approved "Mockup B") */
+.ctable{border:1px solid var(--line);margin-top:8px}
+.trow{display:grid;grid-template-columns:74px 1.3fr 1.3fr 1.2fr 1.2fr auto;gap:12px;align-items:start;padding:10px 12px;border-top:1px solid var(--line);font-size:12px}
+.trow:first-child{border-top:none}
+.trow.thead{background:var(--panel2);border-top:none;font-family:Bahnschrift,"Roboto Condensed",sans-serif;font-size:9.5px;color:var(--dim);text-transform:uppercase;letter-spacing:.06em;padding:7px 12px;align-items:center}
+.trow.god{box-shadow:inset 3px 0 0 var(--gold)}
+.tscore{display:flex;flex-direction:column;gap:2px}
+.tcell{display:flex;flex-direction:column;gap:4px;min-width:0}
+.tcell .rperk{line-height:1.4}
+.rperk.cp{color:var(--mut)}
+.rperk.hit{color:var(--keep)}
+.rperk.hi{color:var(--gold);font-weight:600}
+.rperk.act{text-decoration:underline}
 .frac{font-size:10px;color:var(--dim);font-variant-numeric:tabular-nums}
 .chips{display:flex;gap:4px;flex-wrap:wrap}
 .chip{background:var(--panel2);border:1px solid var(--line);color:var(--mut);padding:5px 9px;font-size:10.5px;cursor:pointer;clip-path:polygon(5px 0,100% 0,100% calc(100% - 5px),calc(100% - 5px) 100%,0 100%,0 5px);font-family:inherit;text-transform:uppercase;letter-spacing:.04em}
 .chip.on.keep{border-color:var(--keep);color:var(--keep);background:rgba(95,208,221,.14)}
 .chip.on.favorite{border-color:var(--gold);color:var(--gold);background:rgba(207,174,66,.16)}
 .chip.on.junk{border-color:var(--junk);color:var(--junk);background:rgba(255,106,82,.14)}
-.copy .loc{font-size:10.5px;color:var(--mut);line-height:1.55}
-.copy .loc b{color:var(--ink)}
-.copy .acts{display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
+/* stats: full names (never abbreviated), MW badge sits inline with its own stat,
+   current -> best-achievable (barrel/mag swap) shown when it differs */
+.statcell{display:flex;flex-direction:column;gap:4px}
+.statrow2{display:flex;align-items:baseline;gap:6px;font-variant-numeric:tabular-nums}
+.statrow2 .sname{min-width:58px;color:var(--dim);font-size:9.5px;text-transform:uppercase;letter-spacing:.03em;font-family:Bahnschrift,"Roboto Condensed",sans-serif}
+.statrow2 .sval{color:var(--mut);font-size:11.5px}
+.statrow2 .sval b{color:var(--ink)}
+.statrow2.s1 .sval{color:var(--gold)} .statrow2.s1 .sval b{color:var(--gold);font-weight:700}
+.statrow2.s2 .sval{color:var(--keep)} .statrow2.s2 .sval b{color:var(--keep);font-weight:700}
+.statrow2.s3 .sval{color:var(--junk)} .statrow2.s3 .sval b{color:var(--junk);font-weight:700}
+.mwtag{font-family:Bahnschrift,"Roboto Condensed",sans-serif;font-size:8.5px;letter-spacing:.04em;background:var(--gold);color:#000;padding:1px 5px;flex:0 0 auto}
+.loccell{font-size:10.5px;color:var(--mut);line-height:1.6}
+.loccell b{color:var(--ink)}
+.mwfallback{margin-top:2px}
+.killrow{display:flex;align-items:center;gap:4px;margin-top:3px;color:var(--mut)}
+.killrow .kn{color:var(--ink);font-variant-numeric:tabular-nums;font-weight:700}
+.actcell{display:flex;flex-direction:column;gap:6px;align-items:flex-end}
 .lockb.mv{font-size:11px;padding:4px 10px}
 .score{font-size:14px;font-weight:700;padding:3px 9px;clip-path:var(--clip);background:var(--panel2);color:var(--mut);font-variant-numeric:tabular-nums;white-space:nowrap;display:inline-block}
 .score.hot{background:rgba(207,174,66,.2);color:var(--gold);font-weight:700}
 .lockb{background:none;border:1px solid var(--line);color:var(--mut);cursor:pointer;font-size:13px;padding:2px 7px;clip-path:var(--clip)}
 .lockb.on{border-color:var(--gold);color:var(--gold)}
 .tagv{font-size:10.5px;color:var(--purp)}
-.st{background:var(--panel2);padding:2px 7px;font-size:11px;color:var(--mut);font-variant-numeric:tabular-nums;clip-path:var(--clip);display:inline-block;margin:2px 2px 0 0}
-.st b{font-weight:600;color:var(--ink)}
-.st.s1 b{color:var(--gold)} .st.s1{outline:1px solid var(--gold);outline-offset:-1px}
-.st.s2 b{color:var(--keep)} .st.s2{outline:1px solid var(--keep);outline-offset:-1px}
-.st.s3 b{color:var(--junk)} .st.s3{outline:1px solid var(--junk);outline-offset:-1px}
+@media(max-width:760px){.trow{grid-template-columns:1fr}.trow.thead{display:none}.actcell{align-items:flex-start}}
 .row{display:flex;justify-content:space-between;gap:8px;align-items:center;border-top:1px solid var(--line);padding:8px 0}
 .row .rn{font-weight:600;font-size:13px}
 .row .ri{color:var(--mut);font-size:11px}
@@ -95,11 +108,8 @@ input[type=checkbox]{accent-color:var(--gold);width:15px;height:15px;flex-shrink
 .hperks .hp2{color:var(--gold)}
 .hperks{overflow:hidden;text-overflow:ellipsis}
 :focus-visible{outline:2px solid var(--gold);outline-offset:2px}
-@media(min-width:760px){body{max-width:880px;margin:0 auto}}
+@media(min-width:760px){body{max-width:1080px;margin:0 auto}}   /* widened for the copy table (2026-07-06) */
 @media(max-width:520px){
-  .copy{grid-template-columns:1fr;gap:9px}
-  .copy .cC{align-items:flex-start;text-align:left}
-  .copy .acts{justify-content:flex-start}
   .tools{gap:4px}
   .pk,.chip{padding:7px 11px}   /* bigger tap targets on phone */
 }
@@ -252,42 +262,63 @@ function renderWatched(){
       return `<button class="pk ${on?'t1':''}" data-w="${hash}" data-st="${esc(s)}">${esc(s)}</button>`;
     }).join('');
 
-    const copyRows=copies.map(({w,sc})=>{
-      const col=ci=>w.cols[ci].map(p=>{
-        const pr=(cfg.perks||{})[p.n]||0;
-        return `<span class="rperk ${pr===2?'hi':pr===1?'hit':'cp'} ${p.on?'act':''}" data-pn="${esc(p.n)}">${pIco(p.n)}${esc(p.n)}</span>`;
-      }).join('')||'—';
-      const stats=(cfg.stats||[]).map(s=>{
-        const v=w.statsMax[s];
-        return `<span class="st ${v!==undefined?rankOf[s](v):''}">${esc(s)} <b>${v??'—'}</b></span>`;
-      }).join('');
-      const tag=tagOf(w);
-      const chips=['keep','favorite','junk'].map(t=>
-        `<button class="chip ${tag===t?'on '+t:''}" data-ctag="${w.id}" data-t="${t}" title="Tag ${t}${tag===t?' — tap again to clear':''}">${t==='favorite'?'fav':t}</button>`).join('');
-      const inVault=w.own==='Vault';
-      const moveBtn=inVault
-        ? `<button class="lockb mv" data-equip="${w.id}" data-rhash="${w.rhash}" data-own="${esc(w.own)}" title="Pull to your character and equip">Equip</button>`
-        : `<button class="lockb mv" data-vault="${w.id}" data-rhash="${w.rhash}" data-own="${esc(w.own)}" title="Send this copy to the vault">→ Vault</button>`;
-      return `<div class="copy">
-        <div class="cA">
-          <span class="score ${sc.god?'hot':''}" title="${sc.matched}/${sc.selN} criteria matched, weighted">${sc.pct}%</span>
-          ${sc.selN?`<span class="frac">${sc.matched}/${sc.selN}${sc.god?' 🎯':''}</span>`:''}
-          <div class="chips">${chips}</div>
-        </div>
-        <div class="cB">
-          <div class="rollline"><b>3:</b> ${col(0)}</div>
-          <div class="rollline"><b>4:</b> ${col(1)}</div>
-          ${stats?`<div class="statline">${stats}</div>`:''}
-        </div>
-        <div class="cC">
-          <div class="loc">${inVault?'Vault':'on <b>'+esc(w.own)+'</b>'} · ${w.pwr}<br>MW <span class="${cfg.mw&&w.mw===cfg.mw?'hi':'cp'}">${w.mw||'—'}</span> · DIM ${w.tag||'none'}</div>
-          <div class="acts">
+    // w.mw is the copy's REAL masterwork, but it's stored as the lowercase plug identifier
+    // (e.g. "charge_time", "reload") while cfg.stats holds the display stat name ("Charge
+    // Time", "Reload Speed") — they don't match as plain strings. Checked against the live
+    // manifest (weapon masterwork plugs) rather than guessed: most stats convert cleanly,
+    // but reload->"Reload Speed", projectile_speed->"Velocity", and damage->"Impact" don't
+    // follow a simple snake_case->Title Case rule.
+    const MW_STAT_NAME={range:'Range',stability:'Stability',handling:'Handling',reload:'Reload Speed',
+      blast_radius:'Blast Radius',charge_time:'Charge Time',draw_time:'Draw Time',
+      projectile_speed:'Velocity',accuracy:'Accuracy',damage:'Impact'};
+    const copyRows=(copies.length?`<div class="ctable">
+      <div class="trow thead"><span>Score</span><span>Column 3</span><span>Column 4</span><span>Stats</span><span>Location / Kills</span><span>Actions</span></div>
+      ${copies.map(({w,sc})=>{
+        const col=ci=>w.cols[ci].map(p=>{
+          const pr=(cfg.perks||{})[p.n]||0;
+          return `<span class="rperk ${pr===2?'hi':pr===1?'hit':'cp'} ${p.on?'act':''}" data-pn="${esc(p.n)}">${pIco(p.n)}${esc(p.n)}</span>`;
+        }).join('')||'—';
+        // this copy's masterwork, translated to the same name space as the watched stats —
+        // if that stat is being watched the MW badge rides right next to it; otherwise (an
+        // untracked stat, or no MW at all) it needs its own fallback line, still visible
+        const mwStatName=w.mw&&(MW_STAT_NAME[w.mw]||w.mw);
+        const mwShownInline=mwStatName && (cfg.stats||[]).includes(mwStatName);
+        // full stat names (never abbreviated); current -> best-achievable value (barrel/mag
+        // swap) when it differs; the masterwork stat gets its badge right next to it
+        const stats=(cfg.stats||[]).map(s=>{
+          const cur=w.stats?.[s], max=w.statsMax?.[s];
+          const rank=max!==undefined?rankOf[s](max):'';
+          const val=(cur!==undefined && max!==undefined && max>cur)?`${cur} &rarr; <b>${max}</b>`:`${max??cur??'—'}`;
+          return `<div class="statrow2 ${rank}"><span class="sname">${esc(s)}</span><span class="sval">${val}</span>${mwShownInline&&mwStatName===s?'<span class="mwtag">MW</span>':''}</div>`;
+        }).join('');
+        const tag=tagOf(w);
+        const chips=['keep','favorite','junk'].map(t=>
+          `<button class="chip ${tag===t?'on '+t:''}" data-ctag="${w.id}" data-t="${t}" title="Tag ${t}${tag===t?' — tap again to clear':''}">${t==='favorite'?'fav':t}</button>`).join('');
+        const inVault=w.own==='Vault';
+        const moveBtn=inVault
+          ? `<button class="lockb mv" data-equip="${w.id}" data-rhash="${w.rhash}" data-own="${esc(w.own)}" title="Pull to your character and equip">Equip</button>`
+          : `<button class="lockb mv" data-vault="${w.id}" data-rhash="${w.rhash}" data-own="${esc(w.own)}" title="Send this copy to the vault">→ Vault</button>`;
+        return `<div class="trow ${sc.god?'god':''}">
+          <div class="tscore">
+            <span class="score ${sc.god?'hot':''}" title="${sc.matched}/${sc.selN} criteria matched, weighted">${sc.pct}%</span>
+            ${sc.selN?`<span class="frac">${sc.matched}/${sc.selN}${sc.god?' 🎯':''}</span>`:''}
+          </div>
+          <div class="tcell">${col(0)}</div>
+          <div class="tcell">${col(1)}</div>
+          <div class="statcell">${stats||'—'}</div>
+          <div class="loccell">${inVault?'Vault':'on <b>'+esc(w.own)+'</b>'} · ✦${w.pwr}${w.locked?' · locked':''}
+            ${(!mwShownInline && w.mw)?`<div class="mwfallback">MW <span class="rperk ${cfg.mw&&w.mw===cfg.mw?'hi':'cp'}">${esc(mwStatName||w.mw)}</span></div>`:''}
+            <div class="killrow"><span class="kn">${(w.kills||0).toLocaleString()}</span> kills</div>
+          </div>
+          <div class="actcell">
             ${selMode?`<input type="checkbox" data-sel="${w.id}" ${sel.has(w.id)?'checked':''}>`:''}
             <button class="lockb ${w.locked?'on':''}" data-lock="${w.id}" data-to="${w.locked?0:1}" title="${w.locked?'Unlock':'Lock'}">${LKSVG(!!w.locked)}</button>
             ${moveBtn}
+            <div class="chips">${chips}</div>
           </div>
-        </div></div>`;
-    }).join('');
+        </div>`;
+      }).join('')}
+    </div>`:'');
 
     return `<div class="card">${head}<div class="wbody">
       <div class="meta">${esc(d.ty)} · ${d.slot} · ${d.ammo} · ${d.dmg}${d.src?` · <b>${esc(d.src)}</b>`:''}
@@ -300,7 +331,7 @@ function renderWatched(){
         </div>
         <div class="colh">Wanted masterwork</div>
         <select data-mw="${hash}"><option value="">any</option>${mwOpts.map(s=>`<option ${cfg.mw===s?'selected':''}>${s}</option>`).join('')}</select>
-        <div class="colh">Watched stats — highest possible on each roll (barrel/mag included)</div><div class="pool">${statBtns}</div>
+        <div class="colh">Watched stats — shown as current → best possible (barrel/mag swap included)</div><div class="pool">${statBtns}</div>
       </div>
       ${selMode?`<div class="tools">
         <button class="btn sm mut" data-selall="${hash}">Select all</button>
