@@ -537,14 +537,19 @@ Core priorities, in his words:
       copy** is auto-kept and chimes with a **different sound** (`beepUpgrade`, a rising 660/990/1320
       triad vs the god-roll `beep`). **Chimes fire only for `w.fresh` drops** — never during the bulk
       re-tag of your existing vault (which would beep dozens of times).
-    - **Last-copy guarantee (Diego, 2026-07-06):** the app must **never remove your last copy** of a
-      weapon — one copy always stays, either one you kept or the app's best per the rules. Implemented
-      as a per-weapon pass after decisions: if EVERY copy of a weapon would end up junk AND the app is
-      the one junking, its best-scoring app-junked copy is promoted back to **keep** (`protectedLast`,
-      shown as a "last copy" badge in the log). If all copies were already junk by Diego's own hand,
-      that's left alone. Net effect: **the app only junks duplicates.** Verified live via dry-run —
-      16 weapons whose copies would all have been junked (e.g. The Palindrome 38%, Igneous Hammer Adept
-      50%) were instead kept (keep 54→68), and single-copy weapons are never junked.
+    - **Per-weapon dedup + last-copy guarantee (Diego, 2026-07-06):** decisions are computed for every
+      copy first, then a **per-weapon pass** (`decByWeapon`) enforces Diego's dedup rule: for a weapon
+      with multiple copies, **keep only the best FAVORITE and the best-rated KEEP — junk every other
+      copy** (regardless of its score band). "Best favorite" = highest-scored copy with score≥fav% or a
+      favorite tag; "best keep" = highest-scored copy with score≥keep% or a keep tag (excluding the
+      favorite). Locked / equipped / exotic / postmaster copies are **untouchable and survive on their
+      own** (a locked keeper is why a weapon can have all its *unlocked* copies junked). Baked-in
+      **last-copy guarantee:** if a weapon would otherwise have zero survivors, its best copy is kept
+      instead (`protectedLast`, "last copy" badge) — the app **never removes your last copy, only
+      duplicates.** Verified live via dry-run (cap raised for the test then the config file deleted so
+      the live default stays 25): 47 multi-copy weapons touched, **0 weapons ended with >1 favorite or
+      >1 keep**; Qua Vinctus IV → 1 favorite (100%) + 1 keep (88%) + 2 junk; Felwinter's Lie (13 copies,
+      1 locked+kept) → the 12 unlocked duplicates junked, the locked keeper untouched.
     - **Junk staging:** keeps `junkStage` (default **3**) junk-tagged legendaries on a character
       (default `stageCid = LOCK_CTX.characterId` = first char, which resolves to the Warlock main
       `2305843010375154553`) so Diego dismantles them in-game — **there is no Bungie dismantle API.**
@@ -558,8 +563,10 @@ Core priorities, in his words:
       all agent testing so no real writes hit the account.
     - **Endpoints:** `GET /api/auto` → `{cfg,last,gameUp}`; `POST /api/auto` saves a config patch;
       `POST /api/auto/run {dryRun}` runs a pass immediately (dry by default) and returns the log.
-    - **First-run note:** with Diego's 87 favorite perks (all grade 1), the current preview would
-      **keep 68 / favorite 34 / junk 25** in the first live sweep (keep includes 16 last-copy protects). That's expected from the rules; if
+    - **First-run note:** with Diego's 87 favorite perks + the per-weapon dedup, an uncapped preview
+      showed **favorite 23 / keep 69 / junk 112** across ~101 weapons (best fav + best keep per weapon,
+      rest junked). The live default caps junk at **25/pass** (every 2 min), so a big cleanup trickles
+      through over several passes rather than all at once — safe and gradual. That's expected from the rules; if
       it's too aggressive, raise the keep/fav thresholds on `/auto` before enabling. **Not yet fired
       live** — the always-on 8787 server must be restarted to load this code (agent did NOT restart it,
       so Diego is present for the first live sweep). Reversible: tags are DIM tags, staging is a move.

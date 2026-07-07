@@ -11,10 +11,11 @@ as keep or junk and then move them to a character in-game for dismantling… run
 an activity." Full spec + technical facts are in HANDOFF "What works now" (Auto inventory manager). His
 4 design decisions (via AskUserQuestion): **go fully live** (real writes, not preview-only) · unwatched
 weapons scored by **★ favorites on the actual roll** · **never touch exotics** · watched weapons **junk
-below the 75% god-roll bar**. Two follow-up asks (2026-07-06, after first build): **(a) last-copy
-guarantee** — never junk your last copy of a weapon; the app only junks duplicates (per-weapon pass
-promotes the best would-be-junk copy back to keep; verified keep 54→68, 16 protected). **(b) `REBOOT.cmd`**
-— a double-clickable one-click restart for both servers (kills node + launchers, relaunches hidden).
+below the 75% god-roll bar**. Follow-up asks (2026-07-06, after first build): **(a) per-weapon dedup** — for a
+weapon with multiple copies, keep only the best favorite + the best-rated keep, junk every other copy;
+with a baked-in last-copy guarantee (never removes your last copy, only duplicates). Verified live
+dry-run: 47 multi-copy weapons, 0 with >1 fav/keep; locked copies protected. **(b) `REBOOT.cmd`** — a
+double-clickable one-click restart for both servers (kills node + launchers, relaunches hidden).
 Engine = `autoManage`/`autoDecide`/`favRollScore`/`fetchActivity` in `vault-verdict.js`; UI =
 `auto-manager.html`; config = `auto-manage.json` (gitignored); restart = `REBOOT.cmd`.
 
@@ -25,7 +26,7 @@ favorites scoring, the 25-junk safety cap, and junk-staging no-op (main already 
 **OPEN — Diego's next actions (surfaced in the wrap-up):**
 1. **Double-click `REBOOT.cmd`** to load this code into the always-on servers (agent deliberately did NOT
    restart them, so Diego is present for the first live sweep).
-2. Open `/auto`, press **Preview next run** to see the plan (currently keep 68 / favorite 34 / junk 25 —
+2. Open `/auto`, press **Preview next run** to see the plan (dedup makes this junk-heavy; capped 25/pass —
    big because he has 87 grade-1 favorites). If too aggressive, raise the keep/favorite thresholds, Save,
    Preview again. It's already `enabled:true`, so it goes live on the next in-orbit pass.
 3. Confirm the first real sweep in-game (tags land in DIM, 3 junk staged on the Warlock, dismantle them).
