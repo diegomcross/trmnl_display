@@ -1290,22 +1290,27 @@ function favRollScore(w, fav) {
   for (const n of names) { const g = fav[n]; if (g) num += (FAVW[g] || 1); else nonfav++; }
   return Math.round(100 * num / (num + nonfav));
 }
-// Decide ONE copy's action. Returns {tag,score,isWatched,reason,notify?} or null (leave it).
+// Decide ONE copy's action. ALWAYS returns {tag,score,isWatched,eligible,reason?,notify?}:
+// tag is the change (or null = leave it), and `eligible` marks a legendary copy the app is
+// allowed to junk (used by the last-copy guarantee to pick a survivor). score = -1 when the
+// copy is untouchable (exotic/locked/equipped/postmaster) or has no perk signal.
 function autoDecide(w, def, watch, fav, thr, rankOfByHash) {
-  if (!def || def.tt !== 5) return null;                       // legendaries only (skip exotics/rares)
-  if (w.loc === 'equipped' || w.loc === 'postmaster') return null;
-  if (w.locked) return null;                                  // respect locks (god-rolls auto-lock)
+  const skip = (reason) => ({ tag: null, score: -1, isWatched: false, eligible: false, reason });
+  if (!def || def.tt !== 5) return skip('not a legendary');   // legendaries only (skip exotics/rares)
+  if (w.loc === 'equipped' || w.loc === 'postmaster') return skip(w.loc);
+  if (w.locked) return skip('locked');                        // respect locks (god-rolls auto-lock)
   const cur = w.tag || '';
-  if (cur === 'infuse' || cur === 'archive') return null;     // leave DIM's other tags alone
+  if (cur === 'infuse' || cur === 'archive') return skip('dim ' + cur);  // leave DIM's other tags alone
   const cfg = watch[w.hash];
   const isWatched = !!(cfg && Object.keys(cfg.perks || {}).length);
   const score = isWatched ? scoreWeaponCopy(w, cfg, rankOfByHash[w.hash] || {}).pct : favRollScore(w, fav);
-  if (score < 0) return null;                                 // no signal — leave it
-  if (score >= thr.fav)  return cur === 'favorite' ? null : { tag: 'favorite', score, isWatched, notify: 'high', reason: `${score}% >= ${thr.fav}` };
-  if (score >= thr.keep) return (cur === 'keep' || cur === 'favorite') ? null : { tag: 'keep', score, isWatched, reason: `${score}% >= ${thr.keep}` };
+  const base = { tag: null, score, isWatched, eligible: true };
+  if (score < 0) return { ...base, eligible: false, reason: 'no perk signal' };
+  if (score >= thr.fav)  return cur === 'favorite' ? base : { ...base, tag: 'favorite', notify: 'high', reason: `${score}% >= ${thr.fav}` };
+  if (score >= thr.keep) return (cur === 'keep' || cur === 'favorite') ? base : { ...base, tag: 'keep', reason: `${score}% >= ${thr.keep}` };
   const junkBar = isWatched ? thr.watchedJunk : thr.unwatchedJunk;
-  if (score < junkBar && cur !== 'keep' && cur !== 'favorite') return cur === 'junk' ? null : { tag: 'junk', score, isWatched, reason: `${score}% < ${junkBar}` };
-  return null;                                                // in the "leave untouched" band
+  if (score < junkBar && cur !== 'keep' && cur !== 'favorite') return cur === 'junk' ? base : { ...base, tag: 'junk', reason: `${score}% < ${junkBar}` };
+  return base;                                                // in the "leave untouched" band
 }
 // A distinct rising chime (vs the god-roll beep()) for a new watched drop that beats your best.
 function beepUpgrade() { exec('powershell -NoProfile -c "[console]::beep(660,150); [console]::beep(990,150); [console]::beep(1320,260)"', { windowsHide: true }, () => {}); }
@@ -1577,14 +1582,35 @@ async function main() {
         bestKept[h] = best;
       }
 
-      let junked = 0, moves = 0;
+      // 1) decide every copy first (no writes) so the last-copy guarantee can see the whole weapon.
+      const decByWeapon = {};
       for (const w of wcache.weapons) {
         const dec = autoDecide(w, defs[w.hash], watch, fav, thr, rankOfByHash);
-        if (!dec) continue;
+        (decByWeapon[w.hash] = decByWeapon[w.hash] || []).push({ w, dec });
+      }
+      // 2) LAST-COPY GUARANTEE (Diego's rule): the app must never remove your last copy of a
+      // weapon — one copy always stays, either one you kept or the app's best per the rules. So
+      // if every copy of a weapon would end up junk AND the app is the one junking, un-junk its
+      // best-scoring copy back to keep. (If all copies were already junk by YOUR hand, that's your
+      // call — we don't override it.) Net effect: the app only junks DUPLICATES.
+      for (const list of Object.values(decByWeapon)) {
+        const finalTag = (d) => (d.dec.tag ?? (d.w.tag || 'none'));
+        if (list.some((d) => finalTag(d) !== 'junk')) continue;      // at least one already survives
+        const appJunk = list.filter((d) => d.dec.tag === 'junk');
+        if (!appJunk.length) continue;                               // all pre-existing manual junk — leave it
+        appJunk.sort((a, b) => (b.dec.score ?? -1) - (a.dec.score ?? -1));
+        const keep = appJunk[0];
+        keep.dec = { ...keep.dec, tag: 'keep', protectedLast: true, reason: 'kept — last copy of this weapon' };
+      }
+
+      // 3) apply.
+      let junked = 0, moves = 0;
+      for (const list of Object.values(decByWeapon)) for (const { w, dec } of list) {
+        if (!dec.tag) continue;
         if (dec.tag === 'junk' && junked >= cfg.maxJunkPerRun) continue;
         const name = defs[w.hash]?.n || String(w.hash);
         const upgrade = dec.isWatched && w.fresh && (dec.tag === 'keep' || dec.tag === 'favorite') && dec.score > (bestKept[w.hash] ?? -1);
-        const line = { id: w.id, name, from: w.tag || 'none', to: dec.tag, score: dec.score, watched: dec.isWatched, upgrade, reason: dec.reason };
+        const line = { id: w.id, name, from: w.tag || 'none', to: dec.tag, score: dec.score, watched: dec.isWatched, upgrade, lastCopy: !!dec.protectedLast, reason: dec.reason };
         if (dec.tag === 'junk') junked++;
         log.counts[dec.tag]++;
         w.tag = dec.tag;   // reflect in memory (ephemeral wcache) so staging below sees it — even in dry-run

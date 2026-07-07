@@ -11,17 +11,21 @@ as keep or junk and then move them to a character in-game for dismantling… run
 an activity." Full spec + technical facts are in HANDOFF "What works now" (Auto inventory manager). His
 4 design decisions (via AskUserQuestion): **go fully live** (real writes, not preview-only) · unwatched
 weapons scored by **★ favorites on the actual roll** · **never touch exotics** · watched weapons **junk
-below the 75% god-roll bar**. Engine = `autoManage`/`autoDecide`/`favRollScore`/`fetchActivity` in
-`vault-verdict.js`; UI = `auto-manager.html`; config = `auto-manage.json` (gitignored).
+below the 75% god-roll bar**. Two follow-up asks (2026-07-06, after first build): **(a) last-copy
+guarantee** — never junk your last copy of a weapon; the app only junks duplicates (per-weapon pass
+promotes the best would-be-junk copy back to keep; verified keep 54→68, 16 protected). **(b) `REBOOT.cmd`**
+— a double-clickable one-click restart for both servers (kills node + launchers, relaunches hidden).
+Engine = `autoManage`/`autoDecide`/`favRollScore`/`fetchActivity` in `vault-verdict.js`; UI =
+`auto-manager.html`; config = `auto-manage.json` (gitignored); restart = `REBOOT.cmd`.
 
 **Verified live via dry-run (`AUTO_DRYRUN=1`, port 8799 — no account writes):** activity gate correctly
 skipped a live pass while Diego was mid-activity while still previewing the plan; tag bands, watched-vs-
 favorites scoring, the 25-junk safety cap, and junk-staging no-op (main already had 7 junk) all behaved.
 
 **OPEN — Diego's next actions (surfaced in the wrap-up):**
-1. Restart the always-on Vault Verdict server so it loads this code (agent deliberately did NOT restart
-   it, so Diego is present for the first live sweep). A ~5s offline blip.
-2. Open `/auto`, press **Preview next run** to see the plan (currently keep 54 / favorite 34 / junk 25 —
+1. **Double-click `REBOOT.cmd`** to load this code into the always-on servers (agent deliberately did NOT
+   restart them, so Diego is present for the first live sweep).
+2. Open `/auto`, press **Preview next run** to see the plan (currently keep 68 / favorite 34 / junk 25 —
    big because he has 87 grade-1 favorites). If too aggressive, raise the keep/favorite thresholds, Save,
    Preview again. It's already `enabled:true`, so it goes live on the next in-orbit pass.
 3. Confirm the first real sweep in-game (tags land in DIM, 3 junk staged on the Warlock, dismantle them).

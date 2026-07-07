@@ -130,7 +130,7 @@ function renderLog(last){
     }
     return `<tr>
       <td>${tagCell(a.from)} → ${tagCell(a.to)}</td>
-      <td>${a.name}${a.upgrade?' <span class="up">▲ new best</span>':''}</td>
+      <td>${a.name}${a.upgrade?' <span class="up">▲ new best</span>':''}${a.lastCopy?' <span class="up" style="color:var(--keep)">last copy</span>':''}</td>
       <td class="mini">${a.watched?'watched':'favorites'}</td>
       <td class="sc">${a.score}%</td>
       <td class="${a.error?'err':'mini'}">${a.error||a.reason||''}</td></tr>`;

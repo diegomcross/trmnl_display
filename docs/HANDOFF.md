@@ -90,6 +90,7 @@ Core priorities, in his words:
 | `perktip.js` | **Shared perk hover popup** (served at `/perktip.js`, included by weapon-watch/perk-finder/weapon-vault). Sectioned card: element accent bar, name, **in-game description in an inset box** (same size), then **community-insight bullets**. Colouring engine: numbers **gold** (buff, shown `+11%`) / **red** (penalty `−`), **teal** seconds/time, **element-coloured keyword verbs** (Jolt=Arc, Scorch=Solar, Sever=Strand…), symbols `▸`(trigger) `▲`(ramp) `▼`(penalty) `×`(stacks) — **no emoji**. `PerkTip.init({perkDescs,perkInsights})`; auto `mouseover` on `[data-p]`/`[data-pn]`. Design + colours locked with Diego over live mockups. |
 | `.clarity-clean.json` | **Committed** curated perk bullets `{perkName:[{type,text}]}` (type ∈ trigger/ramp/penalty/buff/note → leading symbol). Hand-rewritten by Claude for the top ~34 perks, tight AND **complete** (every per-stack %, PvP split, enhanced bonus kept — Diego's rule: never drop info; numbers verbatim). English-only; other locales fall back to localised Clarity. Perks without an entry use the lossless `cleanClarityBullets` fallback. |
 | `perk-favorites.json` | Gitignored: Diego's **favorite trait perks as a graded map** `{perkName: grade 1-3}` (3-star rating in Perk Finder; back-compat: an old flat array loads as grade 1). Grade → vault-score weight **1★=1 · 2★=1.5 · 3★=2**. Scores EVERY weapon in the Weapon Vault. `.bak` alongside. GET/POST `/api/favorites`. |
+| `REBOOT.cmd` | **One-click server restart** (double-clickable). Stops any running node servers + their keep-alive launcher loops, waits, then relaunches `start-display.ps1` (port 3000) and `start-vault.ps1` (port 8787) hidden. Use it to load new code after an update or to bring things back if stuck. ASCII-only. |
 | `auto-manager.html` | **Auto-Manager** control page (served at `/auto`): On/Off toggle (live account writes), rules/thresholds editor (junk-below unwatched/watched %, keep %, favorite %, junk-stage count, per-run safety caps), a **Preview next run (no writes)** button and a **Run now (live)** button, plus a decision-log table of the last run (from→to tag, score, watched/favorites basis, ▲ new-best flag, staging moves). Reads/writes `GET/POST /api/auto`, `POST /api/auto/run`. |
 | `artifacts.html` | **Artifact Mods** reference (served at `/artifacts`): all 7 Monument of Triumph artifacts × 3 columns × 7 mods, with a filter by subclass verb (Solar/Arc/Void/Stasis/Strand/Prismatic keywords) + keywords (Champions, grenade, Super, weapon types) + free text search. **Data is STATIC** (hand-transcribed from the neonlightsmedia Monument of Triumph guide) — if Bungie changes artifacts/mods, edit the `ARTIFACTS` array in this file. No API. |
 | `CLAUDE.md` | Working rules for agents: never drop features, test before push, and **mandatory upkeep of this file + `docs/NEXT_PHASE.md`**. |
@@ -536,6 +537,14 @@ Core priorities, in his words:
       copy** is auto-kept and chimes with a **different sound** (`beepUpgrade`, a rising 660/990/1320
       triad vs the god-roll `beep`). **Chimes fire only for `w.fresh` drops** — never during the bulk
       re-tag of your existing vault (which would beep dozens of times).
+    - **Last-copy guarantee (Diego, 2026-07-06):** the app must **never remove your last copy** of a
+      weapon — one copy always stays, either one you kept or the app's best per the rules. Implemented
+      as a per-weapon pass after decisions: if EVERY copy of a weapon would end up junk AND the app is
+      the one junking, its best-scoring app-junked copy is promoted back to **keep** (`protectedLast`,
+      shown as a "last copy" badge in the log). If all copies were already junk by Diego's own hand,
+      that's left alone. Net effect: **the app only junks duplicates.** Verified live via dry-run —
+      16 weapons whose copies would all have been junked (e.g. The Palindrome 38%, Igneous Hammer Adept
+      50%) were instead kept (keep 54→68), and single-copy weapons are never junked.
     - **Junk staging:** keeps `junkStage` (default **3**) junk-tagged legendaries on a character
       (default `stageCid = LOCK_CTX.characterId` = first char, which resolves to the Warlock main
       `2305843010375154553`) so Diego dismantles them in-game — **there is no Bungie dismantle API.**
@@ -550,7 +559,7 @@ Core priorities, in his words:
     - **Endpoints:** `GET /api/auto` → `{cfg,last,gameUp}`; `POST /api/auto` saves a config patch;
       `POST /api/auto/run {dryRun}` runs a pass immediately (dry by default) and returns the log.
     - **First-run note:** with Diego's 87 favorite perks (all grade 1), the current preview would
-      **keep 54 / favorite 34 / junk 25** in the first live sweep. That's expected from the rules; if
+      **keep 68 / favorite 34 / junk 25** in the first live sweep (keep includes 16 last-copy protects). That's expected from the rules; if
       it's too aggressive, raise the keep/fav thresholds on `/auto` before enabling. **Not yet fired
       live** — the always-on 8787 server must be restarted to load this code (agent did NOT restart it,
       so Diego is present for the first live sweep). Reversible: tags are DIM tags, staging is a move.
