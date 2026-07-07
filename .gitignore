@@ -51,6 +51,8 @@ perk-favorites.json
 perk-favorites.json.bak
 auto-manage.json
 auto-manage.json.bak
+auto-applied.json
+auto-applied.json.bak
 
 # vault-verdict server log + ad-hoc test dumps
 vault.log

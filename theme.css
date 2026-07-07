@@ -36,6 +36,8 @@
   --purp:#a777c5;          /* void      */
   --rev:#cdae32;
   --junk:#e0523a;          /* solar-red */
+  --fav-auto:#6ede9b;      /* favorite the APP applied (light green) */
+  --fav-man:#ff86c8;       /* favorite YOU applied     (pink)        */
   --legendary:#522f65;
   --solar:#f1631d;
 

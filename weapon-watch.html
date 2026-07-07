@@ -67,7 +67,8 @@ input[type=checkbox]{accent-color:var(--gold);width:15px;height:15px;flex-shrink
 .chips{display:flex;gap:4px;flex-wrap:wrap}
 .chip{background:var(--panel2);border:1px solid var(--line);color:var(--mut);padding:5px 9px;font-size:10.5px;cursor:pointer;clip-path:polygon(5px 0,100% 0,100% calc(100% - 5px),calc(100% - 5px) 100%,0 100%,0 5px);font-family:inherit;text-transform:uppercase;letter-spacing:.04em}
 .chip.on.keep{border-color:var(--keep);color:var(--keep);background:rgba(95,208,221,.14)}
-.chip.on.favorite{border-color:var(--gold);color:var(--gold);background:rgba(207,174,66,.16)}
+.chip.on.favorite{border-color:var(--fav-man);color:var(--fav-man);background:rgba(255,134,200,.14)}
+.chip.on.favorite.af{border-color:var(--fav-auto);color:var(--fav-auto);background:rgba(110,222,155,.14)}
 .chip.on.junk{border-color:var(--junk);color:var(--junk);background:rgba(255,106,82,.14)}
 /* stats: full names (never abbreviated), MW badge sits inline with its own stat,
    current -> best-achievable (barrel/mag swap) shown when it differs */
@@ -293,7 +294,7 @@ function renderWatched(){
         }).join('');
         const tag=tagOf(w);
         const chips=['keep','favorite','junk'].map(t=>
-          `<button class="chip ${tag===t?'on '+t:''}" data-ctag="${w.id}" data-t="${t}" title="Tag ${t}${tag===t?' — tap again to clear':''}">${t==='favorite'?'fav':t}</button>`).join('');
+          `<button class="chip ${tag===t?'on '+t:''}${t==='favorite'&&tag==='favorite'&&w.autoFav?' af':''}" data-ctag="${w.id}" data-t="${t}" title="Tag ${t}${tag===t?' — tap again to clear':''}${t==='favorite'&&tag==='favorite'?(w.autoFav?' (auto)':' (yours)'):''}">${t==='favorite'?'fav':t}</button>`).join('');
         const inVault=w.own==='Vault';
         const moveBtn=inVault
           ? `<button class="lockb mv" data-equip="${w.id}" data-rhash="${w.rhash}" data-own="${esc(w.own)}" title="Pull to your character and equip">Equip</button>`

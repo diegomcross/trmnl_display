@@ -539,17 +539,27 @@ Core priorities, in his words:
       re-tag of your existing vault (which would beep dozens of times).
     - **Per-weapon dedup + last-copy guarantee (Diego, 2026-07-06):** decisions are computed for every
       copy first, then a **per-weapon pass** (`decByWeapon`) enforces Diego's dedup rule: for a weapon
-      with multiple copies, **keep only the best FAVORITE and the best-rated KEEP — junk every other
-      copy** (regardless of its score band). "Best favorite" = highest-scored copy with score≥fav% or a
-      favorite tag; "best keep" = highest-scored copy with score≥keep% or a keep tag (excluding the
-      favorite). Locked / equipped / exotic / postmaster copies are **untouchable and survive on their
-      own** (a locked keeper is why a weapon can have all its *unlocked* copies junked). Baked-in
-      **last-copy guarantee:** if a weapon would otherwise have zero survivors, its best copy is kept
-      instead (`protectedLast`, "last copy" badge) — the app **never removes your last copy, only
-      duplicates.** Verified live via dry-run (cap raised for the test then the config file deleted so
-      the live default stays 25): 47 multi-copy weapons touched, **0 weapons ended with >1 favorite or
-      >1 keep**; Qua Vinctus IV → 1 favorite (100%) + 1 keep (88%) + 2 junk; Felwinter's Lie (13 copies,
-      1 locked+kept) → the 12 unlocked duplicates junked, the locked keeper untouched.
+      with multiple copies, **keep ALL favorites plus the single best-rated KEEP — junk every other
+      copy** (regardless of its score band). "Favorite" = a copy with score≥fav% OR a favorite tag (all
+      such copies are kept — Diego's "keep all favorites" 2026-07-06); "best keep" = highest-scored copy
+      with score≥keep% or a keep tag (excluding favorites). Locked / equipped / exotic / postmaster
+      copies are **untouchable and survive on their own** (a locked keeper is why a weapon can have all
+      its *unlocked* copies junked). Baked-in **last-copy guarantee:** if a weapon would otherwise have
+      zero survivors, its best copy is kept (`protectedLast`, "last copy" badge) — the app **never
+      removes your last copy, only duplicates.** Verified live via dry-run: Qua Vinctus IV → 2 favorites
+      (100%) + 1 keep (88%) + 1 junk; Hammerhead → both 100% copies favorited, none junked; Felwinter's
+      Lie (13 copies, 1 locked+kept) → 12 unlocked duplicates junked, locked keeper untouched.
+      **Side effect of "keep all favorites":** a weapon whose rolls are ALL favorited (100% coverage on
+      every copy, e.g. Positive Outlook × 8) keeps every copy — dedup can't trim it. Expected; loosen by
+      un-favoriting some of its perks or raising the fav threshold.
+    - **Auto vs manual favorites — green/pink (Diego, 2026-07-06):** the app records every favorite IT
+      applies in `auto-applied.json` (gitignored, instance-id set; an id is dropped when the app retags
+      it keep/junk, and a favorite the app never touches stays OUT → manual). `fetchWeapons` sets
+      `w.autoFav` (true = app-applied). The UI paints **app favorites light green (`--fav-auto`)** and
+      **your own favorites pink (`--fav-man`)** — new shared theme.css vars — on the Weapon Vault tile
+      corner flag (`.wt.tg-favorite.af`), Weapon Watch copy chips, and New Drops chips; the `/auto` page
+      has a colour legend. Verified: field present on all weapons, 0 green until the first live run
+      (Diego's 37 existing favorites correctly read as manual/pink).
     - **Junk staging:** keeps `junkStage` (default **3**) junk-tagged legendaries on a character
       (default `stageCid = LOCK_CTX.characterId` = first char, which resolves to the Warlock main
       `2305843010375154553`) so Diego dismantles them in-game — **there is no Bungie dismantle API.**

@@ -12,10 +12,13 @@ an activity." Full spec + technical facts are in HANDOFF "What works now" (Auto 
 4 design decisions (via AskUserQuestion): **go fully live** (real writes, not preview-only) · unwatched
 weapons scored by **★ favorites on the actual roll** · **never touch exotics** · watched weapons **junk
 below the 75% god-roll bar**. Follow-up asks (2026-07-06, after first build): **(a) per-weapon dedup** — for a
-weapon with multiple copies, keep only the best favorite + the best-rated keep, junk every other copy;
-with a baked-in last-copy guarantee (never removes your last copy, only duplicates). Verified live
-dry-run: 47 multi-copy weapons, 0 with >1 fav/keep; locked copies protected. **(b) `REBOOT.cmd`** — a
+weapon with multiple copies, keep **all favorites** + the best-rated keep, junk every other copy; with a
+baked-in last-copy guarantee (never removes your last copy, only duplicates). **(b) `REBOOT.cmd`** — a
 double-clickable one-click restart for both servers (kills node + launchers, relaunches hidden).
+**(c) auto vs manual favorites** — `w.autoFav` (app records its own favorites in `auto-applied.json`);
+UI paints app favorites **light green**, your own **pink** (theme.css `--fav-auto`/`--fav-man`) on
+Weapon Vault / Watch / New-Drops tags; `/auto` has a legend. **(d) nav** — `/auto` "Auto-Manager" tab
+added to `banner.js`, which every one of the 8 pages already includes, so all pages have the button.
 Engine = `autoManage`/`autoDecide`/`favRollScore`/`fetchActivity` in `vault-verdict.js`; UI =
 `auto-manager.html`; config = `auto-manage.json` (gitignored); restart = `REBOOT.cmd`.
 

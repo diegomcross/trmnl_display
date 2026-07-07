@@ -59,7 +59,7 @@ select{cursor:pointer}
 .wt .lk{position:absolute;right:3px;top:3px;color:#fff;opacity:.92;display:flex;filter:drop-shadow(0 1px 1px rgba(0,0,0,.85))}
 /* clipped top-left corner = the tag flag (calmer than a full bar) */
 .wt .tagc{position:absolute;left:0;top:0;width:0;height:0;border-style:solid;border-width:15px 15px 0 0;border-color:transparent transparent transparent transparent}
-.wt.tg-keep .tagc{border-top-color:var(--keep)} .wt.tg-favorite .tagc{border-top-color:var(--fav)} .wt.tg-junk .tagc{border-top-color:var(--junk)}
+.wt.tg-keep .tagc{border-top-color:var(--keep)} .wt.tg-favorite .tagc{border-top-color:var(--fav-man)} .wt.tg-favorite.af .tagc{border-top-color:var(--fav-auto)} .wt.tg-junk .tagc{border-top-color:var(--junk)}
 .wt.equipped{outline:2px solid var(--keep);outline-offset:-2px;box-shadow:0 0 7px rgba(95,208,221,.5)}
 .wt.sel{outline:2px solid #fff;outline-offset:-2px}
 .wt.match{outline:2px solid var(--gold);outline-offset:-2px;z-index:1}
@@ -348,7 +348,7 @@ function render(){
 function tile(w){
   const d=w._d, ex=d.tt===6;
   const el=d.dmgIcon?`<img class="elic" src="${BN}${d.dmgIcon}" alt="${esc(d.dmg||'')}" title="${esc(d.dmg||'')}">`:(ELCOL[d.dmg]?`<span class="el" style="background:${ELCOL[d.dmg]}"></span>`:'');
-  const tg=w.tag?` tg-${w.tag}`:'';
+  const tg=w.tag?` tg-${w.tag}${w.tag==='favorite'&&w.autoFav?' af':''}`:'';
   const scoreMode=tileMode==='score' && favAny();   // show favorite-roll % in place of power
   const fs=scoreMode?favScore(w):-1;
   const num=scoreMode?(fs<0?'—':fs+'%'):(w.pwr||'');
@@ -462,7 +462,7 @@ async function doAct(act,ds){
 }
 function refreshTile(w){
   const t=document.querySelector(`.wt[data-id="${w.id}"]`); if(!t) return;
-  t.classList.remove('tg-keep','tg-favorite','tg-junk'); if(w.tag) t.classList.add('tg-'+w.tag);
+  t.classList.remove('tg-keep','tg-favorite','tg-junk','af'); if(w.tag) t.classList.add('tg-'+w.tag); if(w.tag==='favorite'&&w.autoFav) t.classList.add('af');
   const lk=t.querySelector('.lk'); if(w.locked&&!lk){ const s=document.createElement('span'); s.className='lk'; s.innerHTML=LKSVG(true); t.appendChild(s); } else if(!w.locked&&lk){ lk.remove(); }
 }
 

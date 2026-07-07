@@ -42,7 +42,7 @@ th{text-align:left;color:var(--dim);font-size:10px;text-transform:uppercase;lett
 td{padding:6px 8px;border-bottom:1px solid var(--panel2);vertical-align:middle}
 .tg{font-size:10px;font-weight:700;padding:2px 8px;clip-path:var(--clip);text-transform:uppercase;letter-spacing:.04em}
 .tg.keep{background:rgba(95,208,221,.14);color:var(--keep)}
-.tg.favorite{background:rgba(207,174,66,.16);color:var(--gold)}
+.tg.favorite{background:rgba(110,222,155,.16);color:var(--fav-auto)}
 .tg.junk{background:rgba(255,106,82,.14);color:var(--junk)}
 .tg.stage{background:rgba(139,147,167,.14);color:var(--mut)}
 .sc{font-variant-numeric:tabular-nums;font-weight:700}
@@ -99,7 +99,10 @@ td{padding:6px 8px;border-bottom:1px solid var(--panel2);vertical-align:middle}
       <b>Watched weapons</b> (you picked tracked perks) score by perk-match %; copies under the watched-junk
       bar get junked. <b>Unwatched weapons</b> score by how many of the copy's rolled perks are your
       ★ Perk-Finder favorites. A brand-new watched drop that beats your best kept copy is auto-kept with a
-      different chime. Favorited copies are also locked.
+      different chime. Favorited copies are also locked. For weapons with multiple copies it keeps <b>all
+      favorites plus the single best-rated keep</b> and junks the rest — never your last copy.
+      <br><span style="color:var(--fav-auto)">&#9632; light green favorite = set by the app</span> &nbsp;
+      <span style="color:var(--fav-man)">&#9632; pink favorite = set by you</span> (shown on the Weapon Vault / Watch / Drops tags).
     </p>
   </div>
 

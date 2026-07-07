@@ -863,6 +863,9 @@ async function fetchWeapons(e) {
   for (const n of new Set([...Object.keys(perkIcons), ...Object.keys(perkDescs)])) {
     const b = insightBullets(n); if (b && b.length) perkInsights[n] = b;
   }
+  // mark app-applied favorites so the UI can paint them green vs Diego's own (pink).
+  const autoFav = loadAutoFavSet();
+  for (const w of weapons) w.autoFav = w.tag === 'favorite' && autoFav.has(w.id);
   return { weapons, defs: mergedDefs, perkIcons, perkDescs, perkInsights, fetchedAt: new Date().toISOString(), account: `${m.membershipType}/${m.membershipId}` };
 }
 
@@ -1277,6 +1280,12 @@ function saveAuto(patch) {
   const cur = loadAuto();
   saveJsonSafe(AUTO_FILE, { ...cur, ...patch, thr: { ...cur.thr, ...(patch.thr || {}) } });
 }
+// Instance ids the APP itself tagged favorite — so the UI can paint auto-favorites light green
+// and Diego's own (manual) favorites pink. An item leaves this set when the app retags it
+// keep/junk; a pre-existing favorite the app never re-tags stays OUT (→ manual/pink).
+const AUTOFAV_FILE = path.join(__dirname, 'auto-applied.json');
+const loadAutoFavSet = () => { const a = loadJson(AUTOFAV_FILE); return new Set(Array.isArray(a) ? a : []); };
+const saveAutoFavSet = (set) => saveJsonSafe(AUTOFAV_FILE, [...set]);
 let AUTO_LOG = { at: null, safe: null, activity: null, dryRun: AUTO_DRYRUN, actions: [], counts: {}, note: 'not run yet' };
 
 const rolledNames = (w) => [...(w.cols[0] || []), ...(w.cols[1] || [])].map((p) => p.n);
@@ -1588,9 +1597,9 @@ async function main() {
         const dec = autoDecide(w, defs[w.hash], watch, fav, thr, rankOfByHash);
         (decByWeapon[w.hash] = decByWeapon[w.hash] || []).push({ w, dec });
       }
-      // 2) PER-WEAPON DEDUP (Diego's rule): for a weapon with multiple copies, keep only the best
-      // FAVORITE and the best-rated KEEP — junk every other copy. Locked / equipped / exotic copies
-      // are untouchable and survive on their own. Baked-in LAST-COPY GUARANTEE: if a weapon would
+      // 2) PER-WEAPON DEDUP (Diego's rule): for a weapon with multiple copies, keep ALL favorites
+      // plus the best-rated KEEP — junk every other copy. Locked / equipped / exotic copies are
+      // untouchable and survive on their own. Baked-in LAST-COPY GUARANTEE: if a weapon would
       // otherwise end up with zero surviving copies, its best copy is kept instead — the app never
       // removes your last copy of a weapon, only duplicates.
       for (const list of Object.values(decByWeapon)) {
@@ -1601,16 +1610,16 @@ async function main() {
         const protectedSurvivor = list.some((d) => !d.dec.eligible && (d.w.tag || 'none') !== 'junk');
         const isFav = (d) => scoreOf(d) >= thr.fav || d.w.tag === 'favorite';
         const isKeep = (d) => !isFav(d) && (scoreOf(d) >= thr.keep || d.w.tag === 'keep');
-        const survFav = elig.filter(isFav).sort((a, b) => scoreOf(b) - scoreOf(a))[0] || null;
+        const favs = new Set(elig.filter(isFav));                   // KEEP ALL FAVORITES (Diego's rule)
         let survKeep = elig.filter(isKeep).sort((a, b) => scoreOf(b) - scoreOf(a))[0] || null;
         let lastCopyForced = false;
-        if (!protectedSurvivor && !survFav && !survKeep) {          // weapon would vanish → keep its best copy
+        if (!protectedSurvivor && !favs.size && !survKeep) {        // weapon would vanish → keep its best copy
           survKeep = [...elig].sort((a, b) => scoreOf(b) - scoreOf(a))[0];
           lastCopyForced = true;
         }
         for (const d of elig) {
-          if (d === survFav) {
-            d.dec = { ...d.dec, tag: d.w.tag === 'favorite' ? null : 'favorite', notify: 'high', reason: `best copy -> favorite (${scoreOf(d)}%)` };
+          if (favs.has(d)) {
+            d.dec = { ...d.dec, tag: d.w.tag === 'favorite' ? null : 'favorite', notify: 'high', reason: `favorite (${scoreOf(d)}%)` };
           } else if (d === survKeep) {
             d.dec = { ...d.dec, tag: d.w.tag === 'keep' ? null : 'keep', protectedLast: lastCopyForced, reason: lastCopyForced ? 'kept - last copy of this weapon' : `best-rated keep (${scoreOf(d)}%)` };
           } else {
@@ -1620,6 +1629,7 @@ async function main() {
       }
 
       // 3) apply.
+      const autoFavSet = loadAutoFavSet();   // ids the app has favorited (green vs pink in the UI)
       let junked = 0, moves = 0;
       for (const list of Object.values(decByWeapon)) for (const { w, dec } of list) {
         if (!dec.tag) continue;
@@ -1630,6 +1640,10 @@ async function main() {
         if (dec.tag === 'junk') junked++;
         log.counts[dec.tag]++;
         w.tag = dec.tag;   // reflect in memory (ephemeral wcache) so staging below sees it — even in dry-run
+        // track app-applied favorites: this is an AUTO favorite (the app set it) → green; any tag
+        // change off favorite drops it from the set. Diego's own favorites are never in here → pink.
+        if (dec.tag === 'favorite') { autoFavSet.add(w.id); w.autoFav = true; }
+        else { autoFavSet.delete(w.id); w.autoFav = false; }
         if (!dryRun) {
           try {
             await dimWriteTag(e, w.id, dec.tag);
@@ -1640,6 +1654,7 @@ async function main() {
         }
         log.actions.push(line);
       }
+      if (!dryRun) saveAutoFavSet(autoFavSet);
 
       // Stage junk-tagged weapons on a character so Diego can dismantle them in-game.
       const stageCid = cfg.stageCid || LOCK_CTX?.characterId;
