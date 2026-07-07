@@ -1269,10 +1269,10 @@ const FAVW = { 1: 1, 2: 1.5, 3: 2 };                   // ★ grade -> weight (m
 const STAGE_SLOT_CAP = 9;                              // unequipped weapons per slot on a character
 const AUTO_DEFAULTS = {
   enabled: true,           // Diego chose "go fully live"
-  junkStage: 3,            // keep this many junk-tagged weapons staged on a character
+  junkStage: 3,            // junk-tagged weapons to stage IN EACH SLOT (Kinetic/Energy/Power) → 9 total
   stageCid: null,          // character to stage junk on (null = default / Warlock main)
   maxJunkPerRun: 25,       // safety cap: never junk-tag more than this in one pass
-  maxMovesPerRun: 8,       // safety cap on item transfers per pass
+  maxMovesPerRun: 12,      // safety cap on item transfers per pass (up to 9 stages + spills)
   thr: { unwatchedJunk: 60, keep: 80, fav: 90, watchedJunk: 75 },
 };
 function loadAuto() {
@@ -1670,29 +1670,41 @@ async function main() {
       }
       if (!dryRun) saveAutoFavSet(autoFavSet);
 
-      // Stage junk-tagged weapons on a character so Diego can dismantle them in-game.
+      // Stage junk-tagged weapons on a character so Diego can dismantle them in-game. Diego wants
+      // junkStage (default 3) staged in EACH weapon slot — Kinetic / Energy / Power — so 9 total.
       const stageCid = cfg.stageCid || LOCK_CTX?.characterId;
       if (stageCid) {
-        const onChar = wcache.weapons.filter((w) => w.tag === 'junk' && !w.locked && w.loc === 'char' && w.ownCid === stageCid && defs[w.hash]?.tt === 5);
-        let need = cfg.junkStage - onChar.length;
-        const slotCount = {};
-        for (const w of wcache.weapons) if (w.ownCid === stageCid && (w.loc === 'char' || w.loc === 'equipped')) { const s = defs[w.hash]?.slot; if (s) slotCount[s] = (slotCount[s] || 0) + 1; }
-        const pool = wcache.weapons
-          .filter((w) => w.tag === 'junk' && !w.locked && w.loc === 'vault' && defs[w.hash]?.tt === 5)
-          .sort((a, b) => (a.pwr || 0) - (b.pwr || 0));   // stage the lowest-power junk first
-        for (const w of pool) {
-          if (need <= 0 || moves >= cfg.maxMovesPerRun) break;
-          const slot = defs[w.hash]?.slot; if (!slot) continue;
-          if ((slotCount[slot] || 0) >= STAGE_SLOT_CAP + 1) {   // slot full (1 equipped + 9) → make space
-            const spill = wcache.weapons.find((x) => x.ownCid === stageCid && x.loc === 'char' && defs[x.hash]?.slot === slot && !x.locked && x.tag !== 'junk' && x.tag !== 'keep' && x.tag !== 'favorite');
-            if (!spill) { log.actions.push({ stage: 'skip', name: defs[w.hash]?.n, reason: `${slot} full, nothing safe to vault` }); continue; }
-            log.actions.push({ stage: 'spill', name: defs[spill.hash]?.n, slot }); log.counts.spilled++;
-            if (!dryRun) { try { await transferItem(e, spill.id, spill.rhash, stageCid, true); spill.loc = 'vault'; spill.own = 'Vault'; spill.ownCid = null; moves++; } catch (err) { log.actions.push({ stage: 'error', name: defs[spill.hash]?.n, error: err.message }); continue; } }
-            slotCount[slot]--;
+        const SLOTS = ['Kinetic', 'Energy', 'Power'];
+        // current per-slot occupancy on the stage character, and how many junk are already staged per slot
+        const slotCount = {}, junkStaged = {};
+        for (const w of wcache.weapons) if (w.ownCid === stageCid && (w.loc === 'char' || w.loc === 'equipped')) {
+          const s = defs[w.hash]?.slot; if (!s) continue;
+          slotCount[s] = (slotCount[s] || 0) + 1;
+          if (w.tag === 'junk' && !w.locked && w.loc === 'char' && defs[w.hash]?.tt === 5) junkStaged[s] = (junkStaged[s] || 0) + 1;
+        }
+        // vault junk waiting to be staged, bucketed by slot, lowest-power first
+        const poolBySlot = {};
+        for (const w of wcache.weapons) {
+          if (w.tag !== 'junk' || w.locked || w.loc !== 'vault' || defs[w.hash]?.tt !== 5) continue;
+          const s = defs[w.hash]?.slot; if (!s) continue;
+          (poolBySlot[s] = poolBySlot[s] || []).push(w);
+        }
+        for (const s of SLOTS) (poolBySlot[s] || []).sort((a, b) => (a.pwr || 0) - (b.pwr || 0));
+        for (const slot of SLOTS) {
+          let need = cfg.junkStage - (junkStaged[slot] || 0);
+          for (const w of (poolBySlot[slot] || [])) {
+            if (need <= 0 || moves >= cfg.maxMovesPerRun) break;
+            if ((slotCount[slot] || 0) >= STAGE_SLOT_CAP + 1) {   // slot full (1 equipped + 9) → make space
+              const spill = wcache.weapons.find((x) => x.ownCid === stageCid && x.loc === 'char' && defs[x.hash]?.slot === slot && !x.locked && x.tag !== 'junk' && x.tag !== 'keep' && x.tag !== 'favorite');
+              if (!spill) { log.actions.push({ stage: 'skip', name: defs[w.hash]?.n, reason: `${slot} full, nothing safe to vault` }); break; }
+              log.actions.push({ stage: 'spill', name: defs[spill.hash]?.n, slot }); log.counts.spilled++;
+              if (!dryRun) { try { await transferItem(e, spill.id, spill.rhash, stageCid, true); spill.loc = 'vault'; spill.own = 'Vault'; spill.ownCid = null; moves++; } catch (err) { log.actions.push({ stage: 'error', name: defs[spill.hash]?.n, error: err.message }); break; } }
+              slotCount[slot]--;
+            }
+            log.actions.push({ stage: 'add', name: defs[w.hash]?.n, slot }); log.counts.staged++;
+            if (!dryRun) { try { await transferItem(e, w.id, w.rhash, stageCid, false); w.loc = 'char'; w.ownCid = stageCid; w.own = LOCK_CTX?.clsById?.[stageCid] || w.own; moves++; } catch (err) { log.actions.push({ stage: 'error', name: defs[w.hash]?.n, error: err.message }); continue; } }
+            slotCount[slot] = (slotCount[slot] || 0) + 1; need--;
           }
-          log.actions.push({ stage: 'add', name: defs[w.hash]?.n, slot }); log.counts.staged++;
-          if (!dryRun) { try { await transferItem(e, w.id, w.rhash, stageCid, false); w.loc = 'char'; w.ownCid = stageCid; w.own = LOCK_CTX?.clsById?.[stageCid] || w.own; moves++; } catch (err) { log.actions.push({ stage: 'error', name: defs[w.hash]?.n, error: err.message }); continue; } }
-          slotCount[slot] = (slotCount[slot] || 0) + 1; need--;
         }
       }
 

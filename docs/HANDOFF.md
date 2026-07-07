@@ -560,12 +560,16 @@ Core priorities, in his words:
       corner flag (`.wt.tg-favorite.af`), Weapon Watch copy chips, and New Drops chips; the `/auto` page
       has a colour legend. Verified: field present on all weapons, 0 green until the first live run
       (Diego's 37 existing favorites correctly read as manual/pink).
-    - **Junk staging:** keeps `junkStage` (default **3**) junk-tagged legendaries on a character
-      (default `stageCid = LOCK_CTX.characterId` = first char, which resolves to the Warlock main
-      `2305843010375154553`) so Diego dismantles them in-game — **there is no Bungie dismantle API.**
-      If the character already has ≥3 junk it no-ops (verified: main had 7 junk → staged 0). To top up
-      it pulls the **lowest-power** vault junk; if the target slot bucket is full (1 equipped + 9) it
-      first vaults one **unlocked, non-junk, non-keep/fav** weapon from that slot to make room (`spill`).
+    - **Junk staging (per slot, Diego 2026-07-06):** keeps `junkStage` (default **3**) junk-tagged
+      legendaries staged **in EACH weapon slot — Kinetic / Energy / Power — so 9 total** — on a character
+      (default `stageCid = LOCK_CTX.characterId` = first char = the Warlock main `2305843010375154553`)
+      so Diego dismantles them in-game (**there is no Bungie dismantle API**). Per slot it computes
+      `need = 3 − junk already staged in that slot` and pulls the **lowest-power** vault junk of that slot
+      until met (so it never stages more than 3/slot, and re-tops-up as Diego dismantles). If a slot
+      bucket is full (1 equipped + 9) it first vaults one **unlocked, non-junk, non-keep/fav** weapon
+      from that slot to make room (`spill`). `maxMovesPerRun` raised to **12** (up to 9 stages + spills).
+      Verified live via dry-run: main had Kinetic 9 / Energy 9 / Power 0 junk staged → the app added
+      **Power 0→3** and left the already-stocked slots (need ≤ 0).
     - **Safety caps:** `maxJunkPerRun` (25) and `maxMovesPerRun` (8) bound how much one pass can do,
       so a logic bug can't sweep the whole vault in one tick (verified junk capped at exactly 25).
       Config lives in `auto-manage.json` (gitignored, `saveJsonSafe` + `.bak`); `enabled` defaults

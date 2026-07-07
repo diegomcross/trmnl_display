@@ -21,6 +21,8 @@ double-clickable one-click restart for both servers (kills node + launchers, rel
 UI paints app favorites **light green**, your own **pink** (theme.css `--fav-auto`/`--fav-man`) on
 Weapon Vault / Watch / New-Drops tags; `/auto` has a legend. **(d) nav** — `/auto` "Auto-Manager" tab
 added to `banner.js`, which every one of the 8 pages already includes, so all pages have the button.
+**(e) junk staging is PER SLOT** — keep 3 junk staged in EACH of Kinetic/Energy/Power (9 total), topped
+up per slot (`need = 3 − staged`, never more); verified dry-run filled Power 0→3.
 Engine = `autoManage`/`autoDecide`/`favRollScore`/`fetchActivity` in `vault-verdict.js`; UI =
 `auto-manager.html`; config = `auto-manage.json` (gitignored); restart = `REBOOT.cmd`.
 
