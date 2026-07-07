@@ -12,8 +12,10 @@ an activity." Full spec + technical facts are in HANDOFF "What works now" (Auto 
 4 design decisions (via AskUserQuestion): **go fully live** (real writes, not preview-only) · unwatched
 weapons scored by **★ favorites on the actual roll** · **never touch exotics** · watched weapons **junk
 below the 75% god-roll bar**. Follow-up asks (2026-07-06, after first build): **(a) per-weapon dedup** — for a
-weapon with multiple copies, keep **all favorites** + the best-rated keep, junk every other copy; with a
-baked-in last-copy guarantee (never removes your last copy, only duplicates). **(b) `REBOOT.cmd`** — a
+weapon with multiple copies, keep **all favorites** + **exactly one keep** (the single highest ≥80%,
+and only if no keep exists yet — never replaces your keep), **never overwrites your manual junk**, junk
+the other duplicates; baked-in last-copy guarantee (never removes your last copy). Verified 0 rule
+violations in dry-run. **(b) `REBOOT.cmd`** — a
 double-clickable one-click restart for both servers (kills node + launchers, relaunches hidden).
 **(c) auto vs manual favorites** — `w.autoFav` (app records its own favorites in `auto-applied.json`);
 UI paints app favorites **light green**, your own **pink** (theme.css `--fav-auto`/`--fav-man`) on

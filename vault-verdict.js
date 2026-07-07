@@ -1255,9 +1255,12 @@ function scoreWeaponCopy(w, cfg, rankOf) {
 //   - LEGENDARIES ONLY — exotics are never touched.
 //   - Watched weapons (you picked tracked perks): score = perk-match %; junk < god bar (75%).
 //   - Unwatched weapons: score = ★-favorite coverage of the copy's ACTUAL rolled perks;
-//     junk < 60%, leave 60-80 untouched, keep >= 80, favorite (+lock+beep) >= 90.
+//     favorite (+lock+beep) >= 90.
+//   - Per weapon: keep ALL favorites + ONE keep (highest copy >= 80%, only if no keep exists yet);
+//     junk the other duplicates. Never replaces an existing keep, never re-tags your manual junk.
 //   - A brand-new watched drop that beats your best kept copy → keep + a DIFFERENT sound.
-//   - Never touch locked / equipped / postmaster copies, and never junk a keep/favorite tag.
+//   - Never touch locked / equipped / postmaster copies; never junk a keep/favorite; never
+//     overwrite a copy you tagged junk.
 // There is no Bungie dismantle API — "stage for dismantling" just moves junk onto a
 // character so YOU dismantle it. Every decision is recorded in AUTO_LOG for the /auto UI.
 const AUTO_FILE = path.join(__dirname, 'auto-manage.json');
@@ -1597,33 +1600,44 @@ async function main() {
         const dec = autoDecide(w, defs[w.hash], watch, fav, thr, rankOfByHash);
         (decByWeapon[w.hash] = decByWeapon[w.hash] || []).push({ w, dec });
       }
-      // 2) PER-WEAPON DEDUP (Diego's rule): for a weapon with multiple copies, keep ALL favorites
-      // plus the best-rated KEEP — junk every other copy. Locked / equipped / exotic copies are
-      // untouchable and survive on their own. Baked-in LAST-COPY GUARANTEE: if a weapon would
-      // otherwise end up with zero surviving copies, its best copy is kept instead — the app never
-      // removes your last copy of a weapon, only duplicates.
+      // 2) PER-WEAPON DEDUP (Diego's rules, 2026-07-06). For a weapon with multiple copies:
+      //   - Keep ALL favorites (score>=fav% or a favorite tag).
+      //   - Keep exactly ONE keep: the single highest-scored copy >= keep%, and ONLY if the weapon
+      //     has no keep yet. If a keep already exists (yours or a prior run) the app adds none and
+      //     leaves it be — it never replaces your keep with a "better" copy.
+      //   - Never overwrite a copy YOU tagged junk (left as junk even with a great roll).
+      //   - Junk every other duplicate copy.
+      // Locked / equipped / exotic copies are untouchable and survive on their own. Baked-in
+      // LAST-COPY GUARANTEE: if a weapon would otherwise keep nothing, its best copy is kept —
+      // the app never removes your last copy, only duplicates.
       for (const list of Object.values(decByWeapon)) {
         const scoreOf = (d) => (d.dec.score ?? -1);
         const elig = list.filter((d) => d.dec.eligible);            // legendary, unlocked, not equipped/postmaster
         if (!elig.length) continue;                                 // nothing the app may touch
-        // a locked/equipped copy that isn't junk-tagged survives regardless — covers the last-copy check
-        const protectedSurvivor = list.some((d) => !d.dec.eligible && (d.w.tag || 'none') !== 'junk');
+        const active = elig.filter((d) => d.w.tag !== 'junk');      // respect manual junk — never re-tag it
         const isFav = (d) => scoreOf(d) >= thr.fav || d.w.tag === 'favorite';
-        const isKeep = (d) => !isFav(d) && (scoreOf(d) >= thr.keep || d.w.tag === 'keep');
-        const favs = new Set(elig.filter(isFav));                   // KEEP ALL FAVORITES (Diego's rule)
-        let survKeep = elig.filter(isKeep).sort((a, b) => scoreOf(b) - scoreOf(a))[0] || null;
+        const favs = new Set(active.filter(isFav));                 // keep ALL favorites
+        const hasKeep = list.some((d) => d.w.tag === 'keep');       // an existing keep (yours or prior run)
+        let survKeep = hasKeep ? null                               // don't add a keep if one already exists
+          : (active.filter((d) => !favs.has(d) && scoreOf(d) >= thr.keep).sort((a, b) => scoreOf(b) - scoreOf(a))[0] || null);
+        // last-copy guarantee: a locked/equipped non-junk copy already survives; else if nothing would
+        // survive, keep the best active copy (even below keep%) so the weapon isn't lost.
+        const protectedSurvivor = list.some((d) => !d.dec.eligible && (d.w.tag || 'none') !== 'junk');
         let lastCopyForced = false;
-        if (!protectedSurvivor && !favs.size && !survKeep) {        // weapon would vanish → keep its best copy
-          survKeep = [...elig].sort((a, b) => scoreOf(b) - scoreOf(a))[0];
+        if (!protectedSurvivor && !favs.size && !hasKeep && !survKeep && active.length) {
+          survKeep = [...active].sort((a, b) => scoreOf(b) - scoreOf(a))[0];
           lastCopyForced = true;
         }
         for (const d of elig) {
+          if (d.w.tag === 'junk') { d.dec = { ...d.dec, tag: null }; continue; }   // leave your junk alone
           if (favs.has(d)) {
             d.dec = { ...d.dec, tag: d.w.tag === 'favorite' ? null : 'favorite', notify: 'high', reason: `favorite (${scoreOf(d)}%)` };
+          } else if (d.w.tag === 'keep') {
+            d.dec = { ...d.dec, tag: null };                        // existing keep stays — never replaced or junked
           } else if (d === survKeep) {
-            d.dec = { ...d.dec, tag: d.w.tag === 'keep' ? null : 'keep', protectedLast: lastCopyForced, reason: lastCopyForced ? 'kept - last copy of this weapon' : `best-rated keep (${scoreOf(d)}%)` };
+            d.dec = { ...d.dec, tag: 'keep', protectedLast: lastCopyForced, reason: lastCopyForced ? 'kept - last copy of this weapon' : `best-rated keep (${scoreOf(d)}%)` };
           } else {
-            d.dec = { ...d.dec, tag: d.w.tag === 'junk' ? null : 'junk', reason: 'duplicate of a better copy' };
+            d.dec = { ...d.dec, tag: 'junk', reason: 'duplicate of a better copy' };
           }
         }
       }

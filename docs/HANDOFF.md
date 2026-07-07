@@ -539,19 +539,19 @@ Core priorities, in his words:
       re-tag of your existing vault (which would beep dozens of times).
     - **Per-weapon dedup + last-copy guarantee (Diego, 2026-07-06):** decisions are computed for every
       copy first, then a **per-weapon pass** (`decByWeapon`) enforces Diego's dedup rule: for a weapon
-      with multiple copies, **keep ALL favorites plus the single best-rated KEEP — junk every other
-      copy** (regardless of its score band). "Favorite" = a copy with score≥fav% OR a favorite tag (all
-      such copies are kept — Diego's "keep all favorites" 2026-07-06); "best keep" = highest-scored copy
-      with score≥keep% or a keep tag (excluding favorites). Locked / equipped / exotic / postmaster
-      copies are **untouchable and survive on their own** (a locked keeper is why a weapon can have all
-      its *unlocked* copies junked). Baked-in **last-copy guarantee:** if a weapon would otherwise have
-      zero survivors, its best copy is kept (`protectedLast`, "last copy" badge) — the app **never
-      removes your last copy, only duplicates.** Verified live via dry-run: Qua Vinctus IV → 2 favorites
-      (100%) + 1 keep (88%) + 1 junk; Hammerhead → both 100% copies favorited, none junked; Felwinter's
-      Lie (13 copies, 1 locked+kept) → 12 unlocked duplicates junked, locked keeper untouched.
+      with multiple copies (refined 2026-07-06): **keep ALL favorites + exactly ONE keep, junk the other
+      duplicates.** Precisely: (1) **favorites** = every copy with score≥fav% OR a favorite tag are kept;
+      (2) **one keep** = the single highest-scored copy at ≥keep%, and **only if the weapon has no keep
+      yet** — if a keep already exists (yours or a prior run) the app adds none and **never replaces it**
+      with a "better" copy; (3) **manual junk is never overwritten** — a copy YOU tagged junk stays junk
+      even with a god roll; (4) everything else junks. Locked / equipped / exotic / postmaster copies are
+      **untouchable and survive on their own** (a locked keeper is why a weapon can have all its
+      *unlocked* copies junked). Baked-in **last-copy guarantee:** if a weapon would otherwise keep
+      nothing, its best copy is kept (`protectedLast`, "last copy" badge) — the app **never removes your
+      last copy, only duplicates.** Verified live via dry-run with **0 rule violations**: 0 manual-junk
+      copies re-tagged keep/favorite, 0 weapons given >1 keep, 0 existing keeps junked.
       **Side effect of "keep all favorites":** a weapon whose rolls are ALL favorited (100% coverage on
-      every copy, e.g. Positive Outlook × 8) keeps every copy — dedup can't trim it. Expected; loosen by
-      un-favoriting some of its perks or raising the fav threshold.
+      every copy) keeps every copy — dedup can't trim it. Expected; loosen by un-favoriting some perks.
     - **Auto vs manual favorites — green/pink (Diego, 2026-07-06):** the app records every favorite IT
       applies in `auto-applied.json` (gitignored, instance-id set; an id is dropped when the app retags
       it keep/junk, and a favorite the app never touches stays OUT → manual). `fetchWeapons` sets
