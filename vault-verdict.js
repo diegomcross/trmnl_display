@@ -866,6 +866,15 @@ async function fetchWeapons(e) {
   // mark app-applied favorites so the UI can paint them green vs Diego's own (pink).
   const autoFav = loadAutoFavSet();
   for (const w of weapons) w.autoFav = w.tag === 'favorite' && autoFav.has(w.id);
+  // match each roll against Diego's saved Perk Finder combos → combo names (extra weight in
+  // auto-manage scoring) + a PVE/PVP roll tag: PVP only when a pvp-role combo matches this
+  // roll; every other roll reads PVE (Diego: "what's not PVP is considered PVE").
+  const combos = loadCombos();
+  for (const w of weapons) {
+    const hits = comboMatches(w, combos);
+    w.combos = hits.map((c) => c.name).filter(Boolean);
+    w.rollTag = hits.some((c) => String(c.role || '').toLowerCase() === 'pvp') ? 'pvp' : 'pve';
+  }
   return { weapons, defs: mergedDefs, perkIcons, perkDescs, perkInsights, fetchedAt: new Date().toISOString(), account: `${m.membershipType}/${m.membershipId}` };
 }
 
@@ -1276,9 +1285,9 @@ const AUTO_DEFAULTS = {
   stageCid: null,          // character to stage junk on (null = default / Warlock main)
   maxJunkPerRun: 25,       // safety cap: never junk-tag more than this in one pass
   maxMovesPerRun: 12,      // safety cap on item transfers per pass (up to 9 stages + spills)
-  activeSeconds: 30,       // check cadence while there's work to do / you're in an activity
-  idleSeconds: 120,        // "on hold" cadence when nothing's left — just watching for new drops
-  thr: { unwatchedJunk: 60, keep: 80, fav: 90, watchedJunk: 75 },
+  activeSeconds: 30,       // check cadence while Destiny is RUNNING (catch orbit + junk top-up fast)
+  idleSeconds: 120,        // cadence of the cheap no-op check while the game is CLOSED
+  thr: { unwatchedJunk: 60, keep: 80, fav: 90, watchedJunk: 75, comboFloor: 80 },
 };
 function loadAuto() {
   const f = loadJson(AUTO_FILE); const o = (f && typeof f === 'object' && !Array.isArray(f)) ? f : {};
@@ -1297,15 +1306,42 @@ const saveAutoFavSet = (set) => saveJsonSafe(AUTOFAV_FILE, [...set]);
 let AUTO_LOG = { at: null, safe: null, activity: null, dryRun: AUTO_DRYRUN, actions: [], counts: {}, note: 'not run yet' };
 
 const rolledNames = (w) => [...(w.cols[0] || []), ...(w.cols[1] || [])].map((p) => p.n);
-// Unwatched roll quality: how much of THIS copy's actual rolled perks you've favorited
-// (★-weighted). Returns -1 when there are no favorites / no rolled perks (→ leave it).
+// Unwatched roll quality — GRADE-NORMALIZED (2026-07-09 fix). Each trait column contributes
+// its BEST favorited perk's ★-grade weight (1★=1 · 2★=1.5 · 3★=2); score = that sum vs the
+// max possible (a 3★ favorite in BOTH columns = 100%). So: 3★+3★=100 · 3★+2★=88 · 2★+2★=75 ·
+// 1★+1★=50 · one column favorited only ≤50.
+// WHY: the old formula was "what fraction of this roll's perks are favorited" — a standard
+// 1-perk-per-column drop that happened to land two of Diego's 87 grade-1 favorites read
+// 100% ≥ the 90% favorite bar, so the app mass-favorited mediocre weapons (the bug Diego
+// reported). Under the new scale a favorite requires 3★ perks in both columns; two 1★
+// favorites = 50%, i.e. a decent dupe-survivor, never an auto-favorite.
 function favRollScore(w, fav) {
   if (!fav || !Object.keys(fav).length) return -1;
-  const names = new Set(rolledNames(w));
-  if (!names.size) return -1;
-  let num = 0, nonfav = 0;
-  for (const n of names) { const g = fav[n]; if (g) num += (FAVW[g] || 1); else nonfav++; }
-  return Math.round(100 * num / (num + nonfav));
+  const cols = [w.cols[0] || [], w.cols[1] || []];
+  if (!cols[0].length && !cols[1].length) return -1;
+  let sum = 0;
+  for (const col of cols) {
+    let best = 0;
+    for (const p of col) { const g = fav[p.n]; if (g && (FAVW[g] || 1) > best) best = FAVW[g] || 1; }
+    sum += best;
+  }
+  return Math.round(100 * sum / (2 * FAVW[3]));
+}
+// Diego's saved Perk Finder combos matched against a copy's ACTUAL roll: a combo hits when
+// one Slot-1 perk and one Slot-2 perk sit in DIFFERENT trait columns at once (the same rule
+// Perk Finder uses). Used to (a) give defined combos extra weight in auto-manage scoring
+// (comboFloor) and (b) auto-tag the roll PVP/PVE ("what's not PVP is considered PVE").
+function comboMatches(w, combos) {
+  const c0 = new Set((w.cols[0] || []).map((p) => p.n)), c1 = new Set((w.cols[1] || []).map((p) => p.n));
+  if (!c0.size || !c1.size) return [];
+  const out = [];
+  for (const c of (combos || [])) {
+    const s1 = c.slots?.[0] || [], s2 = c.slots?.[1] || [];
+    if (!s1.length || !s2.length) continue;
+    const inCol = (slot, col) => slot.some((n) => col.has(n));
+    if ((inCol(s1, c0) && inCol(s2, c1)) || (inCol(s2, c0) && inCol(s1, c1))) out.push(c);
+  }
+  return out;
 }
 // Decide ONE copy's action. ALWAYS returns {tag,score,isWatched,eligible,reason?,notify?}:
 // tag is the change (or null = leave it), and `eligible` marks a legendary copy the app is
@@ -1315,16 +1351,30 @@ function autoDecide(w, def, watch, fav, thr, rankOfByHash) {
   const skip = (reason) => ({ tag: null, score: -1, isWatched: false, eligible: false, reason });
   if (!def || def.tt !== 5) return skip('not a legendary');   // legendaries only (skip exotics/rares)
   if (w.loc === 'equipped' || w.loc === 'postmaster') return skip(w.loc);
-  if (w.locked) return skip('locked');                        // respect locks (god-rolls auto-lock)
-  const cur = w.tag || '';
+  // HEAL (2026-07-09): favorites the APP applied under the old saturating score (w.autoFav —
+  // Diego's own favorites are never in auto-applied.json) are re-decided from scratch, lock
+  // included (the app locked them itself), so the bogus green favorites demote to keep/junk
+  // under the fixed grade-aware scale instead of surviving forever behind their auto-lock.
+  const healFav = w.tag === 'favorite' && w.autoFav;
+  if (w.locked && !healFav) return skip('locked');            // respect locks (god-rolls auto-lock)
+  const cur = healFav ? '' : (w.tag || '');
   if (cur === 'infuse' || cur === 'archive') return skip('dim ' + cur);  // leave DIM's other tags alone
   const cfg = watch[w.hash];
   const isWatched = !!(cfg && Object.keys(cfg.perks || {}).length);
-  const score = isWatched ? scoreWeaponCopy(w, cfg, rankOfByHash[w.hash] || {}).pct : favRollScore(w, fav);
+  let score, via = '';
+  if (isWatched) score = scoreWeaponCopy(w, cfg, rankOfByHash[w.hash] || {}).pct;
+  else {
+    score = favRollScore(w, fav);
+    // "give defined combos extra weight" (Diego): a roll matching one of his saved Perk
+    // Finder combos is floored at comboFloor (default = the keep band, so it's kept but
+    // never auto-favorited on the combo alone) even when its ★-favorite coverage is low.
+    const floor = thr.comboFloor ?? 80;
+    if ((w.combos || []).length && score < floor) { score = floor; via = ` · combo: ${w.combos[0]}`; }
+  }
   const base = { tag: null, score, isWatched, eligible: true };
   if (score < 0) return { ...base, eligible: false, reason: 'no perk signal' };
-  if (score >= thr.fav)  return cur === 'favorite' ? base : { ...base, tag: 'favorite', notify: 'high', reason: `${score}% >= ${thr.fav}` };
-  if (score >= thr.keep) return (cur === 'keep' || cur === 'favorite') ? base : { ...base, tag: 'keep', reason: `${score}% >= ${thr.keep}` };
+  if (score >= thr.fav)  return cur === 'favorite' ? base : { ...base, tag: 'favorite', notify: 'high', reason: `${score}% >= ${thr.fav}${via}` };
+  if (score >= thr.keep) return (cur === 'keep' || cur === 'favorite') ? base : { ...base, tag: 'keep', reason: `${score}% >= ${thr.keep}${via}` };
   const junkBar = isWatched ? thr.watchedJunk : thr.unwatchedJunk;
   if (score < junkBar && cur !== 'keep' && cur !== 'favorite') return cur === 'junk' ? base : { ...base, tag: 'junk', reason: `${score}% < ${junkBar}` };
   return base;                                                // in the "leave untouched" band
@@ -1336,13 +1386,18 @@ function beepUpgrade() { exec('powershell -NoProfile -c "[console]::beep(660,150
 // played character. We only auto-manage in orbit (currentActivityHash 0) or a social space
 // (mode 40 — Tower / landing zones). Matchmaking for most playlists reports orbit until the
 // activity actually loads, so it's covered. Anything else = we're in an activity → skip.
+let ACT_MEMBER = null;   // membership resolution is stable — cache it (was an extra API call every 30s pass)
 async function fetchActivity(e) {
   const tok = await accessToken(e);
-  const msr = await bungie(`${BASE}/User/GetMembershipsById/${tok.membership_id}/254/`, e, tok.access_token);
-  const primary = msr.primaryMembershipId;
-  const m = (msr.destinyMemberships || []).find((x) => x.membershipId === primary)
-    || (msr.destinyMemberships || []).find((x) => x.crossSaveOverride === 0 || x.crossSaveOverride === x.membershipType)
-    || msr.destinyMemberships[0];
+  let m = ACT_MEMBER;
+  if (!m) {
+    const msr = await bungie(`${BASE}/User/GetMembershipsById/${tok.membership_id}/254/`, e, tok.access_token);
+    const primary = msr.primaryMembershipId;
+    m = (msr.destinyMemberships || []).find((x) => x.membershipId === primary)
+      || (msr.destinyMemberships || []).find((x) => x.crossSaveOverride === 0 || x.crossSaveOverride === x.membershipType)
+      || msr.destinyMemberships[0];
+    ACT_MEMBER = m;
+  }
   const prof = await bungie(`${BASE}/Destiny2/${m.membershipType}/Profile/${m.membershipId}/?components=200,204`, e, tok.access_token);
   const chars = prof.characters?.data || {};
   let cid = null, newest = '';
@@ -1364,6 +1419,17 @@ async function main() {
   if (process.argv[2] === 'probe') return probe(process.argv[3] || '');
   const e = env();
   let cache = null, wcache = null;
+  // Shared weapons fetch: pollDrops (25s) and the auto-manage pass (30s) both need fresh
+  // profile data — dedupe so overlapping callers share one Bungie pull, and a snapshot
+  // younger than maxAgeMs is reused instead of re-fetched.
+  let wFetching = null, wFetchedAt = 0;
+  const freshWeapons = (maxAgeMs = 15000) => {
+    if (wcache && Date.now() - wFetchedAt < maxAgeMs) return Promise.resolve(wcache);
+    if (!wFetching) wFetching = fetchWeapons(e)
+      .then((d) => { wcache = d; wFetchedAt = Date.now(); return d; })
+      .finally(() => { wFetching = null; });
+    return wFetching;
+  };
   const server = http.createServer(async (req, res) => {
     try {
       const json = (obj) => { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(obj)); };
@@ -1374,7 +1440,8 @@ async function main() {
       }
       if (req.url.startsWith('/api/weapons')) {
         const fresh = req.url.includes('fresh=1');
-        if (!wcache || fresh) wcache = await fetchWeapons(e);
+        if (fresh) await freshWeapons(0);            // explicit refresh always re-pulls (deduped)
+        else if (!wcache) await freshWeapons();
         return json(wcache);
       }
       if (req.url.startsWith('/api/auto/run') && req.method === 'POST') {
@@ -1475,7 +1542,9 @@ async function main() {
         return json(ACCOUNT);
       }
       if (req.url.startsWith('/api/combos')) {
-        if (req.method === 'POST') { saveCombos(JSON.parse(await readBody(req) || '[]')); return json({ ok: true }); }
+        // combos drive each copy's PVE/PVP rollTag + combo score floor (computed in
+        // fetchWeapons) — drop the weapons cache so the next /api/weapons reflects the edit.
+        if (req.method === 'POST') { saveCombos(JSON.parse(await readBody(req) || '[]')); wcache = null; return json({ ok: true }); }
         return json(loadCombos());
       }
       if (req.url.startsWith('/api/favorites')) {
@@ -1513,6 +1582,7 @@ async function main() {
       if (req.url.startsWith('/perks')) return res.end(fs.readFileSync(path.join(__dirname, 'perk-finder.html')));
       if (req.url.startsWith('/drops')) return res.end(fs.readFileSync(path.join(__dirname, 'weapon-drops.html')));
       if (req.url.startsWith('/auto')) return res.end(fs.readFileSync(path.join(__dirname, 'auto-manager.html')));
+      if (req.url.startsWith('/settings')) return res.end(fs.readFileSync(path.join(__dirname, 'settings.html')));
       if (req.url.startsWith('/fashion')) return res.end(fs.readFileSync(path.join(__dirname, 'fashion.html')));
       if (req.url.startsWith('/artifacts')) return res.end(fs.readFileSync(path.join(__dirname, 'artifacts.html')));
       return res.end(fs.readFileSync(HTML_FILE));
@@ -1544,7 +1614,7 @@ async function main() {
     const watch = loadWatch();
     if (!Object.keys(watch).length) return;
     try {
-      wcache = await fetchWeapons(e);
+      await freshWeapons();
       const copiesOf = {}; wcache.weapons.forEach((w) => { (copiesOf[w.hash] = copiesOf[w.hash] || []).push(w); });
       for (const w of wcache.weapons) {
         if (!w.fresh || w.locked) continue;             // only brand-new, still-unlocked drops
@@ -1583,7 +1653,7 @@ async function main() {
       // what it WOULD do (it writes nothing), so Diego can see the plan even mid-activity.
       if (!act.safe && !dryRun) { log.note = 'skipped — in an activity'; return log; }
 
-      wcache = await fetchWeapons(e);
+      await freshWeapons();
       const fav = loadFav(), watch = loadWatch(), defs = wcache.defs, thr = cfg.thr;
       const byHash = {};
       for (const w of wcache.weapons) (byHash[w.hash] = byHash[w.hash] || []).push(w);
@@ -1620,7 +1690,8 @@ async function main() {
         const elig = list.filter((d) => d.dec.eligible);            // legendary, unlocked, not equipped/postmaster
         if (!elig.length) continue;                                 // nothing the app may touch
         const active = elig.filter((d) => d.w.tag !== 'junk');      // respect manual junk — never re-tag it
-        const isFav = (d) => scoreOf(d) >= thr.fav || d.w.tag === 'favorite';
+        // a MANUAL favorite is sacred; an app-applied one (autoFav) only stays if it re-earns it
+        const isFav = (d) => scoreOf(d) >= thr.fav || (d.w.tag === 'favorite' && !d.w.autoFav);
         const favs = new Set(active.filter(isFav));                 // keep ALL favorites
         const hasKeep = list.some((d) => d.w.tag === 'keep');       // an existing keep (yours or prior run)
         let survKeep = hasKeep ? null                               // don't add a keep if one already exists
@@ -1661,12 +1732,15 @@ async function main() {
         w.tag = dec.tag;   // reflect in memory (ephemeral wcache) so staging below sees it — even in dry-run
         // track app-applied favorites: this is an AUTO favorite (the app set it) → green; any tag
         // change off favorite drops it from the set. Diego's own favorites are never in here → pink.
+        const wasAutoFav = w.autoFav;
         if (dec.tag === 'favorite') { autoFavSet.add(w.id); w.autoFav = true; }
         else { autoFavSet.delete(w.id); w.autoFav = false; }
         if (!dryRun) {
           try {
             await dimWriteTag(e, w.id, dec.tag);
             if (dec.tag === 'favorite') { try { await setLock(e, w.id, true); w.locked = true; } catch {} }
+            // demoting an app-applied favorite also undoes the app's OWN auto-lock (never a lock you set)
+            else if (wasAutoFav && w.locked) { try { await setLock(e, w.id, false); w.locked = false; } catch {} }
             // Only chime for genuinely NEW drops — never for the bulk re-tagging of your existing vault.
             if (w.fresh) { if (upgrade) beepUpgrade(); else if (dec.notify === 'high') beep(); }
           } catch (err) { line.error = err.message; }
@@ -1717,17 +1791,26 @@ async function main() {
       log.note = `fav ${c.favorite} · keep ${c.keep} · junk ${c.junk} · staged ${c.staged}`;
       console.log(`[auto] ${dryRun ? 'DRY ' : ''}safe=${act.safe} ${log.note}`);
     } catch (err) { log.note = 'error: ' + err.message; console.warn('auto-manage error:', err.message); }
-    finally { AUTO_LOG = log; managing = false; }
+    finally {
+      // a dry-run mutates the in-memory snapshot with PRETEND tags (so its staging preview
+      // works) — drop the cache so no later reader (UI, pollDrops, a live pass reusing a
+      // young snapshot) ever acts on tags that were never actually written.
+      if (dryRun) { wcache = null; }
+      AUTO_LOG = log; managing = false;
+    }
     return log;
   }
 
   checkGame(); setInterval(checkGame, 30000);
   setInterval(pollDrops, 25000);
 
-  // Adaptive auto-manage cadence: run OFTEN (activeSeconds) while there's work — you're in an
-  // activity (so we catch the moment you hit orbit) or the last pass actually tagged/staged
-  // something — and back off to idleSeconds ("on hold") once you're in orbit with nothing left
-  // to do, where it just watches for new drops. A new drop makes the next pass do work → active.
+  // Auto-manage cadence (2026-07-09): while Destiny is RUNNING, every pass runs at
+  // activeSeconds (default 30s) — in an activity that's how fast we catch the moment you
+  // hit orbit; in orbit it's how fast dismantled junk gets topped back up on the character.
+  // (The old adaptive version dropped to a 120s "hold" once a pass did nothing, which is
+  // exactly when Diego dismantles the staged junk — the top-up then sat waiting up to 2
+  // minutes. That's the "taking too long" he reported.) idleSeconds now only paces the
+  // cheap no-op tick while the game is CLOSED.
   let autoTimer = null;
   const scheduleAuto = (sec) => { clearTimeout(autoTimer); autoTimer = setTimeout(autoTick, Math.max(10, sec) * 1000); };
   async function autoTick() {
@@ -1736,11 +1819,8 @@ async function main() {
     try {
       if (cfg.enabled && gameUp) {
         const log = await autoManage();
-        const c = log.counts || {};
-        const did = ((c.favorite || 0) + (c.keep || 0) + (c.junk || 0) + (c.staged || 0)) > 0;
-        const busy = (log.safe === false) ? true : did;   // in an activity → stay responsive; in orbit → active only if working
-        state = busy ? 'active' : 'hold';
-        sec = busy ? (cfg.activeSeconds || 30) : (cfg.idleSeconds || 120);
+        state = (log.safe === false) ? 'waiting for orbit' : 'active';
+        sec = cfg.activeSeconds || 30;
       }
       AUTO_LOG.state = state; AUTO_LOG.nextSec = sec;
     } catch (err) { console.warn('autoTick error:', err.message); }
