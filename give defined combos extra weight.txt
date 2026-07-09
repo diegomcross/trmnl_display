@@ -1,0 +1,7 @@
+give defined combos extra weight
+show a 'new' tag on newly dropped wapons
+tag as PVE or PVP roll
+auto tag rolls with PVE or PVP tags based on combos (what's not PVP is considered PVE)
+activity detection is not working as intended to transfer junk weapons, it's taking too long
+app is mistaken at tagging, selecting many low score weapons as favorites, completely ignoring the rules that we have discussed previously. You have to find where the error is. I suspect that there are two scoring systems at place. The settings page for the auto manager is very confusing.
+We are missing a settings page that encompasses every aspect of the app

@@ -93,6 +93,10 @@ td{padding:6px 8px;border-bottom:1px solid var(--panel2);vertical-align:middle}
       <label class="f">Junk staged per slot (K/E/P)<input id="junkStage" type="number" min="0" max="9"></label>
       <label class="f">Max junk-tags / run<input id="maxJunk" type="number" min="1" max="200"></label>
       <label class="f">Max moves / run<input id="maxMoves" type="number" min="1" max="30"></label>
+    </div>
+    <div class="row" style="margin-top:12px">
+      <label class="f">Check every (active) s<input id="activeSeconds" type="number" min="15" max="600"></label>
+      <label class="f">On-hold check every s<input id="idleSeconds" type="number" min="30" max="1800"></label>
       <button id="saveBtn" class="btn" style="align-self:flex-end">Save settings</button>
     </div>
     <p class="thresh-help">

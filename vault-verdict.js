@@ -1227,9 +1227,12 @@ const DROP_ALERT_FILE = path.join(__dirname, 'drop-alert.json');
 const GAME_PROCESS = process.env.GAME_PROCESS || 'destiny2.exe';
 const ALERTED = new Set();   // instance ids already alerted — a fresh drop only fires ONCE
 let gameUp = false;
+let onGameStart = null;   // set by main() → kick an auto-manage pass the moment the game launches
 function checkGame() {
   exec(`tasklist /FI "IMAGENAME eq ${GAME_PROCESS}" /NH`, { windowsHide: true }, (err, stdout) => {
-    gameUp = !err && new RegExp(GAME_PROCESS.replace(/\./g, '\\.'), 'i').test(stdout || '');
+    const up = !err && new RegExp(GAME_PROCESS.replace(/\./g, '\\.'), 'i').test(stdout || '');
+    if (up && !gameUp && onGameStart) onGameStart();   // just launched → run soon
+    gameUp = up;
   });
 }
 function beep() { exec('powershell -NoProfile -c "1..3 | %{ [console]::beep(880,220); Start-Sleep -m 120 }"', { windowsHide: true }, () => {}); }
@@ -1273,6 +1276,8 @@ const AUTO_DEFAULTS = {
   stageCid: null,          // character to stage junk on (null = default / Warlock main)
   maxJunkPerRun: 25,       // safety cap: never junk-tag more than this in one pass
   maxMovesPerRun: 12,      // safety cap on item transfers per pass (up to 9 stages + spills)
+  activeSeconds: 30,       // check cadence while there's work to do / you're in an activity
+  idleSeconds: 120,        // "on hold" cadence when nothing's left — just watching for new drops
   thr: { unwatchedJunk: 60, keep: 80, fav: 90, watchedJunk: 75 },
 };
 function loadAuto() {
@@ -1718,8 +1723,31 @@ async function main() {
 
   checkGame(); setInterval(checkGame, 30000);
   setInterval(pollDrops, 25000);
-  setTimeout(() => autoManage(), 45000);        // first pass shortly after start
-  setInterval(() => autoManage(), 120000);      // then every 2 min while in game + out of activity
+
+  // Adaptive auto-manage cadence: run OFTEN (activeSeconds) while there's work — you're in an
+  // activity (so we catch the moment you hit orbit) or the last pass actually tagged/staged
+  // something — and back off to idleSeconds ("on hold") once you're in orbit with nothing left
+  // to do, where it just watches for new drops. A new drop makes the next pass do work → active.
+  let autoTimer = null;
+  const scheduleAuto = (sec) => { clearTimeout(autoTimer); autoTimer = setTimeout(autoTick, Math.max(10, sec) * 1000); };
+  async function autoTick() {
+    const cfg = loadAuto();
+    let sec = cfg.idleSeconds || 120, state = 'paused';
+    try {
+      if (cfg.enabled && gameUp) {
+        const log = await autoManage();
+        const c = log.counts || {};
+        const did = ((c.favorite || 0) + (c.keep || 0) + (c.junk || 0) + (c.staged || 0)) > 0;
+        const busy = (log.safe === false) ? true : did;   // in an activity → stay responsive; in orbit → active only if working
+        state = busy ? 'active' : 'hold';
+        sec = busy ? (cfg.activeSeconds || 30) : (cfg.idleSeconds || 120);
+      }
+      AUTO_LOG.state = state; AUTO_LOG.nextSec = sec;
+    } catch (err) { console.warn('autoTick error:', err.message); }
+    scheduleAuto(sec);
+  }
+  onGameStart = () => scheduleAuto(3);            // game just launched → run almost immediately
+  scheduleAuto(gameUp ? 5 : 15);                  // first pass shortly after start
 }
 
 main().catch((err) => { console.error(err.message); process.exit(1); });
