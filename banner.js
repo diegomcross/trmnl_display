@@ -8,7 +8,7 @@
   const BN = 'https://www.bungie.net';
   const PAGES = [
     ['/', 'Armor Vault'], ['/vault', 'Weapon Vault'], ['/weapons', 'Weapon Watch'],
-    ['/fashion', 'Fashion'], ['/perks', 'Perk Finder'], ['/drops', 'New Drops'], ['/auto', 'Auto-Manager'], ['/artifacts', 'Artifacts'],
+    ['/fashion', 'Fashion'], ['/perks', 'Perk Finder'], ['/drops', 'New Drops'], ['/auto', 'Auto-Manager'], ['/artifacts', 'Artifacts'], ['/settings', 'Settings'],
   ];
   const path = location.pathname.replace(/\/+$/, '') || '/';
   const active = (h) => (h === '/' ? path === '/' : path === h || path.startsWith(h + '/'));

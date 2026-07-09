@@ -95,18 +95,23 @@ td{padding:6px 8px;border-bottom:1px solid var(--panel2);vertical-align:middle}
       <label class="f">Max moves / run<input id="maxMoves" type="number" min="1" max="30"></label>
     </div>
     <div class="row" style="margin-top:12px">
-      <label class="f">Check every (active) s<input id="activeSeconds" type="number" min="15" max="600"></label>
-      <label class="f">On-hold check every s<input id="idleSeconds" type="number" min="30" max="1800"></label>
+      <label class="f">Combo-match floor %<input id="thCombo" type="number" min="0" max="100"></label>
+      <label class="f">Check every (game running) s<input id="activeSeconds" type="number" min="15" max="600"></label>
+      <label class="f">Check every (game closed) s<input id="idleSeconds" type="number" min="30" max="1800"></label>
       <button id="saveBtn" class="btn" style="align-self:flex-end">Save settings</button>
     </div>
     <p class="thresh-help">
-      <b>Watched weapons</b> (you picked tracked perks) score by perk-match %; copies under the watched-junk
-      bar get junked. <b>Unwatched weapons</b> score by how many of the copy's rolled perks are your
-      ★ Perk-Finder favorites. A brand-new watched drop that beats your best kept copy is auto-kept with a
-      different chime. Favorited copies are also locked. For weapons with multiple copies it keeps <b>all
-      favorites plus the single best-rated keep</b> and junks the rest — never your last copy.
+      <b>Watched weapons</b> (you picked tracked perks) score by perk-match % — 100% = everything you
+      tracked; copies under the watched-junk bar get junked. <b>Unwatched weapons</b> score by your
+      ★ Perk-Finder favorites, <b>grade-aware</b>: each trait column counts its best favorited perk and
+      100% needs a 3★ favorite in BOTH columns (two 1★ favorites = 50%) — so ordinary rolls are never
+      auto-favorited. A roll completing one of your saved <b>Perk Finder combos</b> never scores below the
+      combo floor. A brand-new watched drop that beats your best kept copy is auto-kept with a different
+      chime. Favorited copies are also locked. For weapons with multiple copies it keeps <b>all favorites
+      plus the single best-rated keep</b> and junks the rest — never your last copy.
       <br><span style="color:var(--fav-auto)">&#9632; light green favorite = set by the app</span> &nbsp;
       <span style="color:var(--fav-man)">&#9632; pink favorite = set by you</span> (shown on the Weapon Vault / Watch / Drops tags).
+      <br>Every setting, with fuller explanations, also lives on the <a href="/settings" style="color:var(--keep)">Settings page</a>.
     </p>
   </div>
 
@@ -155,7 +160,9 @@ function paintState(){
 function fillForm(){
   const t=CFG.thr||{};
   $('thUnwatched').value=t.unwatchedJunk; $('thWatched').value=t.watchedJunk; $('thKeep').value=t.keep; $('thFav').value=t.fav;
+  $('thCombo').value=t.comboFloor??80;
   $('junkStage').value=CFG.junkStage; $('maxJunk').value=CFG.maxJunkPerRun; $('maxMoves').value=CFG.maxMovesPerRun;
+  $('activeSeconds').value=CFG.activeSeconds??30; $('idleSeconds').value=CFG.idleSeconds??120;
 }
 async function loadAll(){
   const d=await fetch('/api/auto').then(r=>r.json());
@@ -169,7 +176,8 @@ async function postCfg(patch){ const d=await fetch('/api/auto',{method:'POST',he
 $('toggle').onclick=async()=>{ const next=!(CFG&&CFG.enabled); if(next && !confirm('Turn auto-manager ON? It will tag and move weapons on your live account whenever you are out of an activity.'))return; await postCfg({enabled:next}); };
 $('saveBtn').onclick=async()=>{
   await postCfg({ junkStage:+$('junkStage').value, maxJunkPerRun:+$('maxJunk').value, maxMovesPerRun:+$('maxMoves').value,
-    thr:{ unwatchedJunk:+$('thUnwatched').value, watchedJunk:+$('thWatched').value, keep:+$('thKeep').value, fav:+$('thFav').value } });
+    activeSeconds:+$('activeSeconds').value, idleSeconds:+$('idleSeconds').value,
+    thr:{ unwatchedJunk:+$('thUnwatched').value, watchedJunk:+$('thWatched').value, keep:+$('thKeep').value, fav:+$('thFav').value, comboFloor:+$('thCombo').value } });
   $('saveBtn').textContent='Saved ✓'; setTimeout(()=>$('saveBtn').textContent='Save settings',1200);
 };
 async function run(dryRun){

@@ -56,6 +56,7 @@ select{cursor:pointer}
 .wt .elic{width:13px;height:13px;flex:0 0 auto;filter:drop-shadow(0 1px 1px rgba(0,0,0,.75))}
 .wgrid.eqbig .wt .elic{width:15px;height:15px}
 .wt .p{color:#fff;font:600 11px/1 Bahnschrift,"Roboto Condensed",sans-serif;letter-spacing:.02em}
+.wt .nwt{background:var(--gold);color:#000;font:700 7.5px/1 Bahnschrift,"Roboto Condensed",sans-serif;letter-spacing:.06em;padding:1px 3px;flex:0 0 auto}
 .wt .lk{position:absolute;right:3px;top:3px;color:#fff;opacity:.92;display:flex;filter:drop-shadow(0 1px 1px rgba(0,0,0,.85))}
 /* clipped top-left corner = the tag flag (calmer than a full bar) */
 .wt .tagc{position:absolute;left:0;top:0;width:0;height:0;border-style:solid;border-width:15px 15px 0 0;border-color:transparent transparent transparent transparent}
@@ -356,7 +357,7 @@ function tile(w){
   return `<div class="wt ${ex?'exotic':''}${tg}${w.loc==='equipped'?' equipped':''}${w._st==='match'?' match':''}${w._st==='dim'?' dim':''}" data-id="${w.id}" title="${esc(d.n||'')}${w.loc==='equipped'?' · equipped':''}${scoreMode?' · '+(fs<0?'no fav':fs+'% fav roll'):(' · ✦'+(w.pwr||'—'))}${w.tag?' · '+w.tag:''}">
     ${d.icon?`<img data-src="${BN}${d.icon}" alt="">`:''}
     <span class="tagc"></span>${w.locked?'<span class="lk">'+LKSVG(true)+'</span>':''}
-    <span class="bot">${el}<span class="${pcls}">${num}</span></span></div>`;
+    <span class="bot">${el}${w.fresh?'<span class="nwt" title="New drop">NEW</span>':''}<span class="${pcls}">${num}</span></span></div>`;
 }
 // Only fetch a tile's emblem art once it scrolls near view — the vault can hold
 // hundreds of weapons and loading every icon at once floods the network.
@@ -405,7 +406,8 @@ function inspect(id){
     </div>`:'';
   $('ispcard').innerHTML=`<div class="ih"><span class="it ${d.tt===6?'exotic':''}">${d.icon?`<img src="${BN}${d.icon}">`:''}</span>
     <div><div class="disp" style="font-size:16px;color:#fff">${esc(d.n||'Weapon')}</div>
-    <div class="count" id="ispsub">${esc(d.ty||d.slot||'')} · ✦${w.pwr||'—'} · ${LOCLABEL[w.loc]||esc(w.own||'')}${w.loc!=='vault'&&w.own?' ('+esc(w.own)+')':''}${w.locked?' · '+LKSVG(true):''}${d.dmg?' · '+esc(d.dmg):''}${w.kills?' · '+w.kills.toLocaleString()+' kills':''}</div></div></div>
+    <div class="count" id="ispsub">${esc(d.ty||d.slot||'')} · ✦${w.pwr||'—'} · ${LOCLABEL[w.loc]||esc(w.own||'')}${w.loc!=='vault'&&w.own?' ('+esc(w.own)+')':''}${w.locked?' · '+LKSVG(true):''}${d.dmg?' · '+esc(d.dmg):''}${w.kills?' · '+w.kills.toLocaleString()+' kills':''}
+    ${w.fresh?' <span class="newflag">New</span>':''}${w.rollTag?` <span class="rolltag ${w.rollTag}" title="${w.combos&&w.combos.length?'Matches your combo: '+esc(w.combos.join(', ')):'No PVP combo matches this roll'}">${w.rollTag}</span>`:''}</div></div></div>
     <div class="ispcols2">${col(w.cols?.[0],'Column 3')}${col(w.cols?.[1],'Column 4')}</div>
     ${w.mw?`<div class="ispcol"><div class="ch">Masterwork</div><span class="pk">${w.mwIcon?`<img src="${BN}${w.mwIcon}">`:''}${esc(w.mw)}</span></div>`:''}
     ${watchSec}

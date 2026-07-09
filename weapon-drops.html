@@ -114,7 +114,7 @@ function render(){
       const perks=cfg.perks||{};
       return (w.cols[ci]||[]).map(p=>{
         const cls=perks[p.n]?'perk match':(p.on?'perk roll':'perk');
-        return `<span class="${cls}">${icon(p.n)}${esc(p.n)}</span>`;
+        return `<span class="${cls}" data-pn="${esc(p.n)}">${icon(p.n)}${esc(p.n)}</span>`;
       }).join('')||'<span class="note">—</span>';
     };
     const stats=(cfg.stats||[]).map(s=>{const v=w.statsMax[s];return `<span class="st ${cfg.stats&&v!==undefined?'':''}">${esc(s)} <b>${v??'—'}</b></span>`;}).join('');
@@ -130,7 +130,7 @@ function render(){
       <div class="body">
         <div class="colh">Column 3</div><div class="perks">${col(0)}</div>
         <div class="colh">Column 4</div><div class="perks">${col(1)}</div>
-        <div class="meta">${mw}<span>${d.ty} · ${w.pwr}</span></div>
+        <div class="meta">${mw}<span>${d.ty} · ${w.pwr}</span>${w.rollTag?`<span class="rolltag ${w.rollTag}" title="${w.combos&&w.combos.length?'Matches your combo: '+esc(w.combos.join(', ')):'No PVP combo matches this roll'}">${w.rollTag}</span>`:''}</div>
         ${stats?`<div class="meta">${stats}</div>`:''}
         <div class="acts">
           <button class="tchip fav ${w.tag==='favorite'?'on':''}${w.tag==='favorite'&&w.autoFav?' af':''}" data-tagset="${w.id}" data-tag="${w.tag==='favorite'?'none':'favorite'}">Fav</button>
@@ -168,10 +168,12 @@ async function load(fresh){
     ]);
     if(d.error) throw new Error(d.error);
     DATA=d; WATCH=w||{}; render();
+    if(window.PerkTip) PerkTip.init({perkDescs:DATA.perkDescs,perkInsights:DATA.perkInsights});
   }catch(err){ $('status').textContent='Error: '+err.message; }
 }
 load(false);
 </script>
+<script src="/perktip.js"></script>
 <script src="/banner.js"></script>
 </body>
 </html>

@@ -64,6 +64,7 @@ input[type=checkbox]{accent-color:var(--gold);width:15px;height:15px;flex-shrink
 .rperk.hi{color:var(--gold);font-weight:600}
 .rperk.act{text-decoration:underline}
 .frac{font-size:10px;color:var(--dim);font-variant-numeric:tabular-nums}
+.rowtags{display:flex;gap:4px;flex-wrap:wrap;margin-top:2px}
 .chips{display:flex;gap:4px;flex-wrap:wrap}
 .chip{background:var(--panel2);border:1px solid var(--line);color:var(--mut);padding:5px 9px;font-size:10.5px;cursor:pointer;clip-path:polygon(5px 0,100% 0,100% calc(100% - 5px),calc(100% - 5px) 100%,0 100%,0 5px);font-family:inherit;text-transform:uppercase;letter-spacing:.04em}
 .chip.on.keep{border-color:var(--keep);color:var(--keep);background:rgba(95,208,221,.14)}
@@ -303,6 +304,7 @@ function renderWatched(){
           <div class="tscore">
             <span class="score ${sc.god?'hot':''}" title="${sc.matched}/${sc.selN} criteria matched, weighted">${sc.pct}%</span>
             ${sc.selN?`<span class="frac">${sc.matched}/${sc.selN}${sc.god?' 🎯':''}</span>`:''}
+            <span class="rowtags">${w.fresh?'<span class="newflag">New</span>':''}${w.rollTag?`<span class="rolltag ${w.rollTag}" title="${w.combos&&w.combos.length?'Matches your combo: '+esc(w.combos.join(', ')):'No PVP combo matches this roll'}">${w.rollTag}</span>`:''}</span>
           </div>
           <div class="tcell">${col(0)}</div>
           <div class="tcell">${col(1)}</div>

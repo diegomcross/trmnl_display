@@ -173,6 +173,16 @@ h1 span,.disp span{ color:var(--gold); }
 .chip.on.favorite{ border-color:var(--gold); color:var(--gold); background:rgba(205,174,50,.16); }
 .chip.on.junk{ border-color:var(--junk); color:var(--junk); background:rgba(224,82,58,.14); }
 
+/* ---------- roll badges (shared: Weapon Watch / New Drops / Weapon Vault) ---------- */
+/* NEW = a fresh drop not yet acked on /drops; PVE/PVP = auto roll classification from
+   Diego's saved Perk Finder combos (a pvp-role combo match = PVP, everything else PVE). */
+.newflag{ background:var(--gold); color:#0b0c0d; font-family:var(--disp); font-weight:700;
+  font-size:9px; letter-spacing:.08em; padding:1px 6px; text-transform:uppercase; white-space:nowrap; }
+.rolltag{ border:1px solid var(--line); color:var(--mut); font-family:var(--disp);
+  font-size:9px; letter-spacing:.08em; padding:1px 6px; text-transform:uppercase; white-space:nowrap; }
+.rolltag.pvp{ border-color:var(--junk); color:var(--junk); }
+.rolltag.pve{ border-color:var(--keep); color:var(--keep); }
+
 /* ---------- lock / equip / vault small buttons ---------- */
 .lockb{ font-family:var(--disp); letter-spacing:.06em; border:1px solid var(--line); color:var(--mut); background:transparent; clip-path:none; border-radius:0; }
 .lockb:hover{ border-color:var(--line-strong); color:var(--white); }
