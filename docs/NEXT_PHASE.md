@@ -3,6 +3,62 @@
 > Maintained per CLAUDE.md. When a feature ships, move it to HANDOFF.md
 > "What works now" and delete it here.
 
+## Where we are (2026-07-09 — Auto-Manager scoring FIXED + PVE/PVP tags + Settings page, ⚠ Diego must REBOOT)
+
+Diego's 2026-07-09 batch, all shipped & verified on an isolated 8799 dry-run instance (real Bungie
+data, no account writes) + pages loaded in a real browser (0 console errors). Details in HANDOFF
+"What works now" (Auto inventory manager + Weapon Watch sections). Summary:
+
+1. **THE BUG — Auto-Manager favoriting low-score weapons — found & fixed.** Diego was right that two
+   scoring systems exist (they're intentional: vault tile % = pool-based potential, Auto-Manager =
+   per-copy roll quality) but the REAL error was `favRollScore` saturating: a standard 1+1-perk roll
+   landing two of his ~94 favorites read 100% ≥ the 90% favorite bar → mass favorites. Now
+   grade-normalized: each trait column counts its best favorited perk's ★ weight, 100% = 3★ in BOTH
+   columns (1★+1★ = 50%). Dry-run verified: **fav 0** (was dozens), bogus 36-88% "favorites" demoted.
+2. **Healing pass:** the 19 wrong app-applied favorites (green, auto-locked by the app itself) are
+   re-decided from scratch — demoted to keep/junk and **their app-lock undone**. Diego's own pink
+   favorites are never touched. Verified in the dry-run log (favorite→junk / favorite→keep lines).
+3. **Defined combos get extra weight:** a roll completing a saved Perk Finder combo (slot1+slot2 in
+   different columns) is floored at `thr.comboFloor` (default 80 = kept). Verified live.
+4. **PVE/PVP roll auto-tag:** every copy gets `rollTag` — PVP when a pvp-role combo matches the roll,
+   else PVE (Diego: "what's not PVP is considered PVE"). Red PVP / teal PVE chips on Weapon Watch
+   copies, New Drops cards, Weapon Vault inspect. Verified: 3 PVP copies all genuinely roll his
+   "Dynamic Zen" (Dynamic Sway Reduction + Zen Moment) pvp combo.
+5. **NEW badge** on fresh drops: Weapon Watch copy rows + Weapon Vault tiles (New Drops already
+   implied it). 6. **Perk hover popup added to /drops** (was the one page missing it) — and yes, the
+   community insight IS the DIM data (Clarity), already integrated everywhere.
+7. **Junk staging latency fixed:** while Destiny runs, passes now ALWAYS run at `activeSeconds`
+   (default 30s) — the old adaptive "hold" dropped to 120s exactly when Diego dismantled staged junk.
+   `idleSeconds` now only paces the no-op check while the game is closed. Also: `/auto`'s cadence
+   inputs were dead (not filled/saved — half-finished commit `c0343ce` from the other machine); wired.
+8. **`/settings` — the app-wide Settings page** (in the banner nav on every page): Auto-Manager
+   on/off + all thresholds + staging character picker + caps + cadence with plain-language help,
+   PVE/PVP combo summary, favorites-by-grade summary (45×1★/19×2★/30×3★ live), god-roll alert rules,
+   community-data refresh buttons. `/auto` keeps its (clarified) editor and links here.
+9. **Audit fixes:** dry-run passes no longer pollute the shared weapons cache with pretend tags;
+   pollDrops + auto passes share one deduped Bungie pull (15s reuse) instead of double-fetching;
+   membership resolution cached in fetchActivity (was an extra API call every pass); saving combos
+   invalidates the weapons cache so PVE/PVP tags update immediately; removed the accidentally
+   committed `give defined combos extra weight.txt` notes file.
+
+**⚠ OPEN — Diego's next actions:**
+1. **Double-click `REBOOT.cmd`** on the machine that runs the always-on servers (neither server was
+   running on the machine this session worked on — the old buggy code may still be live elsewhere).
+   The first live sweep after that will heal the bogus green favorites (capped 25 junk/pass).
+2. Open **/settings**, check the thresholds feel right, and pick the stage character if the default
+   Warlock isn't wanted.
+3. Watch the first live sweep on **/auto** (Preview first if nervous).
+
+**Improvement suggestions (audit follow-ups, NOT started — surface to Diego):**
+- Search-result ranking in Weapon Watch (exact-phrase "iron banner" outranking single-word hits) if
+  that's what "defined combos extra weight" also meant for search.
+- Make the god-roll alert gate (75%/3/4) configurable on /settings.
+- Separate PVP thresholds (a pvp-tagged roll could use pvp-lean wishlist data for scoring).
+- Armor page could reuse the freshWeapons-style fetch dedup (`fetchArmor` still refetches per call).
+- Running the vault server on TWO machines at once would double-manage the account — keep the
+  always-on install on one machine only.
+- Localisation (pt-BR) spec still queued below.
+
 ## Where we are (2026-07-06, later — Auto inventory manager SHIPPED, not yet fired live)
 
 **New feature: automatic inventory manager (`/auto`) — ✅ built & dry-run-verified, ⚠ awaiting Diego's

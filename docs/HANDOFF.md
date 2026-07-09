@@ -77,7 +77,7 @@ Core priorities, in his words:
 | `vault-verdict.js` | **Vault Verdict** server (port **8787**): live Armor 3.0 vault triage + weapons API. Reuses `.env` + `tokens.json`. Slims the manifest to `vault-manifest-cache/slim3-<version>.json` (armor + weapons + trait plug sets + drop sources). `node vault-verdict.js probe "name"` dumps one item for debugging. |
 | `vault-verdict.html` | Vault Verdict frontend (served at `/`): verdict engine, set-bonus 4pc/2pc rating panel with drop locations, exotic favorite-stat tuning panel (per-class filter, primary›secondary), DIM query export. |
 | `weapon-watch.html` | **Weapon Watch** god-roll tracker UI (served at `/weapons`): pick weapons, tag up to 6 perks (normal/★high priority), wanted masterwork + watched stats; scores every copy in the vault. Copies render as an **organized table** (score, columns 3/4, full stat names + MW badge, kills, location, actions — redesigned 2026-07-06, see "What works now"), direct tag chips, Select-multiple batch mode, smart Vault/Equip, no-jump perk selection. Config → `weapon-watch.json`, tags → `weapon-tags.json` (gitignored). |
-| `weapon-drops.html` | **New Drops dashboard** (served at `/drops`): visual cards for *fresh* drops of watched weapons — weapon art, rolled perk icons, masterwork icon, stats, score/🎯. Per-card actions: **Fav / Keep / Junk** tag chips (`/api/tag`, DIM vocab, active chip clears on re-tap) + Lock + smart Equip/→Vault + Seen. Backed by `weapon-seen.json` (gitignored) + `/api/drops/ack`. |
+| `weapon-drops.html` | **New Drops dashboard** (served at `/drops`): visual cards for *fresh* drops of watched weapons — weapon art, rolled perk icons, masterwork icon, stats, score/🎯. Per-card actions: **Fav / Keep / Junk** tag chips (`/api/tag`, DIM vocab, active chip clears on re-tap) + Lock + smart Equip/→Vault + Seen. Perk hover popup (`perktip.js`, added 2026-07-09 — was the one page missing it) + PVE/PVP roll chip. Backed by `weapon-seen.json` (gitignored) + `/api/drops/ack`. |
 | `dim-probe.js` | One-off DIM Sync API check (gitignored). Diego runs `node dim-probe.js` to confirm two-way DIM sync works before it's built. |
 | `fashion.html` | **Fashion loadouts** (served at `/fashion`): each character's equipped armor ornaments + shaders with icons; save named looks (`fashion.json`, gitignored) and re-apply them in one click. Apply requires the character to be in orbit. |
 | `theme.css` | **Shared visual theme** for all four Vault Verdict pages (served at `/theme.css`, linked after each page's inline `<style>`). BrayTech/in-game look: ground `#101312`, hairline white borders, square tiles, Destiny rarity/energy colors, self-hosted **Arimo** (Helvetica/Neue-Haas twin) type, tabular numbers. Pages share CSS-var names so this one file re-skins everything — **edit design tokens here, once.** Also styles the **item tiles** (`.wtile` weapon art, `.pkico` perk-icon tiles) that Weapon Watch renders from `/api/weapons` art — a token repaint alone did NOT read as BrayTech; the real look needed the actual weapon/perk artwork as rarity-framed square tiles. The e-ink display (`server.js`, 1-bit) is separate and unaffected. |
@@ -92,6 +92,7 @@ Core priorities, in his words:
 | `perk-favorites.json` | Gitignored: Diego's **favorite trait perks as a graded map** `{perkName: grade 1-3}` (3-star rating in Perk Finder; back-compat: an old flat array loads as grade 1). Grade → vault-score weight **1★=1 · 2★=1.5 · 3★=2**. Scores EVERY weapon in the Weapon Vault. `.bak` alongside. GET/POST `/api/favorites`. |
 | `REBOOT.cmd` | **One-click server restart** (double-clickable). Stops any running node servers + their keep-alive launcher loops, waits, then relaunches `start-display.ps1` (port 3000) and `start-vault.ps1` (port 8787) hidden. Use it to load new code after an update or to bring things back if stuck. ASCII-only. |
 | `auto-manager.html` | **Auto-Manager** control page (served at `/auto`): On/Off toggle (live account writes), rules/thresholds editor (junk-below unwatched/watched %, keep %, favorite %, junk-stage count, per-run safety caps), a **Preview next run (no writes)** button and a **Run now (live)** button, plus a decision-log table of the last run (from→to tag, score, watched/favorites basis, ▲ new-best flag, staging moves). Reads/writes `GET/POST /api/auto`, `POST /api/auto/run`. |
+| `settings.html` | **App-wide Settings page** (served at `/settings` on 8787, in the banner nav): Auto-Manager on/off + every threshold (fav/keep/watched-junk/unwatched-junk/comboFloor) + junk-staging character picker (`stageCid`, from `/api/account`) + safety caps + check cadence, each with plain-language help; PVE/PVP combo summary (`/api/combos`); favorites-by-grade summary (`/api/favorites`); god-roll alert rules (read-only); community-data refresh buttons (`/api/perks?fresh=1`, `/api/weapons?fresh=1`). All writes go through `GET/POST /api/auto` — same config as `/auto`, which keeps its own compact editor and links here. |
 | `artifacts.html` | **Artifact Mods** reference (served at `/artifacts`): all 7 Monument of Triumph artifacts × 3 columns × 7 mods, with a filter by subclass verb (Solar/Arc/Void/Stasis/Strand/Prismatic keywords) + keywords (Champions, grenade, Super, weapon types) + free text search. **Data is STATIC** (hand-transcribed from the neonlightsmedia Monument of Triumph guide) — if Bungie changes artifacts/mods, edit the `ARTIFACTS` array in this file. No API. |
 | `CLAUDE.md` | Working rules for agents: never drop features, test before push, and **mandatory upkeep of this file + `docs/NEXT_PHASE.md`**. |
 | `docs/NEXT_PHASE.md` | The pickup point: specs + open questions for upcoming features. |
@@ -526,11 +527,29 @@ Core priorities, in his words:
     - **Legendaries only** — `def.tt===5`. **Exotics (`tt===6`) and rares are never touched**
       (Diego's rule). Locked, equipped, and postmaster copies are also skipped, and a human
       keep/favorite tag is never downgraded to junk.
-    - **Scoring:** a **watched** weapon (has tracked perks in `weapon-watch.json`) scores by the
-      server `scoreWeaponCopy` perk-match %; an **unwatched** weapon scores by `favRollScore` =
-      ★-weighted coverage of the copy's **actual rolled perks** (cols 3+4) using
-      `perk-favorites.json` (`FAVW` 1★=1/2★=1.5/3★=2 — mirrors weapon-vault.html's `favScore`, but
-      over the ROLL, not the pool, so it's per-drop roll quality).
+    - **Scoring (REWRITTEN 2026-07-09 — the "mass fake favorites" fix):** a **watched** weapon (has
+      tracked perks in `weapon-watch.json`) scores by the server `scoreWeaponCopy` perk-match %; an
+      **unwatched** weapon scores by `favRollScore`, now **grade-normalized**: each trait column
+      contributes its BEST favorited perk's ★ weight (1★=1 · 2★=1.5 · 3★=2), score = sum ÷ (2×2★★★),
+      so **100% needs a 3★ favorite in BOTH columns; two 1★ favorites = 50%**. The old formula
+      ("fraction of rolled perks favorited") hit 100% whenever a standard 1+1-perk roll landed two of
+      Diego's ~94 grade-1 favorites → the app mass-favorited mediocre weapons (Diego's 2026-07-09 bug
+      report; he suspected two scoring systems — the vault tile % IS a different, pool-based number,
+      but the bug was the saturation). **Combo floor:** a roll completing one of Diego's saved Perk
+      Finder combos (one slot-1 + one slot-2 perk in DIFFERENT columns — `comboMatches`, same rule as
+      Perk Finder) never scores below `thr.comboFloor` (default 80 = kept, never auto-favorited on
+      the combo alone). **HEALING:** app-applied favorites (`w.autoFav`, ids in `auto-applied.json`)
+      are re-decided from scratch each pass — the locked-skip is bypassed for them (the app locked
+      them itself) and on demotion the app's own auto-lock is removed (`wasAutoFav && w.locked` →
+      unlock). Diego's manual (pink) favorites remain sacred (`isFav` in the dedup requires
+      `!d.w.autoFav` for tag-based favorite survival). Verified by dry-run: fav 0, 16 bogus favorites
+      demoted (36-88% scores), 3 re-earned favorite legitimately.
+    - **PVE/PVP roll tags (2026-07-09):** `fetchWeapons` sets per copy `w.combos` (names of matching
+      saved combos) and `w.rollTag` = `'pvp'` if any matching combo's role is pvp, else `'pve'`
+      (Diego: "what's not PVP is considered PVE"). Shown as red PVP / teal PVE chips (`.rolltag` in
+      theme.css) on Weapon Watch copy rows, New Drops cards, Weapon Vault inspect; NEW badge
+      (`.newflag` / `.wt .nwt`) on fresh copies in Weapon Watch + Weapon Vault tiles. POST
+      `/api/combos` nulls the weapons cache so tags update on the next load.
     - **Decision bands (`autoDecide`):** `>=fav%` → favorite (+ auto-lock); `>=keep%` → keep;
       `< junk bar` → junk (watched bar defaults 75% = the god-roll bar Diego chose; unwatched bar
       60%); the middle band is left untouched. A **fresh watched drop that beats your best kept
@@ -577,6 +596,17 @@ Core priorities, in his words:
       all agent testing so no real writes hit the account.
     - **Endpoints:** `GET /api/auto` → `{cfg,last,gameUp}`; `POST /api/auto` saves a config patch;
       `POST /api/auto/run {dryRun}` runs a pass immediately (dry by default) and returns the log.
+    - **Cadence (2026-07-09 — "junk top-up too slow" fix):** while Destiny is RUNNING every pass runs
+      at `activeSeconds` (default 30s) — that's both how fast orbit is caught and how fast dismantled
+      junk is topped back up; `idleSeconds` (120s) only paces the cheap no-op tick while the game is
+      closed. (The earlier adaptive version dropped to a 120s "hold" once a pass did nothing — which
+      is exactly when Diego dismantles, so top-ups lagged ~2min.) `onGameStart` kicks a pass ~3s after
+      destiny2.exe appears. **Fetch dedup:** `freshWeapons(maxAgeMs=15000)` in `main()` — pollDrops
+      (25s) + auto passes share one deduped Bungie pull; an explicit `/api/weapons?fresh=1` always
+      re-pulls. **Dry-run cache poisoning guard:** a dry-run mutates the in-memory snapshot with
+      pretend tags (so its staging preview works) — `wcache` is nulled in the pass's `finally` so no
+      later reader acts on tags that were never written. `fetchActivity` caches the membership
+      resolution (`ACT_MEMBER`) — was an extra API call every pass.
     - **First-run note:** with Diego's 87 favorite perks + the per-weapon dedup, an uncapped preview
       showed **favorite 23 / keep 69 / junk 112** across ~101 weapons (best fav + best keep per weapon,
       rest junked). The live default caps junk at **25/pass** (every 2 min), so a big cleanup trickles
