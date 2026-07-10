@@ -153,14 +153,14 @@ select{cursor:pointer}
         <button class="fchip on" data-sort="power">Power</button>
         <button class="fchip" data-sort="recent">Recent</button>
         <button class="fchip" data-sort="kills">Kills</button>
-        <button class="fchip" data-sort="favs">Perk · Favs</button>
+        <button class="fchip" data-sort="favs">Roll score</button>
         <button class="fchip" data-sort="mine">Perk · Mine</button>
         <button class="fchip" data-sort="blend">Perk · Blend</button>
       </div>
       <select id="statSort" style="width:100%;margin-top:7px"><option value="">…or sort by stat</option></select>
       <div class="flabel" style="margin-top:9px">Tile shows</div>
       <div class="chips" id="fTile">
-        <button class="fchip on" data-tile="score">★ Perk score</button>
+        <button class="fchip on" data-tile="score">Roll score</button>
         <button class="fchip" data-tile="power">Power</button>
       </div>
       <div class="flabel" style="margin-top:10px">Min score <span id="minLbl" class="count" style="color:var(--gold)"></span></div>
@@ -232,19 +232,14 @@ function perkScore(w,mode){
   const cs=col=>{ let best=0; for(const pk of (col||[])){ const v=mode==='mine'?(PMINE[pk.n]||0):((PMINE[pk.n]||0)/maxMine + (PPOP[pk.n]||0)/maxPop*0.35); if(v>best)best=v; } return best; };
   return cs(w.cols&&w.cols[0])+cs(w.cols&&w.cols[1]);
 }
-// favorite-perk score: how much of THIS weapon's trait-perk pool you've favorited —
-// score = favorited pool perks / total pool perks (weighted by star grade so 2★/3★ count
-// more). e.g. 5 of 6 pool perks favorited → 83%. Per weapon (all copies share it).
-// Returns -1 when the weapon has no perk pool (shown as "—", excluded from the threshold).
-function favScore(w){
-  if(!favAny()) return -1;
-  const d=w._d||WEAPONS.defs[w.hash]||{}, pool=d.pool||[[],[]];
-  const names=new Set([...(pool[0]||[]),...(pool[1]||[])]);
-  if(!names.size) return -1;
-  let num=0, nonfav=0;
-  for(const n of names){ const g=FAV[n]; if(g) num+=FAVW[g]; else nonfav++; }
-  return Math.round(100*num/(num+nonfav));
-}
+// actual-roll score (see favScore below) —
+// THE score = the ACTUAL ROLL, per copy, computed server-side (w.rollScore) — the same
+// number the Auto-Manager acts on. Watched weapon → tracked-perk match %; otherwise
+// grade-normalized ★-favorite score (3★ in both columns = 100%), floored at the combo
+// floor when the roll completes a saved Perk Finder combo. Diego 2026-07-09: "I never
+// care about the weapon's potential, the only score that's important is the actual roll"
+// — this replaced the old pool-based potential %. -1 = no signal (shown as "—").
+function favScore(w){ return (typeof w.rollScore==='number')?w.rollScore:-1; }
 const scoreClass=fs=>fs<0?'sdim':fs>=85?'sgold':fs>=60?'steal':fs>=35?'swhite':'sred';
 function cmp(a,b){
   if(statSort) return ((b.statsMax&&b.statsMax[statSort])||0)-((a.statsMax&&a.statsMax[statSort])||0) || (b.pwr||0)-(a.pwr||0);
@@ -301,7 +296,7 @@ function render(){
   //  - QUICK filters (name/type/element/ammo/rarity/tag) now HIDE non-matches.
   //  - COMBO + min-score stay a HIGHLIGHT/DIM overlay (matches float up, rest dim);
   //    "only matches" still fully hides those non-matches.
-  const softActive = combo || (favAny()&&minScore>0);
+  const softActive = combo || minScore>0;
   let shown=0, matched=0;
   // per slot: equipped (selected char) / that char's inventory / postmaster / the shared vault
   const bySlot={Kinetic:{eq:[],inv:[],post:[],vault:[]},Energy:{eq:[],inv:[],post:[],vault:[]},Power:{eq:[],inv:[],post:[],vault:[]}};
@@ -309,7 +304,7 @@ function render(){
     const d=WEAPONS.defs[w.hash]||{}; w._d=d;
     if(!(w.loc==='vault' || w.ownCid===selCid)){ w._st='hide'; continue; }  // other characters hidden
     if(!passQuick(w,d)){ w._st='hide'; continue; }         // quick filters HIDE (real narrowing)
-    const passThresh=!(favAny()&&minScore>0) || favScore(w)>=minScore;
+    const passThresh=!(minScore>0) || favScore(w)>=minScore;
     const passCombo=!combo || !!((scoreCopy(w)||{}).full);
     if(combo&&passCombo) matched++;
     const isSoft=passThresh&&passCombo;
@@ -350,11 +345,11 @@ function tile(w){
   const d=w._d, ex=d.tt===6;
   const el=d.dmgIcon?`<img class="elic" src="${BN}${d.dmgIcon}" alt="${esc(d.dmg||'')}" title="${esc(d.dmg||'')}">`:(ELCOL[d.dmg]?`<span class="el" style="background:${ELCOL[d.dmg]}"></span>`:'');
   const tg=w.tag?` tg-${w.tag}${w.tag==='favorite'&&w.autoFav?' af':''}`:'';
-  const scoreMode=tileMode==='score' && favAny();   // show favorite-roll % in place of power
+  const scoreMode=tileMode==='score';               // show the actual-roll % in place of power
   const fs=scoreMode?favScore(w):-1;
   const num=scoreMode?(fs<0?'—':fs+'%'):(w.pwr||'');
   const pcls=scoreMode?('p '+scoreClass(fs)):'p';
-  return `<div class="wt ${ex?'exotic':''}${tg}${w.loc==='equipped'?' equipped':''}${w._st==='match'?' match':''}${w._st==='dim'?' dim':''}" data-id="${w.id}" title="${esc(d.n||'')}${w.loc==='equipped'?' · equipped':''}${scoreMode?' · '+(fs<0?'no fav':fs+'% fav roll'):(' · ✦'+(w.pwr||'—'))}${w.tag?' · '+w.tag:''}">
+  return `<div class="wt ${ex?'exotic':''}${tg}${w.loc==='equipped'?' equipped':''}${w._st==='match'?' match':''}${w._st==='dim'?' dim':''}" data-id="${w.id}" title="${esc(d.n||'')}${w.loc==='equipped'?' · equipped':''}${scoreMode?' · '+(fs<0?'no score':fs+'% roll ('+(w.rollBasis==='watched'?'watched':'favorites')+')'):(' · ✦'+(w.pwr||'—'))}${w.tag?' · '+w.tag:''}">
     ${d.icon?`<img data-src="${BN}${d.icon}" alt="">`:''}
     <span class="tagc"></span>${w.locked?'<span class="lk">'+LKSVG(true)+'</span>':''}
     <span class="bot">${el}${w.fresh?'<span class="nwt" title="New drop">NEW</span>':''}<span class="${pcls}">${num}</span></span></div>`;
@@ -512,7 +507,7 @@ document.querySelectorAll('[data-clean]').forEach(b=>b.onclick=async()=>{
   $('cleanmsg').textContent=`Vaulted ${r.moved} item${r.moved===1?'':'s'}${r.failed?` · ${r.failed} failed`:''}.`;
   load();
 });
-function updateFavNote(){ const n=Object.keys(FAV).length; $('favnote').textContent = n ? `Scoring by ${n} favorite perk${n===1?'':'s'} (starred in Perk Finder). % = favorited perks ÷ this weapon's total perk pool (2★/3★ count more).` : 'No favorite perks yet — star perks in Perk Finder to score your vault; tiles show power until then.'; }
+function updateFavNote(){ const n=Object.keys(FAV).length; $('favnote').textContent = `% = this copy's ACTUAL ROLL — the same score the Auto-Manager uses. Watched weapons: tracked-perk match. Others: your ${n} ★ favorites, grade-aware (100% needs 3★ in both columns); saved-combo rolls floor at the combo floor.`; }
 
 // perk search dropdown
 $('pq').addEventListener('input',e=>{

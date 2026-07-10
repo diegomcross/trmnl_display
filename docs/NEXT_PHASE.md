@@ -9,9 +9,18 @@ Diego's 2026-07-09 batch, all shipped & verified on an isolated 8799 dry-run ins
 data, no account writes) + pages loaded in a real browser (0 console errors). Details in HANDOFF
 "What works now" (Auto inventory manager + Weapon Watch sections). Summary:
 
+0. **ONE SCORE ONLY (Diego's follow-up, same day): "I never care about the weapon's potential, the
+   only score that's important is the actual roll."** The pool-based vault-tile % is gone; every page
+   and the Auto-Manager now read the same server-computed per-copy `w.rollScore` (see HANDOFF).
+   **ALSO PENDING (asked 2026-07-09, assessment delivered, awaiting Diego's decisions): host this app
+   on the ColaAI v3 server (Cybrancee) so it runs 24/7 online instead of on his PC** — needs the
+   server-unfriendly parts replaced first (destiny2.exe detection → Bungie-API presence; PC beeps →
+   Discord notifications via the ColaAI bot; access protection on the public URL; Linux process
+   supervision; a web OAuth re-auth flow). See the chat summary / ask Diego for his answers.
 1. **THE BUG — Auto-Manager favoriting low-score weapons — found & fixed.** Diego was right that two
-   scoring systems exist (they're intentional: vault tile % = pool-based potential, Auto-Manager =
-   per-copy roll quality) but the REAL error was `favRollScore` saturating: a standard 1+1-perk roll
+   scoring systems exist (they WERE intentional: vault tile % = pool-based potential, Auto-Manager =
+   per-copy roll quality — the pool one has since been removed per item 0) but the REAL error was
+   `favRollScore` saturating: a standard 1+1-perk roll
    landing two of his ~94 favorites read 100% ≥ the 90% favorite bar → mass favorites. Now
    grade-normalized: each trait column counts its best favorited perk's ★ weight, 100% = 3★ in BOTH
    columns (1★+1★ = 50%). Dry-run verified: **fav 0** (was dozens), bogus 36-88% "favorites" demoted.

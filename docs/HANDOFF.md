@@ -398,15 +398,20 @@ Core priorities, in his words:
     Colours/symbols/layout were locked with Diego over ~8 live in-browser mockups. **TODO: localisation**
     — everything API-derived (manifest text, Clarity insight) must be pulled per-locale for pt-BR +
     future langs; see NEXT_PHASE l10n spec. Curated English bullets are en-only.
-  - **Favorite perks → whole-vault perk score (2026-07-04, weighted 2026-07-05):** Perk Finder rows have a
-    **3-star grade** (tap star N → grade N, `{perkName:grade}` in `perk-favorites.json` via `/api/favorites`;
-    a `★ Favorites` filter + count too). Grade weight **1★=1 · 2★=1.5 · 3★=2**. The Weapon Vault scores
-    every weapon by `favScore` = **favorited perks ÷ the weapon's total trait-perk pool** (per weapon, not
-    per copy), weighted: `100 × Σ(fav weight) / (Σ(fav weight) + count of non-favorited pool perks)`. So a
-    pool of 6 with 5 favorited (1★) ≈ 83%; 2★/3★ push it higher. (Diego's def, replacing an earlier
-    "relative best-roll %" that made almost everything 100%.) Tile shows the color-coded % in place of power
-    (`≥85 gold · ≥60 teal · ≥35 white · else red · — no pool/exotic`); `Tile shows: ★ Perk score / Power`
-    toggle, a **Min-score slider** hides low tiles, a `Perk · Favs` sort.
+  - **Weapon Vault tile score = THE ACTUAL ROLL (2026-07-09, Diego: "I never care about the weapon's
+    potential, the only score that's important is the actual roll"):** the old pool-based `favScore`
+    (favorited perks ÷ the weapon's whole trait pool) is GONE from the UI. `fetchWeapons` now computes
+    **`w.rollScore` per copy, server-side, once** — watched weapon → tracked-perk match %
+    (`scoreWeaponCopy`); anything else → grade-normalized ★-favorite score of the roll (`favRollScore`,
+    100% = 3★ favorites in both columns), floored at `thr.comboFloor` when the roll completes a saved
+    Perk Finder combo (`w.comboFloored`). Also `w.rollBasis` ('watched'|'favorites'). **The Auto-Manager
+    consumes the same `w.rollScore`** (`autoDecide(w, def, thr)` no longer recomputes) so the number on a
+    vault tile and the number in the /auto log can never disagree. Weapon Vault: tile % (score mode is
+    always available now, no favorites required), Min-score slider, and the `Roll score` sort all use it;
+    tile tooltip shows the basis. Cache rule: POSTs to `/api/watch`, `/api/favorites`, `/api/auto`
+    (comboFloor), `/api/combos` all null `wcache` because rollScore is baked into the weapons payload.
+    Perk Finder's 3-star grading (`perk-favorites.json`, weights 1★=1 · 2★=1.5 · 3★=2) is unchanged and
+    is what feeds the favorites-basis score.
   - **Perk Finder weapon cards + tag filter (2026-07-05, perk layout redone 2026-07-05 night):** click a
     **Best-Match** weapon (Inventory) → a smart card — perks cols 3/4 **side by side, listed vertically**
     (`.cols2`/`.pool.vert`, same layout as Weapon Watch's tracker; was stacked `.wccol` blocks), rolled perk

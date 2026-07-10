@@ -875,6 +875,31 @@ async function fetchWeapons(e) {
     w.combos = hits.map((c) => c.name).filter(Boolean);
     w.rollTag = hits.some((c) => String(c.role || '').toLowerCase() === 'pvp') ? 'pvp' : 'pve';
   }
+  // THE score (Diego 2026-07-09: "the only score that's important is the actual roll") —
+  // computed ONCE here so every page and the Auto-Manager show the same number per copy:
+  // watched weapon → tracked-perk match % (scoreWeaponCopy); anything else → grade-normalized
+  // ★-favorite score of the roll (favRollScore), floored at comboFloor on a saved-combo match.
+  // w.rollScore (-1 = no signal), w.rollBasis 'watched'|'favorites', w.comboFloored.
+  {
+    const watch = loadWatch(), fav = loadFav(), floor = loadAuto().thr?.comboFloor ?? 80;
+    const byH = {};
+    for (const w of weapons) (byH[w.hash] = byH[w.hash] || []).push(w);
+    for (const [h, copies] of Object.entries(byH)) {
+      const cfg = watch[h];
+      if (cfg && Object.keys(cfg.perks || {}).length) {
+        const r = {};
+        for (const s of (cfg.stats || [])) { const vals = [...new Set(copies.map((x) => x.statsMax[s] ?? -1))].sort((a, b) => b - a); r[s] = (v) => { const i = vals.indexOf(v); return i === 0 ? 's1' : i === 1 ? 's2' : i === 2 ? 's3' : ''; }; }
+        for (const w of copies) { w.rollScore = scoreWeaponCopy(w, cfg, r).pct; w.rollBasis = 'watched'; w.comboFloored = false; }
+      } else {
+        for (const w of copies) {
+          let sc = favRollScore(w, fav);
+          w.comboFloored = !!(w.combos || []).length && sc < floor;
+          if (w.comboFloored) sc = floor;
+          w.rollScore = sc; w.rollBasis = 'favorites';
+        }
+      }
+    }
+  }
   return { weapons, defs: mergedDefs, perkIcons, perkDescs, perkInsights, fetchedAt: new Date().toISOString(), account: `${m.membershipType}/${m.membershipId}` };
 }
 
@@ -1347,7 +1372,9 @@ function comboMatches(w, combos) {
 // tag is the change (or null = leave it), and `eligible` marks a legendary copy the app is
 // allowed to junk (used by the last-copy guarantee to pick a survivor). score = -1 when the
 // copy is untouchable (exotic/locked/equipped/postmaster) or has no perk signal.
-function autoDecide(w, def, watch, fav, thr, rankOfByHash) {
+// Scores come from w.rollScore — computed ONCE in fetchWeapons — so the Auto-Manager and
+// every page always show the same number per copy (Diego: only the actual roll matters).
+function autoDecide(w, def, thr) {
   const skip = (reason) => ({ tag: null, score: -1, isWatched: false, eligible: false, reason });
   if (!def || def.tt !== 5) return skip('not a legendary');   // legendaries only (skip exotics/rares)
   if (w.loc === 'equipped' || w.loc === 'postmaster') return skip(w.loc);
@@ -1359,18 +1386,11 @@ function autoDecide(w, def, watch, fav, thr, rankOfByHash) {
   if (w.locked && !healFav) return skip('locked');            // respect locks (god-rolls auto-lock)
   const cur = healFav ? '' : (w.tag || '');
   if (cur === 'infuse' || cur === 'archive') return skip('dim ' + cur);  // leave DIM's other tags alone
-  const cfg = watch[w.hash];
-  const isWatched = !!(cfg && Object.keys(cfg.perks || {}).length);
-  let score, via = '';
-  if (isWatched) score = scoreWeaponCopy(w, cfg, rankOfByHash[w.hash] || {}).pct;
-  else {
-    score = favRollScore(w, fav);
-    // "give defined combos extra weight" (Diego): a roll matching one of his saved Perk
-    // Finder combos is floored at comboFloor (default = the keep band, so it's kept but
-    // never auto-favorited on the combo alone) even when its ★-favorite coverage is low.
-    const floor = thr.comboFloor ?? 80;
-    if ((w.combos || []).length && score < floor) { score = floor; via = ` · combo: ${w.combos[0]}`; }
-  }
+  const isWatched = w.rollBasis === 'watched';
+  const score = w.rollScore ?? -1;
+  // "give defined combos extra weight" (Diego): comboFloored = the roll matched a saved Perk
+  // Finder combo and was floored at comboFloor (default = the keep band) in fetchWeapons.
+  const via = (w.comboFloored && (w.combos || []).length) ? ` · combo: ${w.combos[0]}` : '';
   const base = { tag: null, score, isWatched, eligible: true };
   if (score < 0) return { ...base, eligible: false, reason: 'no perk signal' };
   if (score >= thr.fav)  return cur === 'favorite' ? base : { ...base, tag: 'favorite', notify: 'high', reason: `${score}% >= ${thr.fav}${via}` };
@@ -1450,13 +1470,15 @@ async function main() {
         return json({ ok: true, last: log });
       }
       if (req.url.startsWith('/api/auto')) {
-        if (req.method === 'POST') { saveAuto(JSON.parse(await readBody(req) || '{}')); return json({ ok: true, cfg: loadAuto() }); }
+        // thresholds (comboFloor) feed the per-copy rollScore baked into the weapons cache
+        if (req.method === 'POST') { saveAuto(JSON.parse(await readBody(req) || '{}')); wcache = null; return json({ ok: true, cfg: loadAuto() }); }
         return json({ cfg: loadAuto(), last: AUTO_LOG, gameUp });
       }
       if (req.url.startsWith('/api/watch')) {
         if (req.method === 'POST') {
           const body = JSON.parse(await readBody(req) || '{}');
           saveWatch(body);
+          wcache = null;   // watch config feeds rollScore/rollBasis on every copy
           return json({ ok: true });
         }
         return json(loadWatch());
@@ -1548,7 +1570,8 @@ async function main() {
         return json(loadCombos());
       }
       if (req.url.startsWith('/api/favorites')) {
-        if (req.method === 'POST') { saveFav(JSON.parse(await readBody(req) || '{}')); return json({ ok: true }); }
+        // favorites feed the per-copy rollScore baked into the weapons cache
+        if (req.method === 'POST') { saveFav(JSON.parse(await readBody(req) || '{}')); wcache = null; return json({ ok: true }); }
         return json(loadFav());
       }
       if (req.url.startsWith('/api/fashion')) return json(await fetchFashion(e));
@@ -1654,25 +1677,19 @@ async function main() {
       if (!act.safe && !dryRun) { log.note = 'skipped — in an activity'; return log; }
 
       await freshWeapons();
-      const fav = loadFav(), watch = loadWatch(), defs = wcache.defs, thr = cfg.thr;
-      const byHash = {};
-      for (const w of wcache.weapons) (byHash[w.hash] = byHash[w.hash] || []).push(w);
-      // per-watched-weapon stat rank fns (for scoreWeaponCopy) + best currently-kept score
-      const rankOfByHash = {}, bestKept = {};
-      for (const [h, copies] of Object.entries(byHash)) {
-        const c = watch[h]; if (!(c && Object.keys(c.perks || {}).length)) continue;
-        const r = {};
-        for (const s of (c.stats || [])) { const vals = [...new Set(copies.map((x) => x.statsMax[s] ?? -1))].sort((a, b) => b - a); r[s] = (v) => { const i = vals.indexOf(v); return i === 0 ? 's1' : i === 1 ? 's2' : i === 2 ? 's3' : ''; }; }
-        rankOfByHash[h] = r;
-        let best = -1;
-        for (const w of copies) if (w.tag === 'keep' || w.tag === 'favorite') best = Math.max(best, scoreWeaponCopy(w, c, r).pct);
-        bestKept[h] = best;
+      const defs = wcache.defs, thr = cfg.thr;
+      // best currently-kept score per WATCHED weapon (for the "new drop beats your best" chime).
+      // Scores ride on each copy (w.rollScore, computed in fetchWeapons) — one scoring system.
+      const bestKept = {};
+      for (const w of wcache.weapons) {
+        if (w.rollBasis !== 'watched' || !(w.tag === 'keep' || w.tag === 'favorite')) continue;
+        bestKept[w.hash] = Math.max(bestKept[w.hash] ?? -1, w.rollScore ?? -1);
       }
 
       // 1) decide every copy first (no writes) so the last-copy guarantee can see the whole weapon.
       const decByWeapon = {};
       for (const w of wcache.weapons) {
-        const dec = autoDecide(w, defs[w.hash], watch, fav, thr, rankOfByHash);
+        const dec = autoDecide(w, defs[w.hash], thr);
         (decByWeapon[w.hash] = decByWeapon[w.hash] || []).push({ w, dec });
       }
       // 2) PER-WEAPON DEDUP (Diego's rules, 2026-07-06). For a weapon with multiple copies:
