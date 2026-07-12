@@ -487,6 +487,7 @@ $('refreshBtn').onclick=()=>loadData(true);
   exoFavs = (await loadStore('vv-exofavs')) || {};
   for(const k of Object.keys(exoFavs)) exoFavs[k]=exoFavs[k].slice(0,2);  // migrate: max 2, order kept
   loadData(false);
+  window.GRELOAD=()=>loadData(false);   // banner "Updated" chip / auto-refresh hook
 })();
 </script>
 <script src="/banner.js"></script>

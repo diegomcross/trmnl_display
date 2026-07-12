@@ -148,6 +148,7 @@ async function load(){
   }catch(err){ $('status').textContent='Error: '+err.message; }
 }
 load();
+window.GRELOAD=()=>load();   // banner "Updated" chip / auto-refresh hook
 </script>
 <script src="/banner.js"></script>
 </body>

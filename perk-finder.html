@@ -662,6 +662,7 @@ async function load(){
   }catch(err){ $('plib').innerHTML=`<div class="big">Error: ${esc(err.message)}</div>`; }
 }
 load();
+window.GRELOAD=()=>load();   // banner "Updated" chip / auto-refresh hook
 </script>
 <script src="/perktip.js"></script>
 <script src="/banner.js"></script>

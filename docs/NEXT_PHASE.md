@@ -3,7 +3,21 @@
 > Maintained per CLAUDE.md. When a feature ships, move it to HANDOFF.md
 > "What works now" and delete it here.
 
-## Where we are (2026-07-09 — Auto-Manager scoring FIXED + PVE/PVP tags + Settings page, ⚠ Diego must REBOOT)
+## Where we are (2026-07-12 — DIM-sync audit: staleness + orbit-detection bugs FIXED, servers already rebooted)
+
+Diego reported "DIM not syncing / taking too long" + "activity detection unreliable" + asked for an
+always-visible last-update indicator. Audit found the DIM cloud connection HEALTHY — the real bugs
+were (1) `GET /api/weapons`/`/api/armor` serving a **forever-cached snapshot** whenever Destiny was
+closed, and (2) the activity gate treating **orbit (its own activity, hash 82913930 — NOT hash 0)**
+as "in an activity", so junk staging only ever ran in the Tower. Both fixed + shipped same day, with
+`junkStage` 3→5 per slot (Diego's ask), a 15s end-of-activity poll, the banner "Updated Xs ago"
+chip + idle auto-reload on every page, `GET /api/status`, and server console output now captured in
+`vault.log`. All verified live (activity resolved by name mid-Trials; chip green in browser; server
+lines in the log). REBOOT.cmd was already run — new code is live; `auto-manage.json` was re-enabled
+(it sat at enabled:false). Everything below is the 2026-07-09 state and still-next items. Full
+details in HANDOFF "Activity gate", "Junk staging", "Data freshness overhaul".
+
+## Previous status (2026-07-09 — Auto-Manager scoring FIXED + PVE/PVP tags + Settings page)
 
 Diego's 2026-07-09 batch, all shipped & verified on an isolated 8799 dry-run instance (real Bungie
 data, no account writes) + pages loaded in a real browser (0 console errors). Details in HANDOFF

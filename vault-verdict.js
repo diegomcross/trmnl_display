@@ -295,6 +295,7 @@ const DIM_TOKEN_FILE = path.join(__dirname, '.dim-token.json');
 let DIM_TAGS = {};        // instanceId -> tag (DIM is the source of truth; cached)
 let DIM_TAGS_AT = 0;
 let DIM_OFF = false;      // set true if DIM has no app key so we stop trying
+let DIM_LAST_ERR = '';    // last DIM read failure (surfaced by /api/status — console output is easy to miss)
 const dimKey = () => { try { return JSON.parse(fs.readFileSync(DIM_APP_FILE, 'utf8')).dimApiKey; } catch { return null; } };
 
 async function dimAuth(e) {
@@ -325,7 +326,7 @@ async function dimReadTags(e) {
   if (!Array.isArray(j.tags)) throw new Error(`DIM read: ${j.error || res.status}`);
   const out = {};
   for (const t of j.tags) if (t.tag) out[t.id] = t.tag;
-  DIM_TAGS = out; DIM_TAGS_AT = Date.now();
+  DIM_TAGS = out; DIM_TAGS_AT = Date.now(); DIM_LAST_ERR = '';
   saveJsonSafe(TAGS_FILE, out); // mirror to disk as an offline fallback
   return out;
 }
@@ -334,7 +335,7 @@ async function dimReadTags(e) {
 async function dimTagsFresh(e, maxAgeMs = 30000) {
   if (DIM_OFF) return DIM_TAGS;
   if (Date.now() - DIM_TAGS_AT > maxAgeMs) {
-    try { await dimReadTags(e); } catch (err) { console.warn('DIM read failed, using cached tags:', err.message); if (!Object.keys(DIM_TAGS).length) DIM_TAGS = loadTags(); }
+    try { await dimReadTags(e); } catch (err) { DIM_LAST_ERR = err.message; console.warn('DIM read failed, using cached tags:', err.message); if (!Object.keys(DIM_TAGS).length) DIM_TAGS = loadTags(); }
   }
   return DIM_TAGS;
 }
@@ -1306,10 +1307,10 @@ const FAVW = { 1: 1, 2: 1.5, 3: 2 };                   // ★ grade -> weight (m
 const STAGE_SLOT_CAP = 9;                              // unequipped weapons per slot on a character
 const AUTO_DEFAULTS = {
   enabled: true,           // Diego chose "go fully live"
-  junkStage: 3,            // junk-tagged weapons to stage IN EACH SLOT (Kinetic/Energy/Power) → 9 total
+  junkStage: 5,            // junk-tagged weapons to stage IN EACH SLOT (Kinetic/Energy/Power) → 15 total (Diego 2026-07-12: 5, not 3)
   stageCid: null,          // character to stage junk on (null = default / Warlock main)
   maxJunkPerRun: 25,       // safety cap: never junk-tag more than this in one pass
-  maxMovesPerRun: 12,      // safety cap on item transfers per pass (up to 9 stages + spills)
+  maxMovesPerRun: 20,      // safety cap on item transfers per pass (up to 15 stages + spills)
   activeSeconds: 30,       // check cadence while Destiny is RUNNING (catch orbit + junk top-up fast)
   idleSeconds: 120,        // cadence of the cheap no-op check while the game is CLOSED
   thr: { unwatchedJunk: 60, keep: 80, fav: 90, watchedJunk: 75, comboFloor: 80 },
@@ -1403,9 +1404,22 @@ function autoDecide(w, def, thr) {
 function beepUpgrade() { exec('powershell -NoProfile -c "[console]::beep(660,150); [console]::beep(990,150); [console]::beep(1320,260)"', { windowsHide: true }, () => {}); }
 
 // Are we safely OUT of an activity? Component 204 (characterActivities) on the most recently
-// played character. We only auto-manage in orbit (currentActivityHash 0) or a social space
-// (mode 40 — Tower / landing zones). Matchmaking for most playlists reports orbit until the
-// activity actually loads, so it's covered. Anything else = we're in an activity → skip.
+// played character. Safe = orbit or a social space (mode 40 — Tower / landing zones).
+// CRITICAL (found 2026-07-12, the "junk staging never runs" bug): orbit is NOT hash 0 —
+// orbit is its own ACTIVITY, hash 82913930, whose def has an empty name and
+// placeHash 2961497387 ("Orbit"). hash 0 basically only appears when logged out, so the
+// old `hash === 0` check meant a live pass only ever ran in the Tower. We now treat the
+// known orbit hash as safe AND resolve any unknown hash's placeHash against the Orbit
+// place (cached on-demand), so a future orbit-hash change still resolves correctly.
+const ORBIT_ACTIVITY_HASH = 82913930;
+const ORBIT_PLACE_HASH = 2961497387;
+const ACTDEF_CACHE = {};   // activityHash -> { name, place } (tiny, on-demand)
+async function activityDefLite(hash, e) {
+  if (ACTDEF_CACHE[hash]) return ACTDEF_CACHE[hash];
+  try { const r = await bungie(`${BASE}/Destiny2/Manifest/DestinyActivityDefinition/${hash}/`, e); ACTDEF_CACHE[hash] = { name: r?.displayProperties?.name || '', place: r?.placeHash || 0 }; }
+  catch { return { name: '', place: 0 }; }   // don't cache a failed lookup
+  return ACTDEF_CACHE[hash];
+}
 let ACT_MEMBER = null;   // membership resolution is stable — cache it (was an extra API call every 30s pass)
 async function fetchActivity(e) {
   const tok = await accessToken(e);
@@ -1426,8 +1440,14 @@ async function fetchActivity(e) {
   const hash = act.currentActivityHash || 0;
   const mode = (act.currentActivityModeType ?? -1);
   const modes = act.currentActivityModeTypes || [];
-  const safe = hash === 0 || mode === 40 || modes.includes(40);
-  return { safe, hash, mode, activeCid: cid };
+  let safe = hash === 0 || hash === ORBIT_ACTIVITY_HASH || mode === 40 || modes.includes(40);
+  let name = hash === 0 ? '(none)' : '';
+  if (hash && hash !== ORBIT_ACTIVITY_HASH) {
+    const d = await activityDefLite(hash, e);
+    if (d.place === ORBIT_PLACE_HASH) safe = true;
+    name = d.name || (d.place === ORBIT_PLACE_HASH ? 'Orbit' : '');
+  } else if (hash === ORBIT_ACTIVITY_HASH) name = 'Orbit';
+  return { safe, hash, mode, name, activeCid: cid };
 }
 
 // ---------- server ----------
@@ -1438,11 +1458,12 @@ const readBody = (req) => new Promise((ok) => {
 async function main() {
   if (process.argv[2] === 'probe') return probe(process.argv[3] || '');
   const e = env();
-  let cache = null, wcache = null;
+  let cache = null, wcache = null, aFetchedAt = 0;
   // Shared weapons fetch: pollDrops (25s) and the auto-manage pass (30s) both need fresh
   // profile data — dedupe so overlapping callers share one Bungie pull, and a snapshot
   // younger than maxAgeMs is reused instead of re-fetched.
   let wFetching = null, wFetchedAt = 0;
+  const SNAPSHOT_TTL = 30000;   // a plain page load never sees data older than this
   const freshWeapons = (maxAgeMs = 15000) => {
     if (wcache && Date.now() - wFetchedAt < maxAgeMs) return Promise.resolve(wcache);
     if (!wFetching) wFetching = fetchWeapons(e)
@@ -1453,15 +1474,23 @@ async function main() {
   const server = http.createServer(async (req, res) => {
     try {
       const json = (obj) => { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(obj)); };
+      if (req.url.startsWith('/api/status')) {
+        // Lightweight heartbeat for the banner's "Updated" chip — NO Bungie/DIM calls.
+        return json({
+          weaponsAt: wcache ? wFetchedAt : 0, fetching: !!wFetching, gameUp,
+          dim: { off: DIM_OFF, at: DIM_TAGS_AT, err: DIM_LAST_ERR },
+          auto: { at: AUTO_LOG.at, state: AUTO_LOG.state || '', enabled: !!loadAuto().enabled },
+        });
+      }
       if (req.url.startsWith('/api/armor')) {
         const fresh = req.url.includes('fresh=1');
-        if (!cache || fresh) cache = await fetchArmor(e);
+        if (!cache || fresh || Date.now() - aFetchedAt > SNAPSHOT_TTL) { cache = await fetchArmor(e); aFetchedAt = Date.now(); }
         return json(cache);
       }
       if (req.url.startsWith('/api/weapons')) {
         const fresh = req.url.includes('fresh=1');
         if (fresh) await freshWeapons(0);            // explicit refresh always re-pulls (deduped)
-        else if (!wcache) await freshWeapons();
+        else await freshWeapons(SNAPSHOT_TTL);       // was cached FOREVER — the "not syncing" bug (2026-07-12)
         return json(wcache);
       }
       if (req.url.startsWith('/api/auto/run') && req.method === 'POST') {
@@ -1671,7 +1700,7 @@ async function main() {
     const log = { at: new Date().toISOString(), safe: null, activity: null, dryRun, actions: [], counts: { favorite: 0, keep: 0, junk: 0, staged: 0, spilled: 0 }, note: '' };
     try {
       const act = await fetchActivity(e).catch((err) => ({ safe: false, hash: -1, mode: -1, err: err.message }));
-      log.safe = act.safe; log.activity = { hash: act.hash, mode: act.mode };
+      log.safe = act.safe; log.activity = { hash: act.hash, mode: act.mode, name: act.name || '' };
       // A live pass ONLY runs when safely out of an activity. A dry-run preview still shows
       // what it WOULD do (it writes nothing), so Diego can see the plan even mid-activity.
       if (!act.safe && !dryRun) { log.note = 'skipped — in an activity'; return log; }
@@ -1820,6 +1849,9 @@ async function main() {
 
   checkGame(); setInterval(checkGame, 30000);
   setInterval(pollDrops, 25000);
+  // Keep the inventory snapshot warm even when Destiny is CLOSED (pollDrops only refreshes
+  // while playing), so pages + the banner "Updated" chip always see data ≤ ~1 min old.
+  setInterval(() => { freshWeapons(55000).catch((err) => console.warn('background refresh failed:', err.message)); }, 60000);
 
   // Auto-manage cadence (2026-07-09): while Destiny is RUNNING, every pass runs at
   // activeSeconds (default 30s) — in an activity that's how fast we catch the moment you
@@ -1837,7 +1869,9 @@ async function main() {
       if (cfg.enabled && gameUp) {
         const log = await autoManage();
         state = (log.safe === false) ? 'waiting for orbit' : 'active';
-        sec = cfg.activeSeconds || 30;
+        // Mid-activity a pass is just the cheap activity check — poll it faster (15s)
+        // so staging fires within seconds of the activity ENDING (Diego 2026-07-12).
+        sec = (log.safe === false) ? Math.min(cfg.activeSeconds || 30, 15) : (cfg.activeSeconds || 30);
       }
       AUTO_LOG.state = state; AUTO_LOG.nextSec = sec;
     } catch (err) { console.warn('autoTick error:', err.message); }

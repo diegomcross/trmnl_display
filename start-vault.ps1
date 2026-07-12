@@ -129,9 +129,29 @@ $nodePath = Find-Node
 if (-not $nodePath) { Log "ERROR: node.exe not found. Install Node.js or check your PATH."; exit 1 }
 
 Set-Location $repo
+
+# The server's console output (DIM sync warnings, drop alerts, auto-manager notes) used
+# to vanish into the hidden window -- diagnosing sync issues was blind. Now every line
+# lands in vault.log, rotated at ~2MB so it never grows unbounded.
+function Rotate-Log {
+  try {
+    if ((Test-Path $logFile) -and ((Get-Item $logFile).Length -gt 2MB)) {
+      $old = $logFile + ".old"
+      if (Test-Path $old) { Remove-Item $old -Force -ErrorAction SilentlyContinue }
+      Move-Item $logFile $old -Force -ErrorAction SilentlyContinue
+    }
+  } catch {}
+}
+
 Log "Starting server: $nodePath vault-verdict.js  (repo: $repo, port: $Port)"
 while ($true) {
-  & $nodePath "vault-verdict.js"
+  Rotate-Log
+  & $nodePath "vault-verdict.js" 2>&1 | ForEach-Object {
+    $text = $_.ToString()
+    if ($text.Trim().Length -gt 0) {
+      try { Add-Content -Path $logFile -Value ("[" + (Get-Date -Format "yyyy-MM-dd HH:mm:ss") + "] " + $text) -ErrorAction SilentlyContinue } catch {}
+    }
+  }
   Log ("vault-verdict.js exited (code " + $LASTEXITCODE + "). Restarting in 5s...")
   Start-Sleep -Seconds 5
 }

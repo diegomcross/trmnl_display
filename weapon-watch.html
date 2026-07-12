@@ -469,6 +469,7 @@ async function load(fresh){
   }catch(err){ $('status').textContent='Load failed: '+err.message; }
 }
 load(false);
+window.GRELOAD=()=>load(false);   // banner "Updated" chip / auto-refresh hook
 </script>
 <script src="/perktip.js"></script>
 <script src="/banner.js"></script>

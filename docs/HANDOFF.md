@@ -70,7 +70,7 @@ Core priorities, in his words:
 | `render.js` | `buildModel(profile)` -> data model; page renderers (`renderSVG`=Orders, `renderQuestsSVG`, `renderTriumphsSVG`, `renderTitleSVG`, `renderDropAlert`=god-roll drop) + `renderPage()` dispatcher. CLI run writes `screen.png` + prints a report. |
 | `server.js` | Always-on TRMNL BYOS HTTP server. Pulls a fresh profile each cycle, picks the current rotation page, renders, converts to 1-bit BMP, serves it. Interrupts the rotation for `drop-alert.json` god-roll alerts (`activeAlert`). Hosts `/settings`, `/display`, `/screen.png`. |
 | `start-display.ps1` | **Always-on launcher for the display server.** Runs `node server.js` and keeps it alive (restart loop). `-Install` adds a hidden **Startup-folder login item** (Task Scheduler is blocked here) + starts it now; `-Uninstall` removes it. Logs to `server.log`. |
-| `start-vault.ps1` | **Always-on launcher for Vault Verdict** (port 8787) — mirrors start-display.ps1. Keeps `node vault-verdict.js` alive so the **god-roll drop poller + two-way DIM sync** run whenever the PC is on. `-Install`/`-Uninstall` (Startup-folder item, "TRMNL Vault Verdict.lnk"). Logs to `vault.log`. Independent of the display launcher. |
+| `start-vault.ps1` | **Always-on launcher for Vault Verdict** (port 8787) — mirrors start-display.ps1. Keeps `node vault-verdict.js` alive so the **god-roll drop poller + two-way DIM sync** run whenever the PC is on. `-Install`/`-Uninstall` (Startup-folder item, "TRMNL Vault Verdict.lnk"). Logs to `vault.log` — **since 2026-07-12 the server's own console output (DIM warnings, drop alerts, auto-manager notes) is captured there too** (timestamped, rotated at ~2MB to `vault.log.old`); before that only launcher lines + crashes landed, which made sync issues invisible. Independent of the display launcher. |
 | `watch-destiny.ps1` | Optional game-coupled alternative: watches for `destiny2.exe` and starts/stops the server with the game. `-Setup` tried to register a Task Scheduler task but that is **denied** on this PC. Logs to `watcher.log`. |
 | `config.json` | Settings written by the settings page (gitignored; per-machine). |
 | `manifest-cache.json` | Cached Bungie manifest defs (gitignored). `CACHE_SCHEMA` const invalidates it when the stored shape changes. |
@@ -83,7 +83,7 @@ Core priorities, in his words:
 | `theme.css` | **Shared visual theme** for all four Vault Verdict pages (served at `/theme.css`, linked after each page's inline `<style>`). BrayTech/in-game look: ground `#101312`, hairline white borders, square tiles, Destiny rarity/energy colors, self-hosted **Arimo** (Helvetica/Neue-Haas twin) type, tabular numbers. Pages share CSS-var names so this one file re-skins everything — **edit design tokens here, once.** Also styles the **item tiles** (`.wtile` weapon art, `.pkico` perk-icon tiles) that Weapon Watch renders from `/api/weapons` art — a token repaint alone did NOT read as BrayTech; the real look needed the actual weapon/perk artwork as rarity-framed square tiles. The e-ink display (`server.js`, 1-bit) is separate and unaffected. |
 | `fonts/arimo-*.woff2` | Self-hosted Arimo 400/500/700 (latin subset, Apache-2.0), served at `/fonts/`. Bundled so type is identical on every device incl. Android. |
 | `weapon-vault.html` | **Weapon Vault** (served at `/vault`): your whole arsenal as a BrayTech-style tile grid (rarity-framed squares, power, element pip, lock, tag border), grouped by slot (Kinetic/Energy/Power), tiles lazy-load via IntersectionObserver. **Tile look (BrayTech-tuned 2026-07-04):** roomy 74px tiles, weapon art, a **clipped top-left corner** as the tag flag (keep=cyan / fav=gold / junk=red — replaced the distracting full-width bar), a small element diamond + power on a bottom gradient strip, lock top-right. **BrayTech-style layout (redesigned 2026-07-04):** grouped **by slot** (Kinetic/Energy/Power); within each slot the **selected guardian's** weapons sit on the LEFT — **Equipped** (marked cyan) as its own group, then that character's **Inventory** below it — a divider, then the shared **Vault** on the right, **capped to 3 rows** with a "Show all N" button (`capVaultRows` counts the grid's resolved columns × 3). **Only one guardian** shows, driven by the banner's emblem-dot selector: `banner.js` dispatches `gbanner:char {cid,cls}` (+ sets `window.GBANNER`) on load and on switch; the vault filters `w.ownCid===selCid` (vault is account-wide). (Earlier all-characters "location sections" version was scrapped — Diego: "looks nothing like DIM/BrayTech, only show one character.") **Sort control:** Power / Recent (by instanceId ≈ acquisition order) / Kills (from the kill-tracker, profile component 309) / Perk·Mine / Perk·Blend (best tracked/blended perk per column, summed). Right rail: quick filters (element/ammo/rarity/locked/new/tag + name search) that hide non-matches, and a **perk combo filter** (two column-aware slots, same rule as Perk Finder) that lights up matching weapons; click a tile to inspect its perks/MW **and manage it like DIM — Equip / To Vault / Lock / Keep / Fav / Junk** (calls `/api/equip`,`/api/vault`,`/api/lock`,`/api/tag`). Equip uses the **smart exotic swap** (below). Reads `/api/weapons` + `/api/perks`. First slice of the "vault-as-grid" vision (armor vault next). |
-| `banner.js` | **Shared in-game nameplate + section nav** (served at `/banner.js`, included by every page via `<script src="/banner.js">` into a `<div id="gbanner">`). Renders your equipped **emblem art as the banner background**, Bungie name, power (✦light) + class, character-switch dots, and the right-aligned section tabs (Armor Vault · Weapon Vault · Fashion · Perk Finder · New Drops · Artifacts). Data from `/api/account`. Replaces the old per-page `<nav class="nav">` — edit nav/banner in this one file. |
+| `banner.js` | **Shared in-game nameplate + section nav** (served at `/banner.js`, included by every page via `<script src="/banner.js">` into a `<div id="gbanner">`). Renders your equipped **emblem art as the banner background**, Bungie name, power (✦light) + class, character-switch dots, and the right-aligned section tabs (Armor Vault · Weapon Vault · Fashion · Perk Finder · New Drops · Artifacts). Data from `/api/account`. Also renders the **"Updated Xs ago" data-freshness chip** (polls `/api/status`; click = force refresh; auto-reloads pages that set `window.GRELOAD` when idle — see "Data freshness overhaul"). Replaces the old per-page `<nav class="nav">` — edit nav/banner in this one file. |
 | `perk-finder.html` | **Perk Finder** (served at `/perks`): pickable list of *all* trait perks in the game, ranked by community popularity (PvE/PvP split bar), with search + column/owned/ranked filters. Two builder modes: **Pick perks** (default, flat — click any perks, column/order irrelevant; weapons ranked by how many they can roll) and **Combo** (Slot 1 + Slot 2; a **full match only when a weapon can roll one perk from each slot in *different columns***). Both feed the Inventory/Farmable match panel; saved as `{perks:[]}` (flat) or `{slots:[[],[]]}` (combo), auto-detected on load. Perk list ranks by **Mine** (how often you track a perk across your watched weapons, priority-weighted — default), **Community** (DIM wishlist), or **Blend** (Mine full weight + Community ×0.35 → surfaces sleeper rolls). Save role-tagged combos (ad-clear/pve/pvp/dps) to `perk-combos.json` (gitignored). Backed by `/api/perks` (which overlays `mine` from `weapon-watch.json`) + `/api/combos`. |
 | `.dim-wishlist.json` | Gitignored cache: the parsed DIM community wishlist folded to `{perkName:{weapons:[names],pve:[names],pvp:[names]}}` (distinct recommended weapons, not a raw roll-line count — see the popularity-algorithm note in "What works now") — the input to Perk Finder's "popularity" (`pop`). Re-downloaded weekly from the voltron list. |
 | `.clarity.json` | Gitignored cache: **Clarity community insights** (the same data DIM shows on perks) folded to `{perkName:insightText}`. Downloaded weekly from `database-clarity.github.io/Live-Clarity-Database/descriptions/dim.json`, flattened (`descriptions.en[].linesContent[].text`). Raw source for the perk **hover popup** (cleaned by `insightBullets`). |
@@ -518,17 +518,51 @@ Core priorities, in his words:
     Bungie token to a third party; the server process is not gated). Verified: 992 tags read,
     reversible write. The "Copy junk DIM query" button remains as a manual export too.
 
+  - **Data freshness overhaul (2026-07-12 — the "DIM not syncing / taking too long" fix):**
+    Diego reported DIM sync broken; the DIM cloud connection was actually healthy (direct probe:
+    200 OK, 965 tags, ~290ms; token valid to 2026-08-02). **The real bug: `GET /api/weapons`
+    served `wcache` FOREVER** — it only refetched when a config POST nulled the cache or while
+    Destiny was running (pollDrops). With the game closed, every page showed a frozen snapshot,
+    tags Diego set in DIM never appeared, and vice-versa looked "not synced". Fixes, all in
+    `vault-verdict.js` `main()`:
+    - Plain `GET /api/weapons` now refreshes when the snapshot is older than **`SNAPSHOT_TTL`
+      (30s)**; `?fresh=1` still always re-pulls. `GET /api/armor` got the same 30s TTL
+      (it had the identical forever-cache bug).
+    - A **60s background keep-warm interval** re-pulls even when Destiny is closed, so data is
+      never more than ~1 min old (while playing, pollDrops' 25s cycle already keeps it fresher).
+    - **`GET /api/status`** (cheap, zero Bungie/DIM calls) → `{weaponsAt, fetching, gameUp,
+      dim:{off,at,err}, auto:{at,state,enabled}}`. `DIM_LAST_ERR` records the last DIM read
+      failure so sync problems are finally VISIBLE (they only went to the lost console before).
+    - **"Updated Xs ago" chip (banner.js, same spot on EVERY page — Diego's ask):** polls
+      `/api/status` every 10s, repaints every 5s; dot = green <90s, gold <5min, red older or a
+      DIM error (error text in the tooltip). **Click = force `/api/weapons?fresh=1`** then reload
+      the page's data. **Gentle auto-reload:** pages expose `window.GRELOAD = () => load(...)`
+      (wired in vault-verdict/weapon-vault/weapon-watch/weapon-drops/perk-finder/fashion); the
+      banner calls it when the server has newer data AND the tab is visible AND Diego hasn't
+      touched the page for 45s (never re-render under his finger), plus immediately when the tab
+      regains visibility. Pages without the hook (auto/settings/artifacts) only full-reload on an
+      explicit chip click. Chip style `.gb-upd` in theme.css.
+
   - **Auto inventory manager (`/auto`, phase-3 — shipped 2026-07-06):** a server-side pass
     (`autoManage` inside `main()` in `vault-verdict.js`, on a 120s interval + a 45s first pass)
     that auto-tags weapon copies and stages junk for dismantling **while Destiny is running AND
     you're safely out of an activity.** Diego's agreed rules (answered 2026-07-06):
-    - **Activity gate (`fetchActivity`, component 204):** reads the most-recently-played
-      character's `currentActivityHash` / `currentActivityModeType`. **Safe = orbit
-      (`currentActivityHash===0`) OR social space (mode `40`).** Matchmaking for most playlists
-      reports orbit until the activity loads, so it's covered. A **live** pass only runs when safe;
-      a **dry-run preview** runs anytime (writes nothing) so the plan is visible even mid-activity.
-      Verified live: while Diego was in an activity (`hash 82913930`) the live pass correctly
-      skipped and the preview still produced the plan.
+    - **Activity gate (`fetchActivity`, component 204) — FIXED 2026-07-12 (the "junk staging
+      never runs" bug):** reads the most-recently-played character's `currentActivityHash` /
+      `currentActivityModeType`. **CRITICAL FACT: orbit is NOT hash 0 — orbit is its own
+      ACTIVITY, hash `82913930`, whose def has an EMPTY name and `placeHash 2961497387`
+      ("Orbit").** Hash 0 basically only appears when logged out. The original gate
+      (`safe = hash===0 || mode 40`) therefore treated orbit as "in an activity" and a live
+      pass only ever ran in the Tower — the 2026-07-06 "verified" note (which read hash
+      82913930 as an activity) was a misdiagnosis. Now **safe = hash 0 OR hash 82913930 OR
+      social (mode/modes 40) OR the activity def's `placeHash` resolves to the Orbit place**
+      (`activityDefLite`, on-demand cached `DestinyActivityDefinition` lookup — future-proof if
+      the orbit hash ever changes). `fetchActivity` also returns the resolved activity **name**,
+      recorded in `AUTO_LOG.activity.name` (verified live: mid-Trials showed
+      `{hash:1229253616, mode:84, name:"The Burnout"}, safe:false`). A **live** pass only runs
+      when safe; a **dry-run preview** runs anytime (writes nothing). While unsafe the tick polls
+      every **15s** (mid-activity a pass is just the cheap activity check) so staging fires within
+      seconds of an activity ENDING — Diego's 2026-07-12 ask.
     - **Legendaries only** — `def.tt===5`. **Exotics (`tt===6`) and rares are never touched**
       (Diego's rule). Locked, equipped, and postmaster copies are also skipped, and a human
       keep/favorite tag is never downgraded to junk.
@@ -584,17 +618,20 @@ Core priorities, in his words:
       corner flag (`.wt.tg-favorite.af`), Weapon Watch copy chips, and New Drops chips; the `/auto` page
       has a colour legend. Verified: field present on all weapons, 0 green until the first live run
       (Diego's 37 existing favorites correctly read as manual/pink).
-    - **Junk staging (per slot, Diego 2026-07-06):** keeps `junkStage` (default **3**) junk-tagged
-      legendaries staged **in EACH weapon slot — Kinetic / Energy / Power — so 9 total** — on a character
+    - **Junk staging (per slot; count raised 2026-07-12):** keeps `junkStage` (default **5** — Diego
+      2026-07-12: "instead of transferring 3, transfer 5"; was 3) junk-tagged
+      legendaries staged **in EACH weapon slot — Kinetic / Energy / Power — so 15 total** — on a character
       (default `stageCid = LOCK_CTX.characterId` = first char = the Warlock main `2305843010375154553`)
       so Diego dismantles them in-game (**there is no Bungie dismantle API**). Per slot it computes
-      `need = 3 − junk already staged in that slot` and pulls the **lowest-power** vault junk of that slot
-      until met (so it never stages more than 3/slot, and re-tops-up as Diego dismantles). If a slot
+      `need = junkStage − junk already staged in that slot` and pulls the **lowest-power** vault junk of that slot
+      until met (so it never stages more than junkStage/slot, and re-tops-up as Diego dismantles). If a slot
       bucket is full (1 equipped + 9) it first vaults one **unlocked, non-junk, non-keep/fav** weapon
-      from that slot to make room (`spill`). `maxMovesPerRun` raised to **12** (up to 9 stages + spills).
+      from that slot to make room (`spill`). `maxMovesPerRun` raised to **20** (up to 15 stages + spills).
+      The live `auto-manage.json` was updated to match (junkStage 5, maxMovesPerRun 20, re-enabled —
+      it had been sitting at `enabled:false`, another reason nothing was transferring).
       Verified live via dry-run: main had Kinetic 9 / Energy 9 / Power 0 junk staged → the app added
       **Power 0→3** and left the already-stocked slots (need ≤ 0).
-    - **Safety caps:** `maxJunkPerRun` (25) and `maxMovesPerRun` (8) bound how much one pass can do,
+    - **Safety caps:** `maxJunkPerRun` (25) and `maxMovesPerRun` (20) bound how much one pass can do,
       so a logic bug can't sweep the whole vault in one tick (verified junk capped at exactly 25).
       Config lives in `auto-manage.json` (gitignored, `saveJsonSafe` + `.bak`); `enabled` defaults
       **true** (Diego chose "go fully live"). **`AUTO_DRYRUN=1` env forces decide-only** — used for

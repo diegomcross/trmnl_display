@@ -91,6 +91,16 @@ h1 span,.disp span{ color:var(--gold); }
   background:none; cursor:pointer; opacity:.5; }
 .gdot.on{ opacity:1; border-color:var(--gold); }
 .gdot img{ width:100%; height:100%; display:block; object-fit:cover; }
+/* "Updated Xs ago" data-freshness chip — same spot in the banner on every page (banner.js) */
+.gb-upd{ display:inline-flex; align-items:center; gap:7px; flex:0 0 auto;
+  font-family:var(--disp); font-size:12px; letter-spacing:.04em; white-space:nowrap;
+  color:rgba(255,255,255,.85); background:rgba(0,0,0,.42); border:1px solid var(--line-strong);
+  padding:5px 10px; cursor:pointer; }
+.gb-upd::before{ content:''; width:8px; height:8px; border-radius:50%; background:var(--mut); flex:0 0 auto; }
+.gb-upd.ok::before{ background:var(--fav-auto); box-shadow:0 0 6px rgba(110,222,155,.7); }
+.gb-upd.warn::before{ background:var(--gold); box-shadow:0 0 6px rgba(205,174,50,.7); }
+.gb-upd.bad::before{ background:var(--junk); box-shadow:0 0 6px rgba(224,82,58,.7); }
+.gb-upd:hover{ border-color:var(--gold); color:var(--white); }
 .gb-nav{ display:flex; gap:2px; flex-wrap:wrap; justify-content:flex-end; }
 .gnav-a{ font-family:var(--disp); text-transform:uppercase; letter-spacing:.1em; font-size:11px;
   text-decoration:none; color:rgba(255,255,255,.70); padding:7px 12px; border:1px solid transparent;
