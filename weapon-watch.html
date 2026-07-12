@@ -126,9 +126,12 @@ input[type=checkbox]{accent-color:var(--gold);width:15px;height:15px;flex-shrink
 <div class="bar"><button class="btn" id="refreshBtn">Refresh from Bungie</button><span class="count" id="status" style="margin:0"></span></div>
 
 <div class="bar" id="wBar">
-  <select id="wSort"><option value="score">Sort: best match %</option><option value="name">Sort: name</option></select>
+  <select id="wSort"><option value="attention">Sort: needs attention (dupes + untagged)</option><option value="score">Sort: best match %</option><option value="copies">Sort: most copies</option><option value="name">Sort: name</option></select>
   <div class="bar" id="wAmmoTabs" style="margin:0"></div>
+  <div class="bar" id="wTagTabs" style="margin:0"></div>
   <label class="tgl"><input type="checkbox" id="wOnlyHits"> Only show weapons with a hit</label>
+  <button class="btn sm mut" id="expAllBtn">Expand all</button>
+  <button class="btn sm mut" id="colAllBtn">Collapse all</button>
   <button class="btn sm mut" id="selModeBtn">Select multiple</button>
   <button class="btn sm red" id="junkUntaggedBtn">Junk untagged</button>
   <button class="btn sm mut" id="expJunkBtn">Copy junk DIM query</button>
@@ -143,7 +146,7 @@ input[type=checkbox]{accent-color:var(--gold);width:15px;height:15px;flex-shrink
 </div>
 
 <script>
-let DATA={weapons:[],defs:{}}, WATCH={}, TAGS={}, q='', wSort='score', wAmmo='', wOnlyHits=false, selMode=false;
+let DATA={weapons:[],defs:{}}, WATCH={}, TAGS={}, q='', wSort='attention', wAmmo='', wFilt='', wOnlyHits=false, selMode=false;
 const openCards=new Set(), sel=new Set();
 const $=id=>document.getElementById(id);
 const esc=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
@@ -220,6 +223,9 @@ function renderWatched(){
 
   $('wAmmoTabs').innerHTML=['','Kinetic','Energy','Power'].map(x=>
     `<button class="tab ${wAmmo===x?'on':''}" data-wammo="${x}">${x||'All ammo'}</button>`).join('');
+  // tag-status filter chips (Diego 2026-07-12: "give filter options")
+  $('wTagTabs').innerHTML=[['','All'],['untagged','Has untagged'],['god','God roll'],['favorite','Has favorite'],['junk','Has junk']].map(([v,t])=>
+    `<button class="tab ${wFilt===v?'on':''}" data-wfilt="${v}">${t}</button>`).join('');
 
   let entries=Object.entries(WATCH).map(([hash,cfg])=>{
     const d=DATA.defs[hash];
@@ -233,24 +239,34 @@ function renderWatched(){
     // order copies by TAG first (favorite → keep → none → junk), then by match score
     const copies=raw.map(w=>({w,sc:scoreCopy(w,cfg,rankOf)})).sort((a,b)=>
       (TAGRANK[tagOf(a.w)]??2)-(TAGRANK[tagOf(b.w)]??2) || b.sc.pct-a.sc.pct || b.sc.matchW-a.sc.matchW);
-    return {hash,cfg,d,rankOf,copies,best:copies[0]?.sc.pct??0,hasGod:copies.some(c=>c.sc.god)};
+    const unt=raw.filter(w=>tagOf(w)==='none').length;   // untagged copies = need a decision
+    return {hash,cfg,d,rankOf,copies,unt,best:copies[0]?.sc.pct??0,hasGod:copies.some(c=>c.sc.god)};
   });
   const totalWatched=entries.length;
-  entries=entries.filter(en=>en.d && matchesQuery(en.d) && (!wAmmo||en.d.slot===wAmmo) && (!wOnlyHits||en.best>0));
-  entries.sort((a,b)=> wSort==='score' ? (b.best-a.best || a.d.n.localeCompare(b.d.n)) : a.d.n.localeCompare(b.d.n));
+  const passFilt=en=> wFilt==='' ? true
+    : wFilt==='untagged' ? en.unt>0
+    : wFilt==='god' ? en.hasGod
+    : en.copies.some(c=>tagOf(c.w)===wFilt);   // favorite / junk
+  entries=entries.filter(en=>en.d && matchesQuery(en.d) && (!wAmmo||en.d.slot===wAmmo) && (!wOnlyHits||en.best>0) && passFilt(en));
+  // "needs attention" (default): most untagged dupes first, then most copies, then best %
+  entries.sort((a,b)=>
+    wSort==='attention' ? (b.unt-a.unt || b.copies.length-a.copies.length || b.best-a.best || a.d.n.localeCompare(b.d.n))
+    : wSort==='score' ? (b.best-a.best || a.d.n.localeCompare(b.d.n))
+    : wSort==='copies' ? (b.copies.length-a.copies.length || b.unt-a.unt || a.d.n.localeCompare(b.d.n))
+    : a.d.n.localeCompare(b.d.n));
   $('wCount').textContent=totalWatched?`showing ${entries.length} of ${totalWatched}`:'';
   $('selModeBtn').classList.toggle('on',selMode);
   $('selModeBtn').textContent=selMode?'Done selecting':'Select multiple';
   $('selModeBtn').style.borderColor=selMode?'var(--gold)':'';
   $('selModeBtn').style.color=selMode?'var(--gold)':'';
 
-  $('watched').innerHTML=(entries.length?entries.map(({hash,cfg,d,rankOf,copies,best,hasGod})=>{
+  $('watched').innerHTML=(entries.length?entries.map(({hash,cfg,d,rankOf,copies,unt,best,hasGod})=>{
     const isOpen=openCards.has(hash);
     const tn=trackedNames(cfg);
     const hperks=tn.length?`<div class="hperks">${tn.map(p=>`<${p.hi?'b class="hp2"':'b'}>${p.hi?'★':''}${esc(p.n)}</b>`).join(' · ')}</div>`:'';
     const vtag=d.versions>1?` <span style="color:var(--dim)">· ${d.versions} versions</span>`:'';
     const head=`<div class="whead" data-open="${hash}">
-      <span class="wl">${wTile(d,best?best+'%':'')}<span class="wtx"><span class="nm">${esc(d.n)}</span> <span class="sum">· ${esc(d.ty)} · ${copies.length} cop${copies.length===1?'y':'ies'} · best ${best}%${vtag} · tracking ${selectedCount(cfg)} criteria</span>${hasGod?'<span class="badge">🎯 GOD ROLL</span>':''}${isOpen?'':hperks}</span></span>
+      <span class="wl">${wTile(d,best?best+'%':'')}<span class="wtx"><span class="nm">${esc(d.n)}</span> <span class="sum">· ${esc(d.ty)} · ${copies.length} cop${copies.length===1?'y':'ies'}${unt?` · <b style="color:var(--rev)">${unt} untagged</b>`:''} · best ${best}%${vtag} · tracking ${selectedCount(cfg)} criteria</span>${hasGod?'<span class="badge">🎯 GOD ROLL</span>':''}${isOpen?'':hperks}</span></span>
       <span class="sum">${isOpen?'▾':'▸'}</span></div>`;
     if(!isOpen) return `<div class="card">${head}</div>`;
 
@@ -389,9 +405,10 @@ const copyIds=hash=>DATA.weapons.filter(w=>w.hash===Number(hash)||String(w.hash)
 document.body.addEventListener('click',async e=>{
   // native controls (tag/mw selects, checkboxes) are handled by the change listener
   if(e.target.closest('select,input[type=checkbox]')) return;
-  const t=e.target.closest('[data-open],[data-watch],[data-unwatch],[data-lock],[data-equip],[data-vault],[data-ctag],[data-selall],[data-selnone],[data-btag],[data-block],[data-junkrest],[data-wammo],.pk');
+  const t=e.target.closest('[data-open],[data-watch],[data-unwatch],[data-lock],[data-equip],[data-vault],[data-ctag],[data-selall],[data-selnone],[data-btag],[data-block],[data-junkrest],[data-wammo],[data-wfilt],.pk');
   if(!t) return;
   if(t.dataset.wammo!==undefined){ wAmmo=t.dataset.wammo; renderWatched(); }
+  else if(t.dataset.wfilt!==undefined){ wFilt=t.dataset.wfilt; renderWatched(); }
   else if(t.dataset.open){ openCards.has(t.dataset.open)?openCards.delete(t.dataset.open):openCards.add(t.dataset.open); renderWatched(); }
   else if(t.dataset.watch){ const h=t.dataset.watch; WATCH[h]={name:DATA.defs[h].n,perks:{},mw:'',stats:[]}; openCards.add(h); save(); render(); }
   else if(t.dataset.unwatch){ if(confirm('Stop watching '+DATA.defs[t.dataset.unwatch].n+'?')){ delete WATCH[t.dataset.unwatch]; save(); render(); } }
@@ -437,6 +454,8 @@ $('q').oninput=e=>{q=e.target.value;render();};
 $('refreshBtn').onclick=()=>load(true);
 $('wSort').onchange=e=>{wSort=e.target.value;renderWatched();};
 $('wOnlyHits').onchange=e=>{wOnlyHits=e.target.checked;renderWatched();};
+$('expAllBtn').onclick=()=>{Object.keys(WATCH).forEach(h=>openCards.add(h));renderWatched();};
+$('colAllBtn').onclick=()=>{openCards.clear();renderWatched();};
 $('selModeBtn').onclick=()=>{selMode=!selMode; if(!selMode) sel.clear(); renderWatched();};
 $('junkUntaggedBtn').onclick=()=>{
   // mass-junk every weapon copy that has no tag yet (tag your keepers first, then junk the rest)

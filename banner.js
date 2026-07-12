@@ -68,9 +68,16 @@
     const age = Date.now() - status.weaponsAt;
     const dimErr = status.dim && status.dim.err;
     c.className = 'gb-upd ' + (dimErr || age > 300000 ? 'bad' : age > 90000 ? 'warn' : 'ok');
-    c.textContent = 'Updated ' + ago(age);
+    // Detected activity (Diego 2026-07-12: show it so he can SEE detection working).
+    const act = status.activity;
+    const actTxt = !status.gameUp ? ''
+      : (act && act.name ? ' · ' + act.name : (act && act.safe === false ? ' · in activity' : ''));
+    c.textContent = 'Updated ' + ago(age) + actTxt;
     c.title = (dimErr ? 'DIM sync problem: ' + dimErr + '\n' : '')
-      + 'Inventory pulled from Bungie ' + ago(age) + (status.gameUp ? ' · Destiny running' : '')
+      + 'Inventory pulled from Bungie ' + ago(age)
+      + (status.gameUp
+          ? (act ? '\nActivity: ' + (act.name || 'hash ' + act.hash) + (act.safe ? ' (safe — orbit/social)' : ' (in activity)') + ', checked ' + ago(Date.now() - act.at) : '\nDestiny running — activity not checked yet')
+          : '\nDestiny not running')
       + '\nClick to refresh now';
   }
 

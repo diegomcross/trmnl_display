@@ -106,13 +106,15 @@ td b{color:var(--ink)}
   <div class="card">
     <h2>Auto-Manager — timing</h2>
     <div class="row">
-      <label class="f">Check every (game running) s<input id="activeSeconds" type="number" min="15" max="600"></label>
+      <label class="f">Check every (in orbit) s<input id="orbitSeconds" type="number" min="15" max="600"></label>
+      <label class="f">Check every (in activity) s<input id="activitySeconds" type="number" min="10" max="600"></label>
       <label class="f">Check every (game closed) s<input id="idleSeconds" type="number" min="30" max="1800"></label>
       <button id="saveBtn" class="btn">Save all Auto-Manager settings</button>
     </div>
-    <p class="help">While Destiny is running the app checks at the first cadence — that's how fast it
-    catches you reaching orbit and how fast dismantled junk gets topped back up. While the game is closed
-    the check is a cheap no-op at the second cadence.</p>
+    <p class="help">In orbit/social the app checks at the first cadence (junk top-up speed). Inside an
+    activity it only runs a cheap "did the activity end?" check at the second cadence — so tagging and
+    junk staging kick in within seconds of finishing. While the game is closed the check is a no-op at
+    the third cadence. Lower = snappier, higher = fewer Bungie API calls.</p>
   </div>
 
   <div class="card">
@@ -166,7 +168,7 @@ function fillForm(){
   $('thFav').value=t.fav; $('thKeep').value=t.keep; $('thWatched').value=t.watchedJunk;
   $('thUnwatched').value=t.unwatchedJunk; $('thCombo').value=t.comboFloor??80;
   $('junkStage').value=CFG.junkStage; $('maxJunk').value=CFG.maxJunkPerRun; $('maxMoves').value=CFG.maxMovesPerRun;
-  $('activeSeconds').value=CFG.activeSeconds??30; $('idleSeconds').value=CFG.idleSeconds??120;
+  $('orbitSeconds').value=CFG.orbitSeconds??60; $('activitySeconds').value=CFG.activitySeconds??15; $('idleSeconds').value=CFG.idleSeconds??120;
   if(CFG.stageCid!=null) $('stageCid').value=String(CFG.stageCid);
 }
 async function loadAll(){
@@ -215,7 +217,7 @@ $('toggle').onclick=async()=>{
 $('saveBtn').onclick=async()=>{
   await postCfg({
     junkStage:+$('junkStage').value, maxJunkPerRun:+$('maxJunk').value, maxMovesPerRun:+$('maxMoves').value,
-    activeSeconds:+$('activeSeconds').value, idleSeconds:+$('idleSeconds').value,
+    orbitSeconds:+$('orbitSeconds').value, activitySeconds:+$('activitySeconds').value, idleSeconds:+$('idleSeconds').value,
     stageCid:$('stageCid').value||null,
     thr:{ unwatchedJunk:+$('thUnwatched').value, watchedJunk:+$('thWatched').value,
           keep:+$('thKeep').value, fav:+$('thFav').value, comboFloor:+$('thCombo').value },

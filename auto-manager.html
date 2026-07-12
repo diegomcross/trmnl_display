@@ -96,7 +96,8 @@ td{padding:6px 8px;border-bottom:1px solid var(--panel2);vertical-align:middle}
     </div>
     <div class="row" style="margin-top:12px">
       <label class="f">Combo-match floor %<input id="thCombo" type="number" min="0" max="100"></label>
-      <label class="f">Check every (game running) s<input id="activeSeconds" type="number" min="15" max="600"></label>
+      <label class="f">Check every (in orbit) s<input id="orbitSeconds" type="number" min="15" max="600"></label>
+      <label class="f">Check every (in activity) s<input id="activitySeconds" type="number" min="10" max="600"></label>
       <label class="f">Check every (game closed) s<input id="idleSeconds" type="number" min="30" max="1800"></label>
       <button id="saveBtn" class="btn" style="align-self:flex-end">Save settings</button>
     </div>
@@ -162,7 +163,7 @@ function fillForm(){
   $('thUnwatched').value=t.unwatchedJunk; $('thWatched').value=t.watchedJunk; $('thKeep').value=t.keep; $('thFav').value=t.fav;
   $('thCombo').value=t.comboFloor??80;
   $('junkStage').value=CFG.junkStage; $('maxJunk').value=CFG.maxJunkPerRun; $('maxMoves').value=CFG.maxMovesPerRun;
-  $('activeSeconds').value=CFG.activeSeconds??30; $('idleSeconds').value=CFG.idleSeconds??120;
+  $('orbitSeconds').value=CFG.orbitSeconds??60; $('activitySeconds').value=CFG.activitySeconds??15; $('idleSeconds').value=CFG.idleSeconds??120;
 }
 async function loadAll(){
   const d=await fetch('/api/auto').then(r=>r.json());
@@ -176,7 +177,7 @@ async function postCfg(patch){ const d=await fetch('/api/auto',{method:'POST',he
 $('toggle').onclick=async()=>{ const next=!(CFG&&CFG.enabled); if(next && !confirm('Turn auto-manager ON? It will tag and move weapons on your live account whenever you are out of an activity.'))return; await postCfg({enabled:next}); };
 $('saveBtn').onclick=async()=>{
   await postCfg({ junkStage:+$('junkStage').value, maxJunkPerRun:+$('maxJunk').value, maxMovesPerRun:+$('maxMoves').value,
-    activeSeconds:+$('activeSeconds').value, idleSeconds:+$('idleSeconds').value,
+    orbitSeconds:+$('orbitSeconds').value, activitySeconds:+$('activitySeconds').value, idleSeconds:+$('idleSeconds').value,
     thr:{ unwatchedJunk:+$('thUnwatched').value, watchedJunk:+$('thWatched').value, keep:+$('thKeep').value, fav:+$('thFav').value, comboFloor:+$('thCombo').value } });
   $('saveBtn').textContent='Saved ✓'; setTimeout(()=>$('saveBtn').textContent='Save settings',1200);
 };

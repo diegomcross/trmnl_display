@@ -17,6 +17,31 @@ lines in the log). REBOOT.cmd was already run — new code is live; `auto-manage
 (it sat at enabled:false). Everything below is the 2026-07-09 state and still-next items. Full
 details in HANDOFF "Activity gate", "Junk staging", "Data freshness overhaul".
 
+**LATER SAME DAY (2026-07-12, second batch):** ⚠ **INCIDENT + the top-priority next task.** After the
+orbit fix + my re-enable of `auto-manage.json` (it sat at enabled:false), Diego finished a Trials match
+and the Auto-Manager ran LIVE at 07:33–07:36: fav 22 / keep 25 / junk ~94 tags + heavy staging — one
+pass logged **"staged 57" which exceeds maxMovesPerRun 20 (suspected cap bug, MUST investigate)**.
+Diego had already reported "it messed up a lot of my weapons a few days ago" and asked for a FULL AUDIT,
+with his tagging **specs confirmed by him FIRST** before any code changes — his words: VERY IMPORTANT.
+State now: **Auto-Manager DISABLED** (`enabled:false`); complete tag/config snapshot saved in
+`audit-backup-20260712-074440/`; the as-implemented spec was written out and sent to Diego for
+confirmation. **BLOCKED: awaiting Diego** — his answers to the spec questions (dupe-junking rule,
+unwatched junk bar, band values, staging counts) must be recorded here verbatim, then: audit
+`autoDecide`/`decByWeapon`/staging vs the confirmed spec, find the staged-57 cap violation, check the
+DIM API audit log for recoverable pre-07:33 tags. Do NOT re-enable until the audit passes and Diego
+says go.
+Also shipped in the second batch: cadence split (`orbitSeconds` 60 / `activitySeconds` 15 /
+`idleSeconds` 120 — replaced `activeSeconds`; inputs updated in /auto + /settings; while the game runs
+the tick now polls activity even when disabled so the chip shows it), `/api/status` gained
+`activity:{safe,hash,mode,name,at}`, the freshness chip moved to a **fixed bottom-right pill** (banner
+placement wrapped badly) and now shows the **detected activity name**, and Weapon Watch got the
+"needs attention" default sort (most untagged dupes first) + tag-status filter chips + expand/collapse
+all + amber "N untagged" header badge.
+**RESTART RULE (learned the hard way):** agents must NOT restart the servers from their own shell —
+the relaunched PowerShell windows come out VISIBLE in Diego's session and he closes them (which kills
+the app). Ask Diego to double-click REBOOT.cmd instead. Server-JS changes from this batch are
+committed but **wait for Diego's reboot to go live**; HTML/CSS changes are already live.
+
 ## Previous status (2026-07-09 — Auto-Manager scoring FIXED + PVE/PVP tags + Settings page)
 
 Diego's 2026-07-09 batch, all shipped & verified on an isolated 8799 dry-run instance (real Bungie

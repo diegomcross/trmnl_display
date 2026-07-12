@@ -533,10 +533,14 @@ Core priorities, in his words:
     - **`GET /api/status`** (cheap, zero Bungie/DIM calls) → `{weaponsAt, fetching, gameUp,
       dim:{off,at,err}, auto:{at,state,enabled}}`. `DIM_LAST_ERR` records the last DIM read
       failure so sync problems are finally VISIBLE (they only went to the lost console before).
-    - **"Updated Xs ago" chip (banner.js, same spot on EVERY page — Diego's ask):** polls
-      `/api/status` every 10s, repaints every 5s; dot = green <90s, gold <5min, red older or a
-      DIM error (error text in the tooltip). **Click = force `/api/weapons?fresh=1`** then reload
-      the page's data. **Gentle auto-reload:** pages expose `window.GRELOAD = () => load(...)`
+    - **"Updated Xs ago" chip (banner.js, EVERY page):** rendered by banner.js but **pinned
+      `position:fixed` to the bottom-right of the viewport** (`.gb-upd` in theme.css) — the first
+      in-banner placement wrapped badly against the 9-tab nav and scrolled away (Diego rejected it
+      same day). Polls `/api/status` every 10s, repaints every 5s; dot = green <90s, gold <5min,
+      red older or a DIM error (error text in the tooltip). Also shows the **detected current
+      activity** (`status.activity.name` — e.g. "Updated 12s ago · Orbit") so Diego can SEE
+      activity detection working; tooltip adds safe/unsafe + when it was checked. **Click = force
+      `/api/weapons?fresh=1`** then reload the page's data. **Gentle auto-reload:** pages expose `window.GRELOAD = () => load(...)`
       (wired in vault-verdict/weapon-vault/weapon-watch/weapon-drops/perk-finder/fashion); the
       banner calls it when the server has newer data AND the tab is visible AND Diego hasn't
       touched the page for 45s (never re-render under his finger), plus immediately when the tab
@@ -638,12 +642,21 @@ Core priorities, in his words:
       all agent testing so no real writes hit the account.
     - **Endpoints:** `GET /api/auto` → `{cfg,last,gameUp}`; `POST /api/auto` saves a config patch;
       `POST /api/auto/run {dryRun}` runs a pass immediately (dry by default) and returns the log.
-    - **Cadence (2026-07-09 — "junk top-up too slow" fix):** while Destiny is RUNNING every pass runs
-      at `activeSeconds` (default 30s) — that's both how fast orbit is caught and how fast dismantled
-      junk is topped back up; `idleSeconds` (120s) only paces the cheap no-op tick while the game is
-      closed. (The earlier adaptive version dropped to a 120s "hold" once a pass did nothing — which
-      is exactly when Diego dismantles, so top-ups lagged ~2min.) `onGameStart` kicks a pass ~3s after
-      destiny2.exe appears. **Fetch dedup:** `freshWeapons(maxAgeMs=15000)` in `main()` — pollDrops
+    - **Cadence (SPLIT 2026-07-12, Diego: "save API calls"):** `activeSeconds` is GONE, replaced by
+      **`orbitSeconds` (60)** — pass cadence while SAFE in orbit/social (junk top-up speed) — and
+      **`activitySeconds` (15)** — the cheap 1-call "did the activity end?" check while INSIDE an
+      activity, so staging fires within seconds of finishing; `idleSeconds` (120s) paces the no-op
+      tick while the game is closed. Inputs updated in both `/auto` and `/settings`. While the game
+      runs the tick polls `fetchActivity` **even when the Auto-Manager is disabled** so the banner
+      chip can display the detected activity (`/api/status` → `activity:{safe,hash,mode,name,at}`,
+      from the `LAST_ACT` module var). API-load context: steady state is ~2-6 Bungie calls/min
+      (pollDrops each 25s + this tick) — far under Bungie's throttle (~20+ req/s bursts), so
+      throttling risk is negligible; the split is still the right economy. `onGameStart` kicks a
+      pass ~3s after destiny2.exe appears.
+      **⚠ STATUS 2026-07-12: Auto-Manager is DISABLED pending Diego's spec confirmation + a full
+      audit** — after the orbit fix it ran live at 07:33-07:36 and mass-retagged (~94 junk, one pass
+      logged "staged 57" > maxMovesPerRun 20, suspected cap bug). Tag snapshot:
+      `audit-backup-20260712-074440/`. See NEXT_PHASE (BLOCKED: awaiting Diego). **Fetch dedup:** `freshWeapons(maxAgeMs=15000)` in `main()` — pollDrops
       (25s) + auto passes share one deduped Bungie pull; an explicit `/api/weapons?fresh=1` always
       re-pulls. **Dry-run cache poisoning guard:** a dry-run mutates the in-memory snapshot with
       pretend tags (so its staging preview works) — `wcache` is nulled in the pass's `finally` so no

@@ -1311,7 +1311,8 @@ const AUTO_DEFAULTS = {
   stageCid: null,          // character to stage junk on (null = default / Warlock main)
   maxJunkPerRun: 25,       // safety cap: never junk-tag more than this in one pass
   maxMovesPerRun: 20,      // safety cap on item transfers per pass (up to 15 stages + spills)
-  activeSeconds: 30,       // check cadence while Destiny is RUNNING (catch orbit + junk top-up fast)
+  orbitSeconds: 60,        // check cadence while SAFE (orbit/social) — Diego 2026-07-12: save API calls
+  activitySeconds: 15,     // check cadence while IN an activity (cheap check; catch the activity ENDING fast)
   idleSeconds: 120,        // cadence of the cheap no-op check while the game is CLOSED
   thr: { unwatchedJunk: 60, keep: 80, fav: 90, watchedJunk: 75, comboFloor: 80 },
 };
@@ -1421,6 +1422,7 @@ async function activityDefLite(hash, e) {
   return ACTDEF_CACHE[hash];
 }
 let ACT_MEMBER = null;   // membership resolution is stable — cache it (was an extra API call every 30s pass)
+let LAST_ACT = null;     // last fetchActivity result + timestamp — shown in the banner chip (/api/status)
 async function fetchActivity(e) {
   const tok = await accessToken(e);
   let m = ACT_MEMBER;
@@ -1447,6 +1449,7 @@ async function fetchActivity(e) {
     if (d.place === ORBIT_PLACE_HASH) safe = true;
     name = d.name || (d.place === ORBIT_PLACE_HASH ? 'Orbit' : '');
   } else if (hash === ORBIT_ACTIVITY_HASH) name = 'Orbit';
+  LAST_ACT = { safe, hash, mode, name, at: Date.now() };
   return { safe, hash, mode, name, activeCid: cid };
 }
 
@@ -1480,6 +1483,7 @@ async function main() {
           weaponsAt: wcache ? wFetchedAt : 0, fetching: !!wFetching, gameUp,
           dim: { off: DIM_OFF, at: DIM_TAGS_AT, err: DIM_LAST_ERR },
           auto: { at: AUTO_LOG.at, state: AUTO_LOG.state || '', enabled: !!loadAuto().enabled },
+          activity: LAST_ACT,   // {safe,hash,mode,name,at} — the banner chip shows this
         });
       }
       if (req.url.startsWith('/api/armor')) {
@@ -1853,25 +1857,31 @@ async function main() {
   // while playing), so pages + the banner "Updated" chip always see data ≤ ~1 min old.
   setInterval(() => { freshWeapons(55000).catch((err) => console.warn('background refresh failed:', err.message)); }, 60000);
 
-  // Auto-manage cadence (2026-07-09): while Destiny is RUNNING, every pass runs at
-  // activeSeconds (default 30s) — in an activity that's how fast we catch the moment you
-  // hit orbit; in orbit it's how fast dismantled junk gets topped back up on the character.
-  // (The old adaptive version dropped to a 120s "hold" once a pass did nothing, which is
-  // exactly when Diego dismantles the staged junk — the top-up then sat waiting up to 2
-  // minutes. That's the "taking too long" he reported.) idleSeconds now only paces the
-  // cheap no-op tick while the game is CLOSED.
+  // Auto-manage cadence (Diego 2026-07-12, "save API calls"): while Destiny is RUNNING,
+  // pace by where you are — IN an activity the tick is just the cheap 1-call activity
+  // check every `activitySeconds` (15s, so staging fires within seconds of the activity
+  // ENDING); SAFE in orbit/social it's every `orbitSeconds` (60s — junk top-up cadence).
+  // idleSeconds (120s) paces the no-op tick while the game is CLOSED. Even with the
+  // Auto-Manager DISABLED the tick still checks the activity while the game runs, so the
+  // banner chip can show what activity is detected (Diego wants to SEE detection working).
   let autoTimer = null;
   const scheduleAuto = (sec) => { clearTimeout(autoTimer); autoTimer = setTimeout(autoTick, Math.max(10, sec) * 1000); };
   async function autoTick() {
     const cfg = loadAuto();
     let sec = cfg.idleSeconds || 120, state = 'paused';
     try {
-      if (cfg.enabled && gameUp) {
-        const log = await autoManage();
-        state = (log.safe === false) ? 'waiting for orbit' : 'active';
-        // Mid-activity a pass is just the cheap activity check — poll it faster (15s)
-        // so staging fires within seconds of the activity ENDING (Diego 2026-07-12).
-        sec = (log.safe === false) ? Math.min(cfg.activeSeconds || 30, 15) : (cfg.activeSeconds || 30);
+      if (gameUp) {
+        let safe = null;
+        if (cfg.enabled) {
+          const log = await autoManage();   // calls fetchActivity internally (updates LAST_ACT)
+          safe = log.safe;
+          state = (safe === false) ? 'waiting for orbit' : 'active';
+        } else {
+          const act = await fetchActivity(e).catch(() => null);   // chip-only activity probe
+          safe = act ? act.safe : null;
+          state = 'disabled';
+        }
+        sec = (safe === false) ? (cfg.activitySeconds || 15) : (cfg.orbitSeconds || 60);
       }
       AUTO_LOG.state = state; AUTO_LOG.nextSec = sec;
     } catch (err) { console.warn('autoTick error:', err.message); }
