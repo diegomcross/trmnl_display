@@ -678,6 +678,26 @@ Core priorities, in his words:
         auto-favorite with 1 tracked perk) — see NEXT_PHASE.
       - **DIM has NO audit-log API** (`GET /audit` 404 — probed) → the pre-incident tags are not
         recoverable. Consequence ↓
+    - **Diego's 2026-07-12 follow-up rules (all shipped):**
+      - **Last-copy guarantee keeps tagging `keep` AND writes a DIM note "best copy"** (his call:
+        "keep as KEEP and add note as best copy"). Implementation: `dimReadTags` now also caches
+        notes (`DIM_NOTES`); `dimWriteTag(e,id,tag,notes)` takes an optional notes arg (omitted =
+        DIM keeps the existing note); the apply loop appends " · best copy" after any existing
+        note so nothing Diego wrote is lost.
+      - **Auto-favorite gate `AUTO_FAV_MIN_CRIT = 3`:** a WATCHED weapon may only be auto-favorited
+        when ≥3 criteria are tracked (`w.rollCrit`, baked in fetchWeapons = tracked perks + mw +
+        stats). One matching tracked perk reads 100% but proves nothing — that's what mass-favorited
+        Shayura's Wrath (2 criteria). Below the gate a high score still earns the (single) keep; the
+        dedup `isFav` respects the same gate via `dec.favEligible`. Favorites-basis is not gated
+        (needs 3★+3★ anyway). One-keep rule (only if no keep exists) confirmed unchanged.
+      - **Unified TAG HISTORY (`tag-history.json`, gitignored, last 4000):** every tag change with
+        source — `manual` (chip in this app, logged in /api/tag), `auto` (Auto-Manager pass),
+        `dim` (edited inside the DIM app — caught by diffing each 30s `dimReadTags` against the
+        last-known map, or the disk mirror right after a restart; our own writes update `DIM_TAGS`
+        first so they never double-log), `revert` (undo). `GET /api/tag-history` (newest first,
+        last 1000). `/auto` has a "Tag history — every change, by source" card with source-filter
+        chips; names for `dim` entries resolve client-side from the weapons payload (id→name,
+        weapons + armor).
     - **Per-run history + one-click UNDO (2026-07-12):** every LIVE pass appends its tag changes
       (`{id,name,from,to}` per action) to `auto-history.json` (gitignored, saveJsonSafe, last 40
       runs; dry-runs never recorded). `GET /api/auto/history` (newest first);

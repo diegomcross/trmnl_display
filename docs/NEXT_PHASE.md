@@ -32,10 +32,12 @@ for armor - btw we need a very similar system to auto tag armor drops - be caref
 system that give me as much visibility as the weapons - for the armor, let's start with stagging
 before auto tagging, I don't want you messing up what I have already tagged." Findings + fixes are
 in HANDOFF ("2026-07-12 audit results"). **Still BLOCKED on Diego: the decision to re-enable** —
-the app will NOT flip `enabled` itself (hard rule, in agent memory). Also still open (ask Diego):
-(a) should the LAST-COPY guarantee tag the survivor `keep` (current behavior) or leave it untagged?
-(b) should auto-favorite require a minimum number of tracked criteria (today 1 tracked perk that
-matches = 100% ≥ 90 → favorite+lock — likely the source of the "fav 22" surprise)?
+the app will NOT flip `enabled` itself (hard rule, in agent memory). The two audit questions were
+ANSWERED (Diego, 2026-07-12, verbatim): "1- keep as KEEP and add note as best copy / 2- ok but only
+ONE weapon gets tagged as keep automatically, unless I already manually tagged one myself / create a
+history system of manual and auto tags that I can go back and check" → all three shipped same day
+(last-copy keeps write a "best copy" DIM note; AUTO_FAV_MIN_CRIT=3 gate on watched auto-favorites,
+one-keep rule confirmed already implemented; unified tag-history — see HANDOFF).
 **NEXT FEATURE (Diego's priority): armor AUTO-TAGGING** — a weapons-grade system (scores, bands,
 preview, per-run history/undo, same /auto visibility). Staging for armor is DONE (see HANDOFF);
 tagging design must reuse the armor page's verdict engine concepts (niches/set bonuses/exotic

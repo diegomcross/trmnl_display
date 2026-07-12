@@ -107,10 +107,13 @@ td{padding:6px 8px;border-bottom:1px solid var(--panel2);vertical-align:middle}
       tracked; copies under the watched-junk bar get junked. <b>Unwatched weapons</b> score by your
       ★ Perk-Finder favorites, <b>grade-aware</b>: each trait column counts its best favorited perk and
       100% needs a 3★ favorite in BOTH columns (two 1★ favorites = 50%) — so ordinary rolls are never
-      auto-favorited. A roll completing one of your saved <b>Perk Finder combos</b> never scores below the
+      auto-favorited. A watched weapon may only be <b>auto-favorited when you track at least 3 criteria</b>
+      (one matching perk = 100% but proves nothing); below that it can still earn the keep. A roll completing
+      one of your saved <b>Perk Finder combos</b> never scores below the
       combo floor. A brand-new watched drop that beats your best kept copy is auto-kept with a different
       chime. Favorited copies are also locked. For weapons with multiple copies it keeps <b>all favorites
-      plus the single best-rated keep</b> and junks the rest — never your last copy.
+      plus the single best-rated keep</b> and junks the rest — never your last copy, which stays tagged
+      keep with a <b>"best copy" note in DIM</b>.
       <br><span style="color:var(--fav-auto)">&#9632; light green favorite = set by the app</span> &nbsp;
       <span style="color:var(--fav-man)">&#9632; pink favorite = set by you</span> (shown on the Weapon Vault / Watch / Drops tags).
       <br>Every setting, with fuller explanations, also lives on the <a href="/settings" style="color:var(--keep)">Settings page</a>.
@@ -128,6 +131,15 @@ td{padding:6px 8px;border-bottom:1px solid var(--panel2);vertical-align:middle}
     <b>Revert</b> restores every tag that run touched back to what it was before. Staged item
     moves are not undone (they're just locations). Runs before 2026-07-12 were not recorded.</p>
     <div id="hist"></div>
+  </div>
+
+  <div class="card">
+    <h2>Tag history — every change, by source</h2>
+    <p class="note">One timeline of every tag change: <b>manual</b> = a chip you tapped in this app ·
+    <b>auto</b> = an Auto-Manager pass · <b>dim</b> = edited inside the DIM app (caught by the 30s
+    cloud sync) · <b>revert</b> = an undo. Last 1000 kept (tag-history.json). Recording started 2026-07-12.</p>
+    <div class="bar" id="thFilter" style="margin-bottom:8px"></div>
+    <div id="taghist"></div>
   </div>
 </div>
 
@@ -181,6 +193,7 @@ async function loadAll(){
   $('lastNote').textContent = d.last&&d.last.at ? `Last automatic check ${ago(d.last.at)} — ${d.last.note||d.last.note===''?d.last.note:''}` : 'No automatic check has run yet this session.';
   renderLog(d.last);
   loadHist();
+  loadTagHist();
 }
 async function loadHist(){
   try{
@@ -200,6 +213,36 @@ async function loadHist(){
       b.disabled=false; b.textContent='Revert'; loadAll();
     };});
   }catch(e){ $('hist').innerHTML='<div class="empty">Could not load history.</div>'; }
+}
+let TH=[], thSrc='', NAMEOF={};
+async function loadTagHist(){
+  try{
+    const h=await fetch('/api/tag-history').then(r=>r.json());
+    TH=Array.isArray(h)?h:[];
+    if(TH.some(x=>!x.name)){ // resolve ids from the (cached) weapons payload for entries logged without a name (dim edits)
+      try{ const w=await fetch('/api/weapons').then(r=>r.json());
+        for(const x of (w.weapons||[])) NAMEOF[x.id]=w.defs[x.hash]?.n||'';
+        for(const a of (w.armor||[])) NAMEOF[a.id]=a.n||'';
+      }catch(e){}
+    }
+    renderTagHist();
+  }catch(e){ $('taghist').innerHTML='<div class="empty">Could not load tag history.</div>'; }
+}
+function renderTagHist(){
+  const SRC=[['','All'],['manual','Manual'],['auto','Auto'],['dim','DIM app'],['revert','Reverts']];
+  $('thFilter').innerHTML=SRC.map(([v,t])=>{
+    const n=v?TH.filter(x=>x.src===v).length:TH.length;
+    return `<button class="btn sm ${thSrc===v?'':'mut'}" data-thsrc="${v}">${t} (${n})</button>`;
+  }).join('');
+  document.querySelectorAll('[data-thsrc]').forEach(b=>{ b.onclick=()=>{ thSrc=b.dataset.thsrc; renderTagHist(); }; });
+  const rows=TH.filter(x=>!thSrc||x.src===thSrc).slice(0,200);
+  if(!rows.length){ $('taghist').innerHTML='<div class="empty">No tag changes recorded'+(thSrc?' from this source':'')+' yet.</div>'; return; }
+  $('taghist').innerHTML='<div style="overflow-x:auto"><table><tr><th>When</th><th>Item</th><th>Change</th><th>Source</th></tr>'+
+    rows.map(x=>`<tr><td class="mini">${new Date(x.at).toLocaleString()}</td>
+      <td>${x.name||NAMEOF[x.id]||'<span class="mini">id '+x.id+'</span>'}</td>
+      <td>${tagCell(x.from)} → ${tagCell(x.to)}</td>
+      <td class="mini">${x.src}</td></tr>`).join('')+'</table></div>'+
+    (TH.filter(x=>!thSrc||x.src===thSrc).length>200?'<p class="note">Showing the latest 200.</p>':'');
 }
 async function postCfg(patch){ const d=await fetch('/api/auto',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(patch)}).then(r=>r.json()); CFG=d.cfg; paintState(); fillForm(); }
 

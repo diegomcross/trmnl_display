@@ -53,6 +53,12 @@ auto-manage.json
 auto-manage.json.bak
 auto-applied.json
 auto-applied.json.bak
+auto-history.json
+auto-history.json.bak
+tag-history.json
+tag-history.json.bak
+audit-backup-*/
+vault.log.old
 
 # vault-verdict server log + ad-hoc test dumps
 vault.log

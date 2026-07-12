@@ -317,6 +317,7 @@ async function dimAuth(e) {
   return { key, token: j.accessToken, pid };
 }
 
+let DIM_NOTES = {};       // instanceId -> DIM note text (read-only cache; preserved on tag writes)
 async function dimReadTags(e) {
   const { key, token, pid } = await dimAuth(e);
   const res = await fetch(`${DIM_API}/profile?platformMembershipId=${pid}&destinyVersion=2&components=tags`, {
@@ -324,9 +325,20 @@ async function dimReadTags(e) {
   });
   const j = await res.json().catch(() => ({}));
   if (!Array.isArray(j.tags)) throw new Error(`DIM read: ${j.error || res.status}`);
-  const out = {};
-  for (const t of j.tags) if (t.tag) out[t.id] = t.tag;
-  DIM_TAGS = out; DIM_TAGS_AT = Date.now(); DIM_LAST_ERR = '';
+  const out = {}, notes = {};
+  for (const t of j.tags) { if (t.tag) out[t.id] = t.tag; if (t.notes) notes[t.id] = t.notes; }
+  // Unified tag history (Diego 2026-07-12): changes made INSIDE the DIM app show up here as a
+  // diff against our last-known state (in-memory map, or the disk mirror right after a restart).
+  // Our own writes (manual chips / auto passes) update DIM_TAGS immediately, so they never
+  // re-log as "dim" — only genuinely external edits do.
+  const prev = Object.keys(DIM_TAGS).length ? DIM_TAGS : loadTags();
+  if (prev && Object.keys(prev).length) {
+    const changes = [];
+    for (const [id, tag] of Object.entries(out)) if ((prev[id] || 'none') !== tag) changes.push({ id, from: prev[id] || 'none', to: tag, src: 'dim' });
+    for (const id of Object.keys(prev)) if (!out[id]) changes.push({ id, from: prev[id], to: 'none', src: 'dim' });
+    logTagHistory(changes);
+  }
+  DIM_TAGS = out; DIM_NOTES = notes; DIM_TAGS_AT = Date.now(); DIM_LAST_ERR = '';
   saveJsonSafe(TAGS_FILE, out); // mirror to disk as an offline fallback
   return out;
 }
@@ -340,9 +352,10 @@ async function dimTagsFresh(e, maxAgeMs = 30000) {
   return DIM_TAGS;
 }
 
-async function dimWriteTag(e, id, tag) {
+async function dimWriteTag(e, id, tag, notes) {
   const { key, token, pid } = await dimAuth(e);
   const payload = { id, tag: (tag && tag !== 'none') ? tag : null };
+  if (notes !== undefined) payload.notes = notes;   // only sent when we mean to set it — omitted = DIM keeps the existing note
   const res = await fetch(`${DIM_API}/profile`, {
     method: 'POST', headers: { 'Content-Type': 'application/json', 'X-API-Key': key, Authorization: `Bearer ${token}`, Origin: DIM_ORIGIN },
     body: JSON.stringify({ platformMembershipId: pid, destinyVersion: 2, updates: [{ action: 'tag', payload }] }),
@@ -350,6 +363,7 @@ async function dimWriteTag(e, id, tag) {
   const j = await res.json().catch(() => ({}));
   if (res.status !== 200) throw new Error(`DIM write ${res.status}: ${JSON.stringify(j).slice(0, 140)}`);
   if (payload.tag) DIM_TAGS[id] = payload.tag; else delete DIM_TAGS[id];
+  if (notes !== undefined) { if (notes) DIM_NOTES[id] = notes; else delete DIM_NOTES[id]; }
   saveJsonSafe(TAGS_FILE, DIM_TAGS);
   return payload.tag || 'none';
 }
@@ -893,7 +907,8 @@ async function fetchWeapons(e) {
       if (cfg && (Object.keys(cfg.perks || {}).length || cfg.mw || (cfg.stats || []).length)) {
         const r = {};
         for (const s of (cfg.stats || [])) { const vals = [...new Set(copies.map((x) => x.statsMax[s] ?? -1))].sort((a, b) => b - a); r[s] = (v) => { const i = vals.indexOf(v); return i === 0 ? 's1' : i === 1 ? 's2' : i === 2 ? 's3' : ''; }; }
-        for (const w of copies) { w.rollScore = scoreWeaponCopy(w, cfg, r).pct; w.rollBasis = 'watched'; w.comboFloored = false; }
+        const crit = Object.keys(cfg.perks || {}).length + (cfg.mw ? 1 : 0) + (cfg.stats || []).length;
+        for (const w of copies) { w.rollScore = scoreWeaponCopy(w, cfg, r).pct; w.rollBasis = 'watched'; w.rollCrit = crit; w.comboFloored = false; }
       } else {
         for (const w of copies) {
           let sc = favRollScore(w, fav);
@@ -1294,6 +1309,7 @@ function beep() { exec('powershell -NoProfile -c "1..3 | %{ [console]::beep(880,
 
 // Server-side mirror of weapon-watch.html scoreCopy (same 75/3/4 god-roll gate).
 const GOD_MIN_PCT = 75, GOD_MIN_MATCHES = 3, GOD_MIN_SELECTED = 4;
+const AUTO_FAV_MIN_CRIT = 3;   // watched weapons: min tracked criteria before the app may auto-favorite (Diego 2026-07-12)
 function scoreWeaponCopy(w, cfg, rankOf) {
   const perks = cfg.perks || {}, roll = new Set([...(w.cols[0] || []), ...(w.cols[1] || [])].map((p) => p.n));
   let selW = 0, matchW = 0, matched = 0, selN = 0; const hit = [];
@@ -1363,6 +1379,21 @@ function recordAutoRun(log) {
   const hist = loadAutoHist();
   hist.push({ at: log.at, counts: log.counts, actions: tagActs.map(({ id, name, from, to }) => ({ id, name, from, to })) });
   saveJsonSafe(AUTOHIST_FILE, hist.slice(-40));
+  logTagHistory(tagActs.map(({ id, name, from, to }) => ({ id, name, from, to, src: 'auto' })));
+}
+// Unified tag history (Diego 2026-07-12: "create a history system of manual and auto tags that I
+// can go back and check"). EVERY tag change lands here with its source: 'manual' (a chip in this
+// app), 'auto' (an Auto-Manager pass), 'dim' (edited inside the DIM app — caught by diffing each
+// 30s cloud read), 'revert' (an /api/auto/revert). tag-history.json, capped at the last 4000.
+const TAGHIST_FILE = path.join(__dirname, 'tag-history.json');
+let TAGHIST_CACHE = null;
+function logTagHistory(entries) {
+  if (!entries || !entries.length) return;
+  if (!TAGHIST_CACHE) { const a = loadJson(TAGHIST_FILE); TAGHIST_CACHE = Array.isArray(a) ? a : []; }
+  const at = new Date().toISOString();
+  for (const en of entries) TAGHIST_CACHE.push({ at, ...en });
+  if (TAGHIST_CACHE.length > 4000) TAGHIST_CACHE = TAGHIST_CACHE.slice(-4000);
+  saveJsonSafe(TAGHIST_FILE, TAGHIST_CACHE);
 }
 let AUTO_LOG = { at: null, safe: null, activity: null, dryRun: AUTO_DRYRUN, actions: [], counts: {}, note: 'not run yet' };
 
@@ -1427,10 +1458,16 @@ function autoDecide(w, def, thr) {
   // "give defined combos extra weight" (Diego): comboFloored = the roll matched a saved Perk
   // Finder combo and was floored at comboFloor (default = the keep band) in fetchWeapons.
   const via = (w.comboFloored && (w.combos || []).length) ? ` · combo: ${w.combos[0]}` : '';
-  const base = { tag: null, score, isWatched, eligible: true };
+  // AUTO-FAVORITE GATE (Diego OK'd 2026-07-12): a WATCHED weapon may only be auto-favorited
+  // when you track at least AUTO_FAV_MIN_CRIT criteria — one lone tracked perk that matches is
+  // 100% but proves nothing (the source of the surprising mass favorites). Below the gate a
+  // high score can still earn the (single) keep. Favorites-basis is already strict (needs 3★
+  // favorites in both columns), so it isn't gated.
+  const favEligible = !isWatched || (w.rollCrit ?? 0) >= AUTO_FAV_MIN_CRIT;
+  const base = { tag: null, score, isWatched, eligible: true, favEligible };
   if (score < 0) return { ...base, eligible: false, reason: 'no perk signal' };
-  if (score >= thr.fav)  return cur === 'favorite' ? base : { ...base, tag: 'favorite', notify: 'high', reason: `${score}% >= ${thr.fav}${via}` };
-  if (score >= thr.keep) return (cur === 'keep' || cur === 'favorite') ? base : { ...base, tag: 'keep', reason: `${score}% >= ${thr.keep}${via}` };
+  if (score >= thr.fav && favEligible) return cur === 'favorite' ? base : { ...base, tag: 'favorite', notify: 'high', reason: `${score}% >= ${thr.fav}${via}` };
+  if (score >= thr.keep) return (cur === 'keep' || cur === 'favorite') ? base : { ...base, tag: 'keep', reason: `${score}% >= ${thr.keep}${via}${favEligible ? '' : ` · fav needs ≥${AUTO_FAV_MIN_CRIT} tracked criteria (you track ${w.rollCrit ?? 0})`}` };
   const junkBar = isWatched ? thr.watchedJunk : thr.unwatchedJunk;
   if (score < junkBar && cur !== 'keep' && cur !== 'favorite') return cur === 'junk' ? base : { ...base, tag: 'junk', reason: `${score}% < ${junkBar}` };
   return base;                                                // in the "leave untouched" band
@@ -1547,6 +1584,7 @@ async function main() {
         if (!run) return json({ error: 'run not found' });
         const autoFavSet = loadAutoFavSet();
         let reverted = 0, errors = 0;
+        const histLines = [];
         for (const a of run.actions) {
           try {
             await dimWriteTag(e, a.id, a.from === 'none' ? 'none' : a.from);
@@ -1554,9 +1592,11 @@ async function main() {
               autoFavSet.delete(a.id);
               try { await setLock(e, a.id, false); } catch {}
             }
+            histLines.push({ id: a.id, name: a.name || '', from: a.to, to: a.from, src: 'revert' });
             reverted++;
           } catch (err) { errors++; }
         }
+        logTagHistory(histLines);
         saveAutoFavSet(autoFavSet);
         wcache = null;   // tags changed under the cache
         return json({ ok: true, reverted, errors, total: run.actions.length });
@@ -1575,6 +1615,10 @@ async function main() {
         }
         return json(loadWatch());
       }
+      if (req.url.startsWith('/api/tag-history')) {
+        if (!TAGHIST_CACHE) { const a = loadJson(TAGHIST_FILE); TAGHIST_CACHE = Array.isArray(a) ? a : []; }
+        return json(TAGHIST_CACHE.slice(-1000).reverse());   // newest first
+      }
       if (req.url.startsWith('/api/tags')) {
         // GET returns DIM's tags (source of truth). Legacy POST kept as a local mirror
         // write but the UI now uses the per-tag /api/tag endpoint below.
@@ -1589,8 +1633,11 @@ async function main() {
         const { id, tag } = JSON.parse(await readBody(req) || '{}');
         if (!id) return json({ error: 'missing id' });
         try {
+          const from = DIM_TAGS[id] || 'none';
           const applied = await dimWriteTag(e, id, tag);
-          if (wcache) { const w = wcache.weapons.find((x) => x.id === id); if (w) w.tag = applied === 'none' ? '' : applied; }
+          const item = wcache && ((wcache.weapons || []).find((x) => x.id === id) || (wcache.armor || []).find((x) => x.id === id));
+          if (item) item.tag = applied === 'none' ? '' : applied;
+          if (from !== applied) logTagHistory([{ id, name: item?.n || (item && wcache.defs[item.hash]?.n) || '', from, to: applied, src: 'manual' }]);
           return json({ ok: true, tag: applied });
         } catch (err) { return json({ error: err.message }); }
       }
@@ -1799,8 +1846,9 @@ async function main() {
         const elig = list.filter((d) => d.dec.eligible);            // legendary, unlocked, not equipped/postmaster
         if (!elig.length) continue;                                 // nothing the app may touch
         const active = elig.filter((d) => d.w.tag !== 'junk');      // respect manual junk — never re-tag it
-        // a MANUAL favorite is sacred; an app-applied one (autoFav) only stays if it re-earns it
-        const isFav = (d) => scoreOf(d) >= thr.fav || (d.w.tag === 'favorite' && !d.w.autoFav);
+        // a MANUAL favorite is sacred; an app-applied one (autoFav) only stays if it re-earns it.
+        // Score-based favorites also need the min-tracked-criteria gate (same rule as autoDecide).
+        const isFav = (d) => (scoreOf(d) >= thr.fav && d.dec.favEligible !== false) || (d.w.tag === 'favorite' && !d.w.autoFav);
         const favs = new Set(active.filter(isFav));                 // keep ALL favorites
         const hasKeep = list.some((d) => d.w.tag === 'keep');       // an existing keep (yours or prior run)
         let survKeep = hasKeep ? null                               // don't add a keep if one already exists
@@ -1846,7 +1894,14 @@ async function main() {
         else { autoFavSet.delete(w.id); w.autoFav = false; }
         if (!dryRun) {
           try {
-            await dimWriteTag(e, w.id, dec.tag);
+            // Last-copy keeps get a DIM note "best copy" (Diego 2026-07-12) — appended after any
+            // existing note so nothing he wrote is ever lost.
+            let note;
+            if (dec.protectedLast) {
+              const cur = DIM_NOTES[w.id] || '';
+              note = cur ? (cur.includes('best copy') ? undefined : cur + ' · best copy') : 'best copy';
+            }
+            await dimWriteTag(e, w.id, dec.tag, note);
             if (dec.tag === 'favorite') { try { await setLock(e, w.id, true); w.locked = true; } catch {} }
             // demoting an app-applied favorite also undoes the app's OWN auto-lock (never a lock you set)
             else if (wasAutoFav && w.locked) { try { await setLock(e, w.id, false); w.locked = false; } catch {} }
