@@ -24,12 +24,23 @@ pass logged **"staged 57" which exceeds maxMovesPerRun 20 (suspected cap bug, MU
 Diego had already reported "it messed up a lot of my weapons a few days ago" and asked for a FULL AUDIT,
 with his tagging **specs confirmed by him FIRST** before any code changes — his words: VERY IMPORTANT.
 State now: **Auto-Manager DISABLED** (`enabled:false`); complete tag/config snapshot saved in
-`audit-backup-20260712-074440/`; the as-implemented spec was written out and sent to Diego for
-confirmation. **BLOCKED: awaiting Diego** — his answers to the spec questions (dupe-junking rule,
-unwatched junk bar, band values, staging counts) must be recorded here verbatim, then: audit
-`autoDecide`/`decByWeapon`/staging vs the confirmed spec, find the staged-57 cap violation, check the
-DIM API audit log for recoverable pre-07:33 tags. Do NOT re-enable until the audit passes and Diego
-says go.
+`audit-backup-20260712-074440/`.
+**AUDIT DONE (same day).** Diego's verbatim answer: "based on what you told me, it seems like the
+specs are correct, we need to make sure that the app is using the same score globally, so whatever
+the app uses has to be the same score that I see in the pages of the app / junk staging also works
+for armor - btw we need a very similar system to auto tag armor drops - be careful and create a
+system that give me as much visibility as the weapons - for the armor, let's start with stagging
+before auto tagging, I don't want you messing up what I have already tagged." Findings + fixes are
+in HANDOFF ("2026-07-12 audit results"). **Still BLOCKED on Diego: the decision to re-enable** —
+the app will NOT flip `enabled` itself (hard rule, in agent memory). Also still open (ask Diego):
+(a) should the LAST-COPY guarantee tag the survivor `keep` (current behavior) or leave it untagged?
+(b) should auto-favorite require a minimum number of tracked criteria (today 1 tracked perk that
+matches = 100% ≥ 90 → favorite+lock — likely the source of the "fav 22" surprise)?
+**NEXT FEATURE (Diego's priority): armor AUTO-TAGGING** — a weapons-grade system (scores, bands,
+preview, per-run history/undo, same /auto visibility). Staging for armor is DONE (see HANDOFF);
+tagging design must reuse the armor page's verdict engine concepts (niches/set bonuses/exotic
+favorite stats) and must NEVER overwrite tags Diego set himself. Design not started — spec it with
+Diego first.
 Also shipped in the second batch: cadence split (`orbitSeconds` 60 / `activitySeconds` 15 /
 `idleSeconds` 120 — replaced `activeSeconds`; inputs updated in /auto + /settings; while the game runs
 the tick now polls activity even when disabled so the chip shows it), `/api/status` gained

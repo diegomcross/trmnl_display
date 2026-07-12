@@ -653,10 +653,50 @@ Core priorities, in his words:
       (pollDrops each 25s + this tick) — far under Bungie's throttle (~20+ req/s bursts), so
       throttling risk is negligible; the split is still the right economy. `onGameStart` kicks a
       pass ~3s after destiny2.exe appears.
-      **⚠ STATUS 2026-07-12: Auto-Manager is DISABLED pending Diego's spec confirmation + a full
-      audit** — after the orbit fix it ran live at 07:33-07:36 and mass-retagged (~94 junk, one pass
-      logged "staged 57" > maxMovesPerRun 20, suspected cap bug). Tag snapshot:
-      `audit-backup-20260712-074440/`. See NEXT_PHASE (BLOCKED: awaiting Diego). **Fetch dedup:** `freshWeapons(maxAgeMs=15000)` in `main()` — pollDrops
+      **⚠ STATUS 2026-07-12: Auto-Manager is DISABLED** — after the orbit fix it ran live at
+      07:33-07:36 and mass-retagged (~94 junk). Tag snapshot: `audit-backup-20260712-074440/`.
+      Diego then CONFIRMED the spec and a full audit ran the same day. **Only Diego re-enables it**
+      (hard rule). See NEXT_PHASE for the two open behavior questions.
+    - **2026-07-12 AUDIT RESULTS (spec confirmed by Diego, then code vs spec):**
+      - **One-global-score (Diego's requirement):** all consumers verified on the same number —
+        Weapon Vault tiles/slider/sort read `w.rollScore`; Weapon Watch + New Drops client
+        `scoreCopy` is formula-identical to server `scoreWeaponCopy` (incl. rankOf built the same
+        way over the same copy set); the Auto-Manager consumes `w.rollScore`. ONE divergence found
+        + fixed: `fetchWeapons` treated a weapon as "watched" only if it had tracked PERKS — a
+        watch config with only a masterwork/stat scored by favorites server-side while pages showed
+        the perk-match number. Watched now = any tracked criteria (perks OR mw OR stats).
+      - **"staged 57" root cause (FIXED):** the staging loop only counted SUCCESSFUL transfers
+        toward `maxMovesPerRun` and `continue`d past failures — when Bungie refused transfers
+        (Diego re-entered an activity mid-pass) it marched the whole junk pool logging phantom
+        "add"s. Real transfers never exceeded the cap; the counter/log lied. Now an ATTEMPT counts
+        toward the cap (dry-run too, so previews are honest), a failed transfer `break`s the slot,
+        and the staged/spilled counters decrement on error.
+      - **Spec compliance verified by reading `autoDecide`+`decByWeapon`:** manual junk is never
+        overwritten (dedup nulls any decision on a `tag==='junk'` copy); manual keep/favorite never
+        downgraded; exotics/rares/locked/equipped/postmaster untouched; one-keep rule + last-copy
+        guarantee as spec'd. Two behavior questions flagged to Diego (last-copy tags `keep`;
+        auto-favorite with 1 tracked perk) — see NEXT_PHASE.
+      - **DIM has NO audit-log API** (`GET /audit` 404 — probed) → the pre-incident tags are not
+        recoverable. Consequence ↓
+    - **Per-run history + one-click UNDO (2026-07-12):** every LIVE pass appends its tag changes
+      (`{id,name,from,to}` per action) to `auto-history.json` (gitignored, saveJsonSafe, last 40
+      runs; dry-runs never recorded). `GET /api/auto/history` (newest first);
+      `POST /api/auto/revert {at}` writes every `from` tag back to DIM (and for app-applied
+      favorites also removes the app's own lock + green flag), then nulls `wcache`. `/auto` shows
+      a "Recent live runs — one-click undo" card with a Revert button per run. Staging moves are
+      not reverted (location, not data). Runs before 2026-07-12 were never recorded.
+    - **ARMOR junk-staging (2026-07-12, Diego: "junk staging also works for armor… start with
+      staging before auto tagging, I don't want you messing up what I have already tagged"):**
+      `fetchWeapons` now also returns a compact `armor` list ({id,hash,rhash,n,slot,tt,own,loc
+      (postmaster-aware),ownCid,locked,pwr,tag}) — tag from the LIVE DIM tags (same source as
+      weapons; NOT the optional dim-data.json the armor page merges). The staging pass is a shared
+      `stageJunkSet(kind,items,SLOTS,info)` run for weapons (Kinetic/Energy/Power) and — when
+      `armorStage` (default true, checkbox in /auto + /settings) — armor (Helmet/Gauntlets/Chest/
+      Leg/Class Item), same junkStage-per-slot, lowest-power-first, spill + caps, actions logged
+      with `kind:'armor'` so /auto shows "(armor)" rows. **Armor is staging-ONLY: the app never
+      writes an armor tag.** Legendaries only (a junk-tagged EXOTIC armor piece is ignored, same
+      as weapons — Diego's vault had exactly one, verified excluded). Armor auto-tagging is a
+      future feature (NEXT_PHASE, design with Diego first). **Fetch dedup:** `freshWeapons(maxAgeMs=15000)` in `main()` — pollDrops
       (25s) + auto passes share one deduped Bungie pull; an explicit `/api/weapons?fresh=1` always
       re-pulls. **Dry-run cache poisoning guard:** a dry-run mutates the in-memory snapshot with
       pretend tags (so its staging preview works) — `wcache` is nulled in the pass's `finally` so no

@@ -92,15 +92,18 @@ td b{color:var(--ink)}
   <div class="card">
     <h2>Auto-Manager — junk staging &amp; safety</h2>
     <div class="row">
-      <label class="f">Junk staged per slot (K/E/P)<input id="junkStage" type="number" min="0" max="9"></label>
+      <label class="f">Junk staged per slot<input id="junkStage" type="number" min="0" max="9"></label>
+      <label class="f" style="flex-direction:row;align-items:center;gap:6px">Also stage junk ARMOR<input id="armorStage" type="checkbox" style="width:15px;height:15px;accent-color:var(--gold)"></label>
       <label class="f">Stage junk on<select id="stageCid"><option value="">Default (main character)</option></select></label>
       <label class="f">Max junk-tags per pass<input id="maxJunk" type="number" min="1" max="200"></label>
-      <label class="f">Max item moves per pass<input id="maxMoves" type="number" min="1" max="30"></label>
+      <label class="f">Max item moves per pass<input id="maxMoves" type="number" min="1" max="60"></label>
     </div>
-    <p class="help">There is no dismantle API — the app moves junk-tagged weapons onto the chosen character
-    (up to the per-slot number in each of Kinetic / Energy / Power) so <b>you</b> dismantle them in-game.
-    It tops the piles back up as you dismantle. The two caps bound how much one pass can ever do, so a bad
-    rule can't sweep your whole vault at once.</p>
+    <p class="help">There is no dismantle API — the app moves junk-tagged items onto the chosen character
+    (up to the per-slot number in each of Kinetic / Energy / Power — and, if armor staging is on, in each
+    of Helmet / Gauntlets / Chest / Leg / Class Item) so <b>you</b> dismantle them in-game. It tops the
+    piles back up as you dismantle. <b>Armor is staging-only: the app never tags armor</b> — it only moves
+    pieces you already junked yourself. The two caps bound how much one pass can ever do, so a bad rule
+    can't sweep your whole vault at once.</p>
   </div>
 
   <div class="card">
@@ -167,7 +170,7 @@ function fillForm(){
   const t=CFG.thr||{};
   $('thFav').value=t.fav; $('thKeep').value=t.keep; $('thWatched').value=t.watchedJunk;
   $('thUnwatched').value=t.unwatchedJunk; $('thCombo').value=t.comboFloor??80;
-  $('junkStage').value=CFG.junkStage; $('maxJunk').value=CFG.maxJunkPerRun; $('maxMoves').value=CFG.maxMovesPerRun;
+  $('junkStage').value=CFG.junkStage; $('armorStage').checked=CFG.armorStage!==false; $('maxJunk').value=CFG.maxJunkPerRun; $('maxMoves').value=CFG.maxMovesPerRun;
   $('orbitSeconds').value=CFG.orbitSeconds??60; $('activitySeconds').value=CFG.activitySeconds??15; $('idleSeconds').value=CFG.idleSeconds??120;
   if(CFG.stageCid!=null) $('stageCid').value=String(CFG.stageCid);
 }
@@ -216,7 +219,7 @@ $('toggle').onclick=async()=>{
 };
 $('saveBtn').onclick=async()=>{
   await postCfg({
-    junkStage:+$('junkStage').value, maxJunkPerRun:+$('maxJunk').value, maxMovesPerRun:+$('maxMoves').value,
+    junkStage:+$('junkStage').value, armorStage:$('armorStage').checked, maxJunkPerRun:+$('maxJunk').value, maxMovesPerRun:+$('maxMoves').value,
     orbitSeconds:+$('orbitSeconds').value, activitySeconds:+$('activitySeconds').value, idleSeconds:+$('idleSeconds').value,
     stageCid:$('stageCid').value||null,
     thr:{ unwatchedJunk:+$('thUnwatched').value, watchedJunk:+$('thWatched').value,

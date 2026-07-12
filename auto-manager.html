@@ -90,7 +90,8 @@ td{padding:6px 8px;border-bottom:1px solid var(--panel2);vertical-align:middle}
       <label class="f">Favorite at / above %<input id="thFav" type="number" min="0" max="100"></label>
     </div>
     <div class="row" style="margin-top:12px">
-      <label class="f">Junk staged per slot (K/E/P)<input id="junkStage" type="number" min="0" max="9"></label>
+      <label class="f">Junk staged per slot<input id="junkStage" type="number" min="0" max="9"></label>
+      <label class="f" style="flex-direction:row;align-items:center;gap:6px">Also stage junk ARMOR (never re-tags armor)<input id="armorStage" type="checkbox" style="width:15px;height:15px;accent-color:var(--gold)"></label>
       <label class="f">Max junk-tags / run<input id="maxJunk" type="number" min="1" max="200"></label>
       <label class="f">Max moves / run<input id="maxMoves" type="number" min="1" max="30"></label>
     </div>
@@ -120,13 +121,21 @@ td{padding:6px 8px;border-bottom:1px solid var(--panel2);vertical-align:middle}
     <h2>Last run <span id="runKind" class="mini"></span></h2>
     <div id="log"></div>
   </div>
+
+  <div class="card">
+    <h2>Recent live runs — one-click undo</h2>
+    <p class="note">Every live pass records exactly which tags it changed (auto-history.json).
+    <b>Revert</b> restores every tag that run touched back to what it was before. Staged item
+    moves are not undone (they're just locations). Runs before 2026-07-12 were not recorded.</p>
+    <div id="hist"></div>
+  </div>
 </div>
 
 <script src="/banner.js"></script>
 <script>
 const $=id=>document.getElementById(id);
 let CFG=null;
-function fmtActivity(a){ if(!a) return ''; if(a.hash===0) return 'orbit'; if(a.mode===40) return 'social'; if(a.hash<0) return '—'; return 'activity #'+a.hash; }
+function fmtActivity(a){ if(!a) return ''; if(a.name) return a.name; if(a.hash===0) return 'orbit'; if(a.mode===40) return 'social'; if(a.hash<0) return '—'; return 'activity #'+a.hash; }
 function tagCell(t){ if(!t||t==='none') return '<span class="mini">—</span>'; return `<span class="tg ${t}">${t}</span>`; }
 
 function renderLog(last){
@@ -138,7 +147,7 @@ function renderLog(last){
   if(!acts.length){ $('log').innerHTML=head+'<div class="empty">No changes needed — everything already sorted.</div>'; return; }
   const rows=acts.map(a=>{
     if(a.stage){
-      const lbl=a.stage==='add'?'stage junk →char':a.stage==='spill'?'vault to make room':a.stage==='skip'?'skip':'error';
+      const lbl=(a.stage==='add'?'stage junk →char':a.stage==='spill'?'vault to make room':a.stage==='skip'?'skip':'error')+(a.kind==='armor'?' (armor)':'');
       return `<tr><td><span class="tg stage">${lbl}</span></td><td>${a.name||''}</td><td class="mini">${a.slot||''}</td><td colspan="2" class="${a.error?'err':'mini'}">${a.error||a.reason||''}</td></tr>`;
     }
     return `<tr>
@@ -162,7 +171,7 @@ function fillForm(){
   const t=CFG.thr||{};
   $('thUnwatched').value=t.unwatchedJunk; $('thWatched').value=t.watchedJunk; $('thKeep').value=t.keep; $('thFav').value=t.fav;
   $('thCombo').value=t.comboFloor??80;
-  $('junkStage').value=CFG.junkStage; $('maxJunk').value=CFG.maxJunkPerRun; $('maxMoves').value=CFG.maxMovesPerRun;
+  $('junkStage').value=CFG.junkStage; $('armorStage').checked=CFG.armorStage!==false; $('maxJunk').value=CFG.maxJunkPerRun; $('maxMoves').value=CFG.maxMovesPerRun;
   $('orbitSeconds').value=CFG.orbitSeconds??60; $('activitySeconds').value=CFG.activitySeconds??15; $('idleSeconds').value=CFG.idleSeconds??120;
 }
 async function loadAll(){
@@ -171,12 +180,32 @@ async function loadAll(){
   $('gameState').textContent=d.gameUp?'Destiny is running':'Destiny not detected — auto passes are paused';
   $('lastNote').textContent = d.last&&d.last.at ? `Last automatic check ${ago(d.last.at)} — ${d.last.note||d.last.note===''?d.last.note:''}` : 'No automatic check has run yet this session.';
   renderLog(d.last);
+  loadHist();
+}
+async function loadHist(){
+  try{
+    const runs=await fetch('/api/auto/history').then(r=>r.json());
+    if(!Array.isArray(runs)||!runs.length){ $('hist').innerHTML='<div class="empty">No recorded live runs yet.</div>'; return; }
+    $('hist').innerHTML='<div style="overflow-x:auto"><table><tr><th>When</th><th>Changes</th><th></th></tr>'+runs.slice(0,10).map(r=>{
+      const c=r.counts||{};
+      return `<tr><td class="mini">${new Date(r.at).toLocaleString()}</td>
+        <td class="mini">fav ${c.favorite||0} · keep ${c.keep||0} · junk ${c.junk||0} — ${r.actions.length} tag change${r.actions.length===1?'':'s'}</td>
+        <td><button class="btn sm red" data-revert="${r.at}">Revert</button></td></tr>`;
+    }).join('')+'</table></div>';
+    document.querySelectorAll('[data-revert]').forEach(b=>{ b.onclick=async()=>{
+      if(!confirm(`Undo this run? Every tag it changed (${b.closest('tr').children[1].textContent.trim()}) goes back to what it was before.`))return;
+      b.disabled=true; b.textContent='Reverting…';
+      const res=await fetch('/api/auto/revert',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({at:b.dataset.revert})}).then(r=>r.json());
+      alert(res.error?('Revert failed: '+res.error):`Reverted ${res.reverted}/${res.total} tags${res.errors?` (${res.errors} errors — run it again to retry)`:''}.`);
+      b.disabled=false; b.textContent='Revert'; loadAll();
+    };});
+  }catch(e){ $('hist').innerHTML='<div class="empty">Could not load history.</div>'; }
 }
 async function postCfg(patch){ const d=await fetch('/api/auto',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(patch)}).then(r=>r.json()); CFG=d.cfg; paintState(); fillForm(); }
 
 $('toggle').onclick=async()=>{ const next=!(CFG&&CFG.enabled); if(next && !confirm('Turn auto-manager ON? It will tag and move weapons on your live account whenever you are out of an activity.'))return; await postCfg({enabled:next}); };
 $('saveBtn').onclick=async()=>{
-  await postCfg({ junkStage:+$('junkStage').value, maxJunkPerRun:+$('maxJunk').value, maxMovesPerRun:+$('maxMoves').value,
+  await postCfg({ junkStage:+$('junkStage').value, armorStage:$('armorStage').checked, maxJunkPerRun:+$('maxJunk').value, maxMovesPerRun:+$('maxMoves').value,
     orbitSeconds:+$('orbitSeconds').value, activitySeconds:+$('activitySeconds').value, idleSeconds:+$('idleSeconds').value,
     thr:{ unwatchedJunk:+$('thUnwatched').value, watchedJunk:+$('thWatched').value, keep:+$('thKeep').value, fav:+$('thFav').value, comboFloor:+$('thCombo').value } });
   $('saveBtn').textContent='Saved ✓'; setTimeout(()=>$('saveBtn').textContent='Save settings',1200);

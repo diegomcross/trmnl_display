@@ -887,7 +887,10 @@ async function fetchWeapons(e) {
     for (const w of weapons) (byH[w.hash] = byH[w.hash] || []).push(w);
     for (const [h, copies] of Object.entries(byH)) {
       const cfg = watch[h];
-      if (cfg && Object.keys(cfg.perks || {}).length) {
+      // "watched" = ANY tracked criteria (perks OR masterwork OR stats). Perks-only was the old
+      // test — a weapon tracking just a MW/stat scored by favorites here while every page showed
+      // the perk-match number (found in the 2026-07-12 one-global-score audit).
+      if (cfg && (Object.keys(cfg.perks || {}).length || cfg.mw || (cfg.stats || []).length)) {
         const r = {};
         for (const s of (cfg.stats || [])) { const vals = [...new Set(copies.map((x) => x.statsMax[s] ?? -1))].sort((a, b) => b - a); r[s] = (v) => { const i = vals.indexOf(v); return i === 0 ? 's1' : i === 1 ? 's2' : i === 2 ? 's3' : ''; }; }
         for (const w of copies) { w.rollScore = scoreWeaponCopy(w, cfg, r).pct; w.rollBasis = 'watched'; w.comboFloored = false; }
@@ -901,7 +904,24 @@ async function fetchWeapons(e) {
       }
     }
   }
-  return { weapons, defs: mergedDefs, perkIcons, perkDescs, perkInsights, fetchedAt: new Date().toISOString(), account: `${m.membershipType}/${m.membershipId}` };
+  // Compact ARMOR list for junk-staging (Diego 2026-07-12: staging only, NEVER tag armor).
+  // tag = the live DIM tag (same source as weapons — NOT the optional dim-data.json overlay
+  // that the armor page merges). Only what staging needs; the armor page keeps fetchArmor.
+  const armor = [];
+  for (const { it, own, loc: rawLoc, cid } of raw) {
+    const def = man.items[it.itemHash];
+    if (!def || def.it !== 2 || !it.itemInstanceId || !BUCKET[def.b]) continue;
+    const loc = it.bucketHash === 215593132 ? 'postmaster' : rawLoc;
+    const inst = instances[it.itemInstanceId] || {};
+    armor.push({
+      id: it.itemInstanceId, hash: it.itemHash, rhash: it.itemHash, n: def.n,
+      slot: BUCKET[def.b], tt: def.tt, own, loc, ownCid: cid,
+      locked: !!(it.state & 1), pwr: inst.primaryStat?.value || 0,
+      tag: tags[it.itemInstanceId] || '',
+    });
+  }
+
+  return { weapons, armor, defs: mergedDefs, perkIcons, perkDescs, perkInsights, fetchedAt: new Date().toISOString(), account: `${m.membershipType}/${m.membershipId}` };
 }
 
 // ---------- god-roll watch config + local tag overlay ----------
@@ -1308,6 +1328,7 @@ const STAGE_SLOT_CAP = 9;                              // unequipped weapons per
 const AUTO_DEFAULTS = {
   enabled: true,           // Diego chose "go fully live"
   junkStage: 5,            // junk-tagged weapons to stage IN EACH SLOT (Kinetic/Energy/Power) → 15 total (Diego 2026-07-12: 5, not 3)
+  armorStage: true,        // ALSO stage junk-tagged ARMOR per slot (Diego 2026-07-12). Staging only — armor is NEVER auto-tagged.
   stageCid: null,          // character to stage junk on (null = default / Warlock main)
   maxJunkPerRun: 25,       // safety cap: never junk-tag more than this in one pass
   maxMovesPerRun: 20,      // safety cap on item transfers per pass (up to 15 stages + spills)
@@ -1330,6 +1351,19 @@ function saveAuto(patch) {
 const AUTOFAV_FILE = path.join(__dirname, 'auto-applied.json');
 const loadAutoFavSet = () => { const a = loadJson(AUTOFAV_FILE); return new Set(Array.isArray(a) ? a : []); };
 const saveAutoFavSet = (set) => saveJsonSafe(AUTOFAV_FILE, [...set]);
+// Persistent history of every LIVE pass's tag changes (auto-history.json, last 40 runs).
+// Born from the 2026-07-12 incident: AUTO_LOG was in-memory only, the server restarted, and
+// the exact list of retagged weapons was gone (DIM's API has no audit endpoint — verified).
+// With {id, from, to} recorded per action, POST /api/auto/revert {at} can undo a whole run.
+const AUTOHIST_FILE = path.join(__dirname, 'auto-history.json');
+const loadAutoHist = () => { const a = loadJson(AUTOHIST_FILE); return Array.isArray(a) ? a : []; };
+function recordAutoRun(log) {
+  const tagActs = (log.actions || []).filter((a) => a.to && a.id && !a.error);
+  if (!tagActs.length) return;
+  const hist = loadAutoHist();
+  hist.push({ at: log.at, counts: log.counts, actions: tagActs.map(({ id, name, from, to }) => ({ id, name, from, to })) });
+  saveJsonSafe(AUTOHIST_FILE, hist.slice(-40));
+}
 let AUTO_LOG = { at: null, safe: null, activity: null, dryRun: AUTO_DRYRUN, actions: [], counts: {}, note: 'not run yet' };
 
 const rolledNames = (w) => [...(w.cols[0] || []), ...(w.cols[1] || [])].map((p) => p.n);
@@ -1501,6 +1535,31 @@ async function main() {
         const { dryRun } = JSON.parse(await readBody(req) || '{}');
         const log = await autoManage({ force: true, dryRun: dryRun !== false });   // preview (dry) by default
         return json({ ok: true, last: log });
+      }
+      if (req.url.startsWith('/api/auto/history')) {
+        return json(loadAutoHist().slice().reverse());   // newest first
+      }
+      // Undo one recorded live run: restore every tag it changed back to `from`.
+      // (Staging transfers are position moves, not data — they're left where they are.)
+      if (req.url.startsWith('/api/auto/revert') && req.method === 'POST') {
+        const { at } = JSON.parse(await readBody(req) || '{}');
+        const run = loadAutoHist().find((r) => r.at === at);
+        if (!run) return json({ error: 'run not found' });
+        const autoFavSet = loadAutoFavSet();
+        let reverted = 0, errors = 0;
+        for (const a of run.actions) {
+          try {
+            await dimWriteTag(e, a.id, a.from === 'none' ? 'none' : a.from);
+            if (a.to === 'favorite') {   // the app auto-locked it — undo our own lock + green flag
+              autoFavSet.delete(a.id);
+              try { await setLock(e, a.id, false); } catch {}
+            }
+            reverted++;
+          } catch (err) { errors++; }
+        }
+        saveAutoFavSet(autoFavSet);
+        wcache = null;   // tags changed under the cache
+        return json({ ok: true, reverted, errors, total: run.actions.length });
       }
       if (req.url.startsWith('/api/auto')) {
         // thresholds (comboFloor) feed the per-copy rollScore baked into the weapons cache
@@ -1799,46 +1858,62 @@ async function main() {
       }
       if (!dryRun) saveAutoFavSet(autoFavSet);
 
-      // Stage junk-tagged weapons on a character so Diego can dismantle them in-game. Diego wants
-      // junkStage (default 3) staged in EACH weapon slot — Kinetic / Energy / Power — so 9 total.
+      // Stage junk-tagged items on a character so Diego can dismantle them in-game: junkStage
+      // per slot for WEAPONS (Kinetic/Energy/Power) and — Diego 2026-07-12 — for ARMOR
+      // (Helmet/Gauntlets/Chest/Leg/Class Item). Armor is staging-ONLY: the app never writes
+      // an armor tag; it only moves pieces Diego himself already tagged junk (in DIM or here).
+      // CAP FIX (the "staged 57" bug, 2026-07-12): a transfer ATTEMPT now counts toward
+      // maxMovesPerRun (dry-run too, so the preview is honest), and a failed transfer stops
+      // that slot instead of marching through the whole pool logging phantom "add"s — the old
+      // loop only counted successes, so when Bungie refused transfers (e.g. back in an
+      // activity mid-pass) nothing ever tripped the cap.
       const stageCid = cfg.stageCid || LOCK_CTX?.characterId;
-      if (stageCid) {
-        const SLOTS = ['Kinetic', 'Energy', 'Power'];
-        // current per-slot occupancy on the stage character, and how many junk are already staged per slot
+      const stageJunkSet = async (kind, items, SLOTS, info) => {   // info(x) -> {slot,tt,n}
+        // current per-slot occupancy on the stage character, and junk already staged per slot
         const slotCount = {}, junkStaged = {};
-        for (const w of wcache.weapons) if (w.ownCid === stageCid && (w.loc === 'char' || w.loc === 'equipped')) {
-          const s = defs[w.hash]?.slot; if (!s) continue;
+        for (const x of items) if (x.ownCid === stageCid && (x.loc === 'char' || x.loc === 'equipped')) {
+          const s = info(x).slot; if (!s) continue;
           slotCount[s] = (slotCount[s] || 0) + 1;
-          if (w.tag === 'junk' && !w.locked && w.loc === 'char' && defs[w.hash]?.tt === 5) junkStaged[s] = (junkStaged[s] || 0) + 1;
+          if (x.tag === 'junk' && !x.locked && x.loc === 'char' && info(x).tt === 5) junkStaged[s] = (junkStaged[s] || 0) + 1;
         }
         // vault junk waiting to be staged, bucketed by slot, lowest-power first
         const poolBySlot = {};
-        for (const w of wcache.weapons) {
-          if (w.tag !== 'junk' || w.locked || w.loc !== 'vault' || defs[w.hash]?.tt !== 5) continue;
-          const s = defs[w.hash]?.slot; if (!s) continue;
-          (poolBySlot[s] = poolBySlot[s] || []).push(w);
+        for (const x of items) {
+          if (x.tag !== 'junk' || x.locked || x.loc !== 'vault' || info(x).tt !== 5) continue;
+          const s = info(x).slot; if (!s) continue;
+          (poolBySlot[s] = poolBySlot[s] || []).push(x);
         }
         for (const s of SLOTS) (poolBySlot[s] || []).sort((a, b) => (a.pwr || 0) - (b.pwr || 0));
         for (const slot of SLOTS) {
           let need = cfg.junkStage - (junkStaged[slot] || 0);
-          for (const w of (poolBySlot[slot] || [])) {
+          for (const x of (poolBySlot[slot] || [])) {
             if (need <= 0 || moves >= cfg.maxMovesPerRun) break;
             if ((slotCount[slot] || 0) >= STAGE_SLOT_CAP + 1) {   // slot full (1 equipped + 9) → make space
-              const spill = wcache.weapons.find((x) => x.ownCid === stageCid && x.loc === 'char' && defs[x.hash]?.slot === slot && !x.locked && x.tag !== 'junk' && x.tag !== 'keep' && x.tag !== 'favorite');
-              if (!spill) { log.actions.push({ stage: 'skip', name: defs[w.hash]?.n, reason: `${slot} full, nothing safe to vault` }); break; }
-              log.actions.push({ stage: 'spill', name: defs[spill.hash]?.n, slot }); log.counts.spilled++;
-              if (!dryRun) { try { await transferItem(e, spill.id, spill.rhash, stageCid, true); spill.loc = 'vault'; spill.own = 'Vault'; spill.ownCid = null; moves++; } catch (err) { log.actions.push({ stage: 'error', name: defs[spill.hash]?.n, error: err.message }); break; } }
+              const spill = items.find((y) => y.ownCid === stageCid && y.loc === 'char' && info(y).slot === slot && !y.locked && y.tag !== 'junk' && y.tag !== 'keep' && y.tag !== 'favorite');
+              if (!spill) { log.actions.push({ stage: 'skip', kind, name: info(x).n, reason: `${slot} full, nothing safe to vault` }); break; }
+              log.actions.push({ stage: 'spill', kind, name: info(spill).n, slot }); log.counts.spilled++;
+              moves++;   // an attempt counts toward the cap
+              if (!dryRun) { try { await transferItem(e, spill.id, spill.rhash, stageCid, true); spill.loc = 'vault'; spill.own = 'Vault'; spill.ownCid = null; } catch (err) { log.actions.push({ stage: 'error', kind, name: info(spill).n, error: err.message }); log.counts.spilled--; break; } }
               slotCount[slot]--;
             }
-            log.actions.push({ stage: 'add', name: defs[w.hash]?.n, slot }); log.counts.staged++;
-            if (!dryRun) { try { await transferItem(e, w.id, w.rhash, stageCid, false); w.loc = 'char'; w.ownCid = stageCid; w.own = LOCK_CTX?.clsById?.[stageCid] || w.own; moves++; } catch (err) { log.actions.push({ stage: 'error', name: defs[w.hash]?.n, error: err.message }); continue; } }
+            log.actions.push({ stage: 'add', kind, name: info(x).n, slot }); log.counts.staged++;
+            moves++;   // an attempt counts toward the cap
+            if (!dryRun) { try { await transferItem(e, x.id, x.rhash, stageCid, false); x.loc = 'char'; x.ownCid = stageCid; x.own = LOCK_CTX?.clsById?.[stageCid] || x.own; } catch (err) { log.actions.push({ stage: 'error', kind, name: info(x).n, error: err.message }); log.counts.staged--; break; } }
             slotCount[slot] = (slotCount[slot] || 0) + 1; need--;
           }
         }
+      };
+      if (stageCid) {
+        await stageJunkSet('weapon', wcache.weapons, ['Kinetic', 'Energy', 'Power'],
+          (w) => ({ slot: defs[w.hash]?.slot, tt: defs[w.hash]?.tt, n: defs[w.hash]?.n || String(w.hash) }));
+        if (cfg.armorStage !== false)
+          await stageJunkSet('armor', wcache.armor || [], ['Helmet', 'Gauntlets', 'Chest', 'Leg', 'Class Item'],
+            (a) => ({ slot: a.slot, tt: a.tt, n: a.n }));
       }
 
       const c = log.counts;
       log.note = `fav ${c.favorite} · keep ${c.keep} · junk ${c.junk} · staged ${c.staged}`;
+      if (!dryRun) recordAutoRun(log);   // persist live tag changes so any run can be reverted
       console.log(`[auto] ${dryRun ? 'DRY ' : ''}safe=${act.safe} ${log.note}`);
     } catch (err) { log.note = 'error: ' + err.message; console.warn('auto-manage error:', err.message); }
     finally {
