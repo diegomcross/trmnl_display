@@ -132,7 +132,7 @@ details.panel[open] summary::after{content:" –"}
 
 <details class="panel" id="exoPanel">
   <summary>Exotics — favorite stat tuning</summary>
-  <p class="savenote">Pick up to <b>two</b> stats that synergize with the exotic's function — first pick is the <b>primary</b>, second the <b>secondary</b>. Copies are ranked by primary stat, ties broken by secondary, and only the best copy is kept. No favorite set: falls back to per-archetype niches and the exotic is flagged pending. Saves automatically.</p>
+  <p class="savenote">Pick up to <b>three</b> stats that synergize with the exotic's function — first pick is the <b>primary</b>, then <b>secondary</b>, then <b>tertiary</b>. Copies are ranked by the <b>weighted sum: primary ×3 + secondary ×2 + tertiary ×1</b> (every pick always matters — one huge primary alone doesn't beat two good stats), and only the best copy is kept; the card shows the math. No favorite set: falls back to per-archetype niches and the exotic is flagged pending. Saves automatically.</p>
   <div class="bar" id="exoClsTabs" style="margin-top:8px"></div>
   <div id="exoList"></div>
 </details>
@@ -190,7 +190,12 @@ async function saveStore(key,obj){
 const saveRatings=()=>saveStore('vv-ratings',ratings);
 const saveFavs=()=>saveStore('vv-exofavs',exoFavs);
 const rateOf = sb => sb ? (ratings[sb]||'und') : 'ignore';
-const favOf = n => exoFavs[n]||[];   // [primary, secondary?] — max 2, order matters
+const favOf = n => exoFavs[n]||[];   // [primary, secondary?, tertiary?] — max 3, order matters (Diego 2026-07-12)
+// Copies of a tuned exotic rank by the WEIGHTED SUM of the favorite stats (3×primary +
+// 2×secondary + 1×tertiary) — every picked stat always matters ("preferably both/all"),
+// with clear ordered importance. One high primary alone no longer beats two good stats.
+const FAVW3=[3,2,1];
+const favScoreOf=(it,f)=>f.reduce((sum,k,ix)=>sum+FAVW3[ix]*(it.s[k]||0),0);
 
 // Diego's exotic synergy defaults — seeded once per exotic on first sight; the
 // panel is the source of truth after that.
@@ -219,14 +224,15 @@ function seedFavs(){
 function compute(o){
   const groups = new Map();
   for(const it of ITEMS){
-    it.v=null; it.why=''; it.pend=false; it.f1=0; it.f2=0;
+    it.v=null; it.why=''; it.pend=false; it.f1=0; it.f2=0; it.f3=0; it.fscore=0;
     if(it.tag==='junk'){ it.v='junk'; it.why='You tagged it junk.'; continue; }
-    if(it.t===0){ it.v='review'; it.why='Armor 2.0 legacy — keep only for raid mod slots or a stat combo no archetype can roll.'; continue; }
+    if(it.t===0){ it.v='junk'; it.why='Armor 2.0 legacy — trash (Diego 2026-07-12: junk always).'; continue; }
     const slot = isClassItem(it.slot)?'Class Item':it.slot;
     let key;
     if(it.x){
       const f=favOf(it.n);
-      it.f1=f[0]?(it.s[f[0]]||0):0; it.f2=f[1]?(it.s[f[1]]||0):0;
+      it.f1=f[0]?(it.s[f[0]]||0):0; it.f2=f[1]?(it.s[f[1]]||0):0; it.f3=f[2]?(it.s[f[2]]||0):0;
+      it.fscore=favScoreOf(it,f);   // 3×primary + 2×secondary + 1×tertiary — all picks matter
       if(f.length){ key = `X|${it.cls}|${it.n}`; }                         // favorite stat rules: one best copy
       else{ key = `X|${it.cls}|${it.n}|${it.a}|${it.ter}`; it.pend=true; } // untuned: per-niche + pending
     }
@@ -240,25 +246,27 @@ function compute(o){
     if(!groups.has(key)) groups.set(key,[]);
     groups.get(key).push(it);
   }
+  // weighted-math string for exotic cards, e.g. "Melee 32×3 + Super 28×2 + Weapons 20×1 = 172"
+  const favMath=(it,f)=>f.map((k,ix)=>`${STATN[k]} ${it.s[k]||0}×${FAVW3[ix]}`).join(' + ')+` = <b>${it.fscore}</b>`;
   for(const arr of groups.values()){
-    arr.sort((a,b)=> b.f1-a.f1 || b.f2-a.f2 || b.t-a.t || b.tot-a.tot || b.mw-a.mw || (TAGRANK[b.tag]-TAGRANK[a.tag]) || b.lo-a.lo);
+    arr.sort((a,b)=> b.fscore-a.fscore || b.f1-a.f1 || b.t-a.t || b.tot-a.tot || b.mw-a.mw || (TAGRANK[b.tag]-TAGRANK[a.tag]) || b.lo-a.lo);
     const best = arr[0];
     best.v='keep';
     const r = best.x?'':rateOf(best.sb);
     const bf = best.x?favOf(best.n):[];
     best.why = bf.length
-      ? (arr.length>1?`Best of ${arr.length} copies — `:'Only copy — ')+`${STATN[bf[0]]} <b>${best.f1}</b>${bf[1]?` › ${STATN[bf[1]]} <b>${best.f2}</b>`:''}.`
+      ? (arr.length>1?`Best of ${arr.length} copies — `:'Only copy — ')+favMath(best,bf)+'.'
       : (arr.length>1?`Best of ${arr.length} in this niche.`:'Only piece in this niche.');
     if(best.x && !bf.length) best.why += ' <u>No favorite stat set — tune it in the exotics panel.</u>';
     if(r==='2pc') best.why += ' Held for the 2-piece bonus.';
     if(r==='ignore'&&best.sb) best.why += ' Set ignored — earning its slot on stats alone.';
     if(best.pend) best.why += ' <u>Set rating pending — decide in the set panel.</u>';
-    if(best.t<5){ best.v='review'; best.why += ' <em>Sub-Tier 5 — farmable upgrade exists.</em>'; }
+    if(best.t<5) best.why += ' Sub-Tier 5 — a farmable upgrade exists (kept until a better roll drops).';
     for(let i=1;i<arr.length;i++){
       const it=arr[i];
       it.v='junk';
       it.why=bf.length
-        ? `Outclassed copy — ${STATN[bf[0]]} ${it.f1}${bf[1]?'/'+it.f2:''} vs <b>${best.f1}${bf[1]?'/'+best.f2:''}</b> on the keeper.`
+        ? `Outclassed copy — ${favMath(it,bf)} vs <b>${best.fscore}</b> on the keeper.`
         : `Outclassed by <b>${best.n}</b> (T${best.t}, ${best.tot} base).`;
       if(o.fav && it.tag==='favorite'){ it.v='review'; it.why+=' <em>Kept from junk: tagged favorite.</em>'; }
       else if(o.lo && it.lo>0){ it.v='review'; it.why+=` <em>Kept from junk: in ${it.lo} loadout${it.lo>1?'s':''}.</em>`; }
@@ -386,11 +394,11 @@ function renderExos(){
     const e=byName[nm], fav=favOf(nm);
     return `<div class="srow">
       <div class="sh"><span class="snm" style="color:var(--gold)">${nm} <span style="color:var(--dim);font-weight:400">· ${e.cls} ${e.slot} · ${e.c} cop${e.c>1?'ies':'y'}</span></span>
-      <span class="ssrc">${fav.length?STATN[fav[0]]+(fav[1]?' › '+STATN[fav[1]]:''):'⚠ no favorite set'}</span></div>
+      <span class="ssrc">${fav.length?fav.map(k=>STATN[k]).join(' › '):'⚠ no favorite set'}</span></div>
       <div class="xseg" data-exo="${nm.replace(/"/g,'&quot;')}">
         ${['w','h','c','g','s','m'].map(k=>{
           const ix=fav.indexOf(k);
-          return `<button class="${ix>=0?'on':''}" data-k="${k}">${STATN[k]}${ix===0?' ¹':ix===1?' ²':''}</button>`;
+          return `<button class="${ix>=0?'on':''}" data-k="${k}">${STATN[k]}${ix===0?' ¹':ix===1?' ²':ix===2?' ³':''}</button>`;
         }).join('')}
       </div>
     </div>`;
@@ -404,7 +412,7 @@ function card(i){
   const stats=['w','h','c','g','s','m'].map(k=>
     `<span class="st ${i.s[k]>=20?'hi':''} ${fav.includes(k)?'fv':''}">${STATN[k]} <b>${i.s[k]}</b></span>`).join('');
   let rl = i.sb ? ` · <span class="flag">${i.sb}: ${RLBL[rateOf(i.sb)]}</span>` : '';
-  if(fav.length) rl += ` · <span class="flag">fav ${STATN[fav[0]]} ${i.f1}${fav[1]?` › ${STATN[fav[1]]} ${i.f2}`:''}</span>`;
+  if(fav.length) rl += ` · <span class="flag">fav ${fav.map(k=>`${STATN[k]} ${i.s[k]||0}`).join(' › ')} (score ${i.fscore})</span>`;
   return `<div class="card v${i.v}">
     <div class="top"><span class="nm ${i.x?'ex':''}">${i.n}</span><span class="vb v${i.v} disp">${i.v}</span></div>
     <div class="meta"><b>${i.cls}</b> · ${i.slot} · <b>${i.a}</b>${p?` (${STATN[p]}/${STATN[s]})`:''} · 3rd: <b>${i.ter}</b> · <span class="pips">${pips}</span> ${i.tot} base
@@ -422,9 +430,9 @@ document.body.addEventListener('click',e=>{
   if(xb){
     const nm=xb.parentElement.dataset.exo, k=xb.dataset.k, cur=favOf(nm);
     let next;
-    if(cur.includes(k)) next=cur.filter(x=>x!==k);        // deselect (secondary promotes to primary)
-    else if(cur.length<2) next=[...cur,k];                // first pick = primary, second = secondary
-    else next=[cur[0],k];                                 // already 2: new pick replaces the secondary
+    if(cur.includes(k)) next=cur.filter(x=>x!==k);        // deselect (the rest promote up in order)
+    else if(cur.length<3) next=[...cur,k];                // picks in order: primary, secondary, tertiary
+    else next=[cur[0],cur[1],k];                          // already 3: new pick replaces the tertiary
     if(next.length) exoFavs[nm]=next; else delete exoFavs[nm];
     saveFavs(); const keep=$('exoPanel').open; render(); $('exoPanel').open=keep; return;
   }
@@ -485,7 +493,7 @@ $('refreshBtn').onclick=()=>loadData(true);
 (async function init(){
   ratings = (await loadStore('vv-ratings')) || {};
   exoFavs = (await loadStore('vv-exofavs')) || {};
-  for(const k of Object.keys(exoFavs)) exoFavs[k]=exoFavs[k].slice(0,2);  // migrate: max 2, order kept
+  for(const k of Object.keys(exoFavs)) exoFavs[k]=exoFavs[k].slice(0,3);  // migrate: max 3, order kept
   loadData(false);
   window.GRELOAD=()=>loadData(false);   // banner "Updated" chip / auto-refresh hook
 })();
