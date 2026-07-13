@@ -869,6 +869,29 @@ async function fetchWeapons(e) {
   }
   for (const w of weapons) w.hash = canonical[w.hash] || w.hash;
 
+  // Farm-watch reconciliation (2026-07-12): a weapon watched while UNOWNED is keyed by the
+  // weapon-pools manifest hash. When a copy finally drops, its owned def lives under the
+  // reissue-merged CANONICAL hash — remap the watch entry by NAME so the watch lights up
+  // (rollScore, /drops, god-roll alerts) without Diego redoing his perk tracking.
+  {
+    const watch = loadWatch() || {}; let remapped = false;
+    const byName = {}; for (const [h, d] of Object.entries(mergedDefs)) byName[d.n] = h;
+    for (const [h, cfg] of Object.entries(watch)) {
+      if (mergedDefs[h] || !cfg?.name) continue;
+      const canon = byName[cfg.name];
+      if (!canon) continue;   // genuinely unowned — stays a farm watch under the pool hash
+      if (!watch[canon]) watch[canon] = cfg;
+      else {   // BOTH exist (old Perk Finder farm-save + a later owned watch) → merge, owned entry wins conflicts
+        const t = watch[canon];
+        t.perks = { ...(cfg.perks || {}), ...(t.perks || {}) };
+        if (!t.mw && cfg.mw) t.mw = cfg.mw;
+        if ((!t.stats || !t.stats.length) && (cfg.stats || []).length) t.stats = cfg.stats;
+      }
+      delete watch[h]; remapped = true;
+    }
+    if (remapped) saveWatch(watch);
+  }
+
   // new-drop detection: flag copies whose instance id we haven't seen before.
   const seen = loadSeen();
   if (!seen.seeded) { for (const w of weapons) seen.ids.add(w.id); seen.seeded = true; saveSeen(seen); }

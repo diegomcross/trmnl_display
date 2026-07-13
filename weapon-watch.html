@@ -146,7 +146,10 @@ input[type=checkbox]{accent-color:var(--gold);width:15px;height:15px;flex-shrink
 </div>
 
 <script>
-let DATA={weapons:[],defs:{}}, WATCH={}, TAGS={}, q='', wSort='attention', wAmmo='', wFilt='', wOnlyHits=false, selMode=false;
+let DATA={weapons:[],defs:{}}, WATCH={}, TAGS={}, POOLS={}, q='', wSort='attention', wAmmo='', wFilt='', wOnlyHits=false, selMode=false;
+// def resolver: owned defs first, else the all-game pool entry (lets you watch weapons you
+// don't own yet — "farm watches"). Pool defs carry owned:false + blank ammo/dmg.
+const defOf=h=>DATA.defs[h]||POOLS[h];
 const openCards=new Set(), sel=new Set();
 const $=id=>document.getElementById(id);
 const esc=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
@@ -228,7 +231,7 @@ function renderWatched(){
     `<button class="tab ${wFilt===v?'on':''}" data-wfilt="${v}">${t}</button>`).join('');
 
   let entries=Object.entries(WATCH).map(([hash,cfg])=>{
-    const d=DATA.defs[hash];
+    const d=defOf(hash);   // owned def, else pool def (farm watch — unowned weapon)
     const raw=copiesOf[hash]||[];
     // rank each watched stat across this weapon's copies first (score needs it)
     const rankOf={};
@@ -266,7 +269,7 @@ function renderWatched(){
     const hperks=tn.length?`<div class="hperks">${tn.map(p=>`<${p.hi?'b class="hp2"':'b'}>${p.hi?'★':''}${esc(p.n)}</b>`).join(' · ')}</div>`:'';
     const vtag=d.versions>1?` <span style="color:var(--dim)">· ${d.versions} versions</span>`:'';
     const head=`<div class="whead" data-open="${hash}">
-      <span class="wl">${wTile(d,best?best+'%':'')}<span class="wtx"><span class="nm">${esc(d.n)}</span> <span class="sum">· ${esc(d.ty)} · ${copies.length} cop${copies.length===1?'y':'ies'}${unt?` · <b style="color:var(--rev)">${unt} untagged</b>`:''} · best ${best}%${vtag} · tracking ${selectedCount(cfg)} criteria</span>${hasGod?'<span class="badge">🎯 GOD ROLL</span>':''}${isOpen?'':hperks}</span></span>
+      <span class="wl">${wTile(d,best?best+'%':'')}<span class="wtx"><span class="nm">${esc(d.n)}</span> <span class="sum">· ${esc(d.ty)} · ${d.owned===false?`<b style="color:var(--keep)">not owned</b>${d.src?` · farm: ${esc(d.src)}`:''}`:`${copies.length} cop${copies.length===1?'y':'ies'}${unt?` · <b style="color:var(--rev)">${unt} untagged</b>`:''} · best ${best}%`}${vtag} · tracking ${selectedCount(cfg)} criteria</span>${hasGod?'<span class="badge">🎯 GOD ROLL</span>':''}${d.owned===false?'<span class="badge" style="background:rgba(95,208,221,.2);color:var(--keep)">FARM</span>':''}${isOpen?'':hperks}</span></span>
       <span class="sum">${isOpen?'▾':'▸'}</span></div>`;
     if(!isOpen) return `<div class="card">${head}</div>`;
 
@@ -371,13 +374,19 @@ function renderWatched(){
 function renderAdd(){
   const copiesOf=copiesByHash();
   const ql=q.trim().toLowerCase();
-  const rows=Object.entries(DATA.defs)
-    .filter(([h,d])=>!WATCH[h]&&matchesQuery(d))
+  // owned weapons first, then EVERY other weapon in the game (farm watches) — deduped
+  // against owned defs by NAME (pool hashes differ from the reissue-merged owned hashes)
+  const ownedNames=new Set(Object.values(DATA.defs).map(d=>d.n));
+  const owned=Object.entries(DATA.defs).filter(([h,d])=>!WATCH[h]&&matchesQuery(d))
     .sort((a,b)=>a[1].n.localeCompare(b[1].n));
-  $('allList').innerHTML=rows.slice(0,ql?200:30).map(([h,d])=>`<div class="row">
-    <div><div class="rn">${esc(d.n)}</div><div class="ri">${esc(d.ty)} · ${d.slot} · ${d.ammo} · ${d.dmg} · ${(copiesOf[h]||[]).length} in vault${d.src?` · ${esc(d.src)}`:''}</div></div>
+  const farm=Object.entries(POOLS).filter(([h,d])=>!WATCH[h]&&!ownedNames.has(d.n)&&matchesQuery(d))
+    .sort((a,b)=>a[1].n.localeCompare(b[1].n));
+  const rows=[...owned,...farm];
+  const cap=ql?200:30;
+  $('allList').innerHTML=rows.slice(0,cap).map(([h,d])=>`<div class="row">
+    <div><div class="rn">${esc(d.n)}${d.owned===false?' <span style="color:var(--keep);font-size:10px">NOT OWNED</span>':''}</div><div class="ri">${esc(d.ty)}${d.slot?` · ${d.slot}`:''}${d.ammo?` · ${d.ammo}`:''}${d.dmg?` · ${d.dmg}`:''}${d.owned===false?'':` · ${(copiesOf[h]||[]).length} in vault`}${d.src?` · ${esc(d.src)}`:''}</div></div>
     <button class="btn sm" data-watch="${h}">Watch</button></div>`).join('')
-    +(rows.length>(ql?200:30)?`<p class="count">…${rows.length-(ql?200:30)} more — refine the search.</p>`:'');
+    +(rows.length>cap?`<p class="count">…${rows.length-cap} more — refine the search.</p>`:'');
 }
 
 const save=()=>fetch('/api/watch',{method:'POST',body:JSON.stringify(WATCH)});
@@ -410,8 +419,8 @@ document.body.addEventListener('click',async e=>{
   if(t.dataset.wammo!==undefined){ wAmmo=t.dataset.wammo; renderWatched(); }
   else if(t.dataset.wfilt!==undefined){ wFilt=t.dataset.wfilt; renderWatched(); }
   else if(t.dataset.open){ openCards.has(t.dataset.open)?openCards.delete(t.dataset.open):openCards.add(t.dataset.open); renderWatched(); }
-  else if(t.dataset.watch){ const h=t.dataset.watch; WATCH[h]={name:DATA.defs[h].n,perks:{},mw:'',stats:[]}; openCards.add(h); save(); render(); }
-  else if(t.dataset.unwatch){ if(confirm('Stop watching '+DATA.defs[t.dataset.unwatch].n+'?')){ delete WATCH[t.dataset.unwatch]; save(); render(); } }
+  else if(t.dataset.watch){ const h=t.dataset.watch; WATCH[h]={name:defOf(h).n,perks:{},mw:'',stats:[]}; openCards.add(h); save(); render(); }
+  else if(t.dataset.unwatch){ if(confirm('Stop watching '+(defOf(t.dataset.unwatch)||{n:'this weapon'}).n+'?')){ delete WATCH[t.dataset.unwatch]; save(); render(); } }
   else if(t.dataset.lock){ t.disabled=true; if(await setLock(t.dataset.lock,+t.dataset.to)) renderWatched(); else t.disabled=false; }
   else if(t.dataset.equip){ t.disabled=true; t.textContent='…'; if(await itemAction('/api/equip',t.dataset.equip,t.dataset.rhash,t.dataset.own)) renderWatched(); else { t.disabled=false; t.textContent='Equip'; } }
   else if(t.dataset.vault){ t.disabled=true; t.textContent='…'; if(await itemAction('/api/vault',t.dataset.vault,t.dataset.rhash,t.dataset.own)) renderWatched(); else { t.disabled=false; t.textContent='→ Vault'; } }
@@ -475,13 +484,16 @@ $('expJunkBtn').onclick=()=>{
 async function load(fresh){
   $('status').textContent=fresh?'Pulling fresh drops from Bungie…':'Loading…';
   try{
-    const [d,w,tg]=await Promise.all([
+    const [d,w,tg,wp]=await Promise.all([
       fetch('/api/weapons'+(fresh?'?fresh=1':'')).then(r=>r.json()),
       fetch('/api/watch').then(r=>r.json()),
       fetch('/api/tags').then(r=>r.json()),
+      // all-game weapon pool (for farm watches) — big-ish, fetched once per page life
+      Object.keys(POOLS).length?Promise.resolve(null):fetch('/api/weapon-pools').then(r=>r.json()).catch(()=>null),
     ]);
     if(d.error) throw new Error(d.error);
     DATA=d; WATCH=w||{}; TAGS=tg||{};
+    if(wp&&wp.weapons){ POOLS={}; for(const p of wp.weapons) POOLS[p.hash]={...p,ammo:'',dmg:'',versions:0,owned:false}; }
     if(window.PerkTip) PerkTip.init({perkDescs:DATA.perkDescs,perkInsights:DATA.perkInsights});
     $('status').textContent=`${DATA.weapons.length} weapons · synced ${new Date(d.fetchedAt).toLocaleTimeString()}`;
     render();
