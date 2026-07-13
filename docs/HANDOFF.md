@@ -560,6 +560,30 @@ Core priorities, in his words:
       `GET /api/builds/suggestions[?id=]` (pure preview — no seen/alert writes),
       `POST /api/builds/alerts/ack {buildId?}`, `GET /api/builds/alerts`,
       `POST /api/builds/import-dim`.
+    - **UI/UX pass (2026-07-13, Diego: "take your time making this look good"):** list cards
+      with **Destiny-style diamond super icons** (element-colored ring, rotated square) +
+      exotic art tile + mini stat meters (current vs min marker, met=green/unmet=red);
+      abilities selection moved into a **game-style MODAL** (element tabs → SUPER / CLASS
+      ABILITY / MOVEMENT / MELEE / GRENADE / ASPECTS (slot math shown) / FRAGMENTS (cap
+      counter), 58px tiles, element-glow selected state with ✓ corner); **exotic anchor
+      picker = its own modal, grouped by slot** (Helmet/Gauntlets/Chest/Leg/Class Item),
+      gold-framed official art, **deduped by NAME** (reissues share a name across hashes —
+      the whole engine now matches the anchor by hash OR name: championSet, isUpgrade,
+      exoOf/exoPickList client-side; build.exotic carries `n`); stat goals got **sliders**
+      (range+number synced, element-colored thumbs); **hover popups everywhere** via
+      perktip.js — abilities/aspects/fragments AND exotic armor show in-game text +
+      **Clarity community insights**. Server: `/api/subclass-catalog` returns
+      `{catalog, insights}` (insight bullets keyed by name, incl. exotic armor);
+      **`loadClarity` now also builds `byItem`** (Clarity's `itemName` — how exotic ARMOR
+      insight is keyed by the armor's own name, not its intrinsic perk); the cache shape
+      gained `byItem` — old caches without it auto-refresh. fetchArmor emits `icon` per
+      piece. **Set-bonus selection per build** (`setBonus:{name,want:0|2|4}`, sets list from
+      /api/armor's owned-sets map, 2pc/4pc descriptions shown): 4pc locks the four
+      non-exotic slots to set pieces (gap chip when a slot has none), 2pc converts the two
+      cheapest slots; suggestion candidates respect locked slots. "Delete all DIM drafts"
+      button (`POST /api/builds/delete {drafts:true}`). CSS gotcha that broke the first
+      modal render: tile frames were `<span>`s — width/height silently ignored on inline
+      elements; every sized span needs `display:block`.
     - **DIM import (`dimReadLoadouts` — components=loadouts, separate from dimReadTags;
       `importDimLoadouts`):** maps DIM loadouts → **drafts** (watch OFF until Diego finishes
       + saves): subclass plugs classified BY pc (totems/trinkets fold to aspects/fragments),

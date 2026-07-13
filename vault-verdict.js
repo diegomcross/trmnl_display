@@ -414,10 +414,10 @@ async function importDimLoadouts(e) {
         else if (kind === 'fragments' || kind === 'trinkets') plugs.fragments.push(ph);
       }
     }
-    let exotic = { hash: 0, slot: '' };
+    let exotic = { hash: 0, slot: '', n: '' };
     for (const eq of (lo.equipped || [])) {
       const d = man.items[eq.hash];
-      if (d && d.it === 2 && d.tt === 6 && BUCKET[d.b]) { exotic = { hash: eq.hash, slot: BUCKET[d.b] }; break; }
+      if (d && d.it === 2 && d.tt === 6 && BUCKET[d.b]) { exotic = { hash: eq.hash, slot: BUCKET[d.b], n: d.n }; break; }
     }
     // DIM statConstraints: array order = priority; Armor 3.0 DIM uses minStat/maxStat,
     // legacy loadouts carry minTier/maxTier (×10). Unlisted stats append in default order.
@@ -770,7 +770,7 @@ async function fetchArmor(e) {
     const setDef = def.set ? man.sets[def.set] : null;
     const dim = tags[id] || {};
     out.push({
-      n: def.n, id, hash: it.itemHash,
+      n: def.n, id, hash: it.itemHash, icon: def.icon || '',
       tag: dim.tag || '', note: dim.note || '',
       x: def.tt === 6, t: inst.gearTier ?? 0,
       slot, cls: CLASS[def.c] || '—', src: def.src || '',
@@ -1187,22 +1187,28 @@ async function loadClarity(man, fresh = false) {
   if (!fresh) {
     try {
       const st = fs.statSync(CLARITY_FILE);
-      if (Date.now() - st.mtimeMs < CLARITY_MAX_AGE) return (CLARITY = JSON.parse(fs.readFileSync(CLARITY_FILE, 'utf8')));
+      if (Date.now() - st.mtimeMs < CLARITY_MAX_AGE) {
+        const c = JSON.parse(fs.readFileSync(CLARITY_FILE, 'utf8'));
+        if (c.byItem) return (CLARITY = c);   // old cache without byItem → fall through and re-download
+      }
     } catch {}
   }
   try {
     console.log('Downloading Clarity community insights (one-time / weekly)...');
     const raw = await fetch(CLARITY_URL).then((r) => r.json());
-    const byName = {};
+    const byName = {}, byItem = {};
     for (const [h, entry] of Object.entries(raw)) {
       const nm = foldPerkName(man.items[h]?.n) || entry?.name;
-      if (!nm) continue;
       const txt = flattenClarity(entry);
-      if (txt && !byName[nm]) byName[nm] = txt;   // first (usually base) wins; enhanced shares the name
+      if (!txt) continue;
+      if (nm && !byName[nm]) byName[nm] = txt;   // first (usually base) wins; enhanced shares the name
+      // Clarity also names the ITEM the perk belongs to — this is how exotic ARMOR gets its
+      // insight keyed by the armor's own name (e.g. "Winter's Guile", not "Warlord's Sigil").
+      if (entry?.itemName && !byItem[entry.itemName]) byItem[entry.itemName] = txt;
     }
-    CLARITY = { generatedAt: new Date().toISOString(), byName };
+    CLARITY = { generatedAt: new Date().toISOString(), byName, byItem };
     fs.writeFileSync(CLARITY_FILE, JSON.stringify(CLARITY));
-    console.log(`Clarity insights: ${Object.keys(byName).length} perks.`);
+    console.log(`Clarity insights: ${Object.keys(byName).length} perks, ${Object.keys(byItem).length} items.`);
   } catch (err) {
     console.warn('clarity download failed:', err.message);
     try { CLARITY = JSON.parse(fs.readFileSync(CLARITY_FILE, 'utf8')); }
@@ -1254,7 +1260,7 @@ function cleanClarityBullets(raw) {
 function insightBullets(name) {
   const clean = loadCleanClarity()[name];
   if (Array.isArray(clean) && clean.length) return clean;
-  return cleanClarityBullets((CLARITY && CLARITY.byName[name]) || '');
+  return cleanClarityBullets((CLARITY && (CLARITY.byName[name] || (CLARITY.byItem && CLARITY.byItem[name]))) || '');
 }
 
 // Perk category tags for the Perk Finder tag filter, derived from the perk's name + in-game
@@ -1449,11 +1455,12 @@ function upsertBuild(input) {
     builds.push(b);
   } else {
     // bump rev when anything that changes scoring changed
-    const scoringChanged = ['cls', 'exotic', 'prio', 'min', 'max'].some((k) => k in input && JSON.stringify(input[k]) !== JSON.stringify(b[k]));
+    const scoringChanged = ['cls', 'exotic', 'prio', 'min', 'max', 'setBonus'].some((k) => k in input && JSON.stringify(input[k]) !== JSON.stringify(b[k]));
     if (scoringChanged) b.rev = (b.rev || 1) + 1;
   }
-  for (const k of ['name', 'cls', 'classType', 'elem', 'plugs', 'exotic', 'prio', 'min', 'max', 'watch', 'draft', 'notes']) if (k in input) b[k] = input[k];
+  for (const k of ['name', 'cls', 'classType', 'elem', 'plugs', 'exotic', 'prio', 'min', 'max', 'setBonus', 'watch', 'draft', 'notes']) if (k in input) b[k] = input[k];
   b.plugs = b.plugs || { super: 0, grenade: 0, melee: 0, classAbility: 0, movement: 0, aspects: [], fragments: [] };
+  b.setBonus = b.setBonus || { name: '', want: 0 };   // want: 0=off, 2=2-piece, 4=4-piece
   b.prio = Array.isArray(b.prio) && b.prio.length === 6 ? b.prio : STATKEYS.slice();
   b.min = b.min || {}; b.max = b.max || {};
   for (const k of STATKEYS) { b.min[k] = Math.max(0, Math.min(200, +b.min[k] || 0)); b.max[k] = Math.max(0, Math.min(200, +(b.max[k] ?? 200))); }
@@ -1483,14 +1490,39 @@ function championSet(build, items) {
   const pool = items.filter((i) => i.cls === build.cls && ARMOR_SLOTS.includes(i.slot));
   const slots = {}; let exoticMissing = false;
   const exSlot = build.exotic?.slot || '';
+  const sb = (build.setBonus && build.setBonus.name && build.setBonus.want) ? build.setBonus : null;
+  const bestIn = (cands) => cands.slice().sort((a, b) => pieceScoreB(b, W) - pieceScoreB(a, W))[0] || null;
+  const setGaps = [], lockedSetSlots = new Set();
   for (const slot of ARMOR_SLOTS) {
-    let cands;
-    if (slot === exSlot) { cands = pool.filter((i) => i.slot === slot && i.hash === build.exotic.hash); if (!cands.length) { exoticMissing = true; cands = []; } }
-    else cands = pool.filter((i) => i.slot === slot && !i.x);
-    slots[slot] = cands.slice().sort((a, b) => pieceScoreB(b, W) - pieceScoreB(a, W))[0] || null;
+    if (slot === exSlot) {
+      // exotics match by hash OR NAME — the same exotic exists under multiple hashes across reissues
+      const c = pool.filter((i) => i.slot === slot && i.x && (i.hash === build.exotic.hash || (build.exotic.n && i.n === build.exotic.n)));
+      if (!c.length) exoticMissing = true;
+      slots[slot] = bestIn(c);
+      continue;
+    }
+    const glob = bestIn(pool.filter((i) => i.slot === slot && !i.x));
+    if (sb && sb.want === 4) {   // 4-piece: every non-exotic slot must come from the set
+      const setBest = bestIn(pool.filter((i) => i.slot === slot && !i.x && i.sb === sb.name));
+      if (setBest) { slots[slot] = setBest; lockedSetSlots.add(slot); }
+      else { slots[slot] = glob; setGaps.push(slot); }
+    } else slots[slot] = glob;
+  }
+  if (sb && sb.want === 2) {   // 2-piece: convert the two slots where a set piece costs the least
+    const opts = [];
+    for (const slot of ARMOR_SLOTS) {
+      if (slot === exSlot) continue;
+      if (slots[slot] && slots[slot].sb === sb.name) { opts.push({ slot, loss: -1 }); continue; }   // already set — free
+      const setBest = bestIn(pool.filter((i) => i.slot === slot && !i.x && i.sb === sb.name));
+      if (setBest) opts.push({ slot, loss: pieceScoreB(slots[slot] || { s: {} }, W) - pieceScoreB(setBest, W), piece: setBest });
+    }
+    opts.sort((a, b) => a.loss - b.loss);
+    let have = 0;
+    for (const o of opts) { if (have >= 2) break; if (o.piece) slots[o.slot] = o.piece; lockedSetSlots.add(o.slot); have++; }
+    if (have < 2) setGaps.push(`only ${have} ${sb.name} piece${have === 1 ? '' : 's'} owned`);
   }
   const T = setTotals(Object.values(slots));
-  return { slots, T, W, score: cappedScore(T, build, W), deficit: minDeficit(T, build), exoticMissing };
+  return { slots, T, W, score: cappedScore(T, build, W), deficit: minDeficit(T, build), exoticMissing, setGaps, lockedSetSlots, sb };
 }
 
 function isUpgrade(build, champ, cand) {
@@ -1498,8 +1530,10 @@ function isUpgrade(build, champ, cand) {
   if (!ARMOR_SLOTS.includes(slot) || cand.cls !== build.cls) return null;
   const cur = champ.slots[slot];
   if (cur && cur.id === cand.id) return null;                    // already the champion piece
-  if (slot === (build.exotic?.slot || '')) { if (cand.hash !== build.exotic?.hash) return null; }
+  if (slot === (build.exotic?.slot || '')) { if (!(cand.hash === build.exotic?.hash || (build.exotic?.n && cand.n === build.exotic.n))) return null; }
   else if (cand.x) return null;                                  // never suggest a second exotic
+  // set-bonus constraint: a slot locked to the chosen set only accepts pieces of that set
+  if (champ.lockedSetSlots && champ.lockedSetSlots.has(slot) && champ.sb && cand.sb !== champ.sb.name) return null;
   const T2 = {}; STATKEYS.forEach((k) => { T2[k] = (champ.T[k] || 0) - (cur ? (cur.s[k] || 0) : 0) + (cand.s[k] || 0); });
   const dNew = minDeficit(T2, build), dOld = champ.deficit;
   if (dNew > dOld) return null;                                  // never move away from a min target
@@ -1836,13 +1870,27 @@ async function main() {
       }
       if (req.url.startsWith('/api/subclass-catalog')) {
         const man = await loadManifest(e);
-        return json(buildSubclassCatalog(man));
+        const cat = buildSubclassCatalog(man);
+        // Community insights (Clarity — the same data DIM shows) for aspects/fragments/
+        // abilities, keyed by name, for the hover popup (Diego 2026-07-13).
+        await loadClarity(man).catch(() => {});
+        const insights = {};
+        for (const cls of Object.values(cat)) for (const el of Object.values(cls)) for (const list of Object.values(el))
+          for (const x of list) if (!insights[x.n]) { const b = insightBullets(x.n); if (b && b.length) insights[x.n] = b; }
+        // exotic ARMOR insights too (Clarity covers exotic armor) — for the anchor-picker hover
+        for (const d of Object.values(man.items)) if (d.it === 2 && d.tt === 6 && d.n && !insights[d.n]) {
+          const b = insightBullets(d.n); if (b && b.length) insights[d.n] = b;
+        }
+        return json({ catalog: cat, insights });
       }
       if (req.url.startsWith('/api/builds/delete') && req.method === 'POST') {
-        const { id } = JSON.parse(await readBody(req) || '{}');
-        saveBuilds(loadBuilds().filter((b) => b.id !== id));
-        BUILD_ALERTS_CACHE = loadBuildAlerts().filter((a) => a.buildId !== id); saveBuildAlerts();
-        return json({ ok: true });
+        const { id, drafts } = JSON.parse(await readBody(req) || '{}');
+        const before = loadBuilds();
+        const keep = drafts ? before.filter((b) => !(b.draft && b.src === 'dim')) : before.filter((b) => b.id !== id);
+        saveBuilds(keep);
+        const kept = new Set(keep.map((b) => b.id));
+        BUILD_ALERTS_CACHE = loadBuildAlerts().filter((a) => kept.has(a.buildId)); saveBuildAlerts();
+        return json({ ok: true, deleted: before.length - keep.length });
       }
       if (req.url.startsWith('/api/builds/import-dim') && req.method === 'POST') {
         try { return json({ ok: true, ...(await importDimLoadouts(e)) }); }
@@ -1865,7 +1913,7 @@ async function main() {
           outB[build.id] = {
             champion: {
               slots: Object.fromEntries(Object.entries(champ.slots).map(([s, p]) => [s, p ? { id: p.id, n: p.n, s: p.s, t: p.t, tune: p.tune, tuneKind: p.tuneKind, x: p.x } : null])),
-              totals: champ.T, deficit: champ.deficit, exoticMissing: champ.exoticMissing,
+              totals: champ.T, deficit: champ.deficit, exoticMissing: champ.exoticMissing, setGaps: champ.setGaps || [],
             },
             suggestions,
           };
