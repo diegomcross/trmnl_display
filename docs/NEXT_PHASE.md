@@ -43,6 +43,20 @@ preview, per-run history/undo, same /auto visibility). Staging for armor is DONE
 tagging design must reuse the armor page's verdict engine concepts (niches/set bonuses/exotic
 favorite stats) and must NEVER overwrite tags Diego set himself. Design not started — spec it with
 Diego first.
+
+**2026-07-12 EVENING (plan-mode session, all SHIPPED — see HANDOFF):** Weapon Watch farm-watching
+(unowned weapons watchable end-to-end; 13 hidden Perk Finder farm-saves surfaced/merged), armor
+verdict rules (3 ordered exotic favorite stats w/ weighted 3/2/1 sum; Armor 2.0 junk always;
+sub-T5 keepers stay keep), and the **BUILD CRAFTER** (`/builds`: subclass builds with official
+art, stat priorities + min/max, champion set, explained upgrade suggestions, 60s background
+watcher → feed + Builds-tab badge + TRMNL "ARMOR UPGRADE" panel alert, Balanced-Tuning notes,
+DIM-loadout import — 90 drafts imported). **Diego must REBOOT (double-click REBOOT.cmd) to load
+the server side** — /builds 404s and the farm-watch reconciliation + build watcher don't run
+until then. Open follow-ups (small): (a) his 90 imported drafts have watch OFF — he curates
+which to finish+save; a bulk-delete-drafts button may be wanted; (b) tier-1 min-gap suggestions
+can trade away min-less stats (documented; protect with a min) — revisit if he finds it noisy;
+(c) suggestion counts on unfinished goal sets can be large (e.g. 75) — consider capping the
+preview list per build.
 Also shipped in the second batch: cadence split (`orbitSeconds` 60 / `activitySeconds` 15 /
 `idleSeconds` 120 — replaced `activeSeconds`; inputs updated in /auto + /settings; while the game runs
 the tick now polls activity even when disabled so the chip shows it), `/api/status` gained

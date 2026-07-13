@@ -368,6 +368,76 @@ async function dimWriteTag(e, id, tag, notes) {
   return payload.tag || 'none';
 }
 
+// DIM cloud LOADOUTS (Build Crafter import). Separate from dimReadTags so the tag flows
+// stay untouched. The Sync API returns a flat loadouts[] array; the dim-data.json export
+// wraps each as {loadout:{...}} — parse both defensively.
+async function dimReadLoadouts(e) {
+  const { key, token, pid } = await dimAuth(e);
+  const res = await fetch(`${DIM_API}/profile?platformMembershipId=${pid}&destinyVersion=2&components=loadouts`, {
+    headers: { 'X-API-Key': key, Authorization: `Bearer ${token}`, Origin: DIM_ORIGIN },
+  });
+  const j = await res.json().catch(() => ({}));
+  if (!Array.isArray(j.loadouts)) throw new Error(`DIM loadouts: ${j.error || res.status}`);
+  return j.loadouts.map((l) => (l && l.loadout) ? l.loadout : l);
+}
+
+// Map DIM loadouts → DRAFT builds (Diego 2026-07-12: import as drafts; watch stays OFF
+// until he opens each draft, refines the goals, and saves). Subclass plugs are classified
+// BY THEIR pc (never socket index); stasis totems/trinkets fold to aspects/fragments.
+async function importDimLoadouts(e) {
+  const man = await loadManifest(e);
+  const louts = await dimReadLoadouts(e);
+  const builds = loadBuilds();
+  const CLSBY = { 0: 'Titan', 1: 'Hunter', 2: 'Warlock' };
+  const imported = [], skipped = [];
+  for (const lo of louts) {
+    if (!lo || !lo.id) continue;
+    if (builds.some((b) => b.dimId === lo.id)) { skipped.push({ name: lo.name || '?', reason: 'already imported' }); continue; }
+    const cls = CLSBY[lo.classType];
+    if (!cls) { skipped.push({ name: lo.name || '?', reason: 'any-class loadout (no class)' }); continue; }
+    const plugs = { super: 0, grenade: 0, melee: 0, classAbility: 0, movement: 0, aspects: [], fragments: [] };
+    let elem = '';
+    for (const eq of (lo.equipped || [])) {
+      const so = eq.socketOverrides; if (!so) continue;
+      for (const ph of Object.values(so)) {
+        const p = man.items[ph]; const pc = (p && p.pc) || '';
+        const m = pc.match(/^(?:titan|hunter|warlock|shared)\.(arc|solar|void|strand|stasis|prism)\.(\w+)$/);
+        if (!m) continue;
+        elem = elem || m[1];
+        const kind = m[2];
+        if (kind === 'supers') plugs.super = ph;
+        else if (kind === 'grenades' || kind === 'prism_grenade') plugs.grenade = plugs.grenade || ph;
+        else if (kind === 'melee') plugs.melee = ph;
+        else if (kind === 'class_abilities') plugs.classAbility = ph;
+        else if (kind === 'movement') plugs.movement = ph;
+        else if (kind === 'aspects' || kind === 'totems') { if (plugs.aspects.length < 2) plugs.aspects.push(ph); }
+        else if (kind === 'fragments' || kind === 'trinkets') plugs.fragments.push(ph);
+      }
+    }
+    let exotic = { hash: 0, slot: '' };
+    for (const eq of (lo.equipped || [])) {
+      const d = man.items[eq.hash];
+      if (d && d.it === 2 && d.tt === 6 && BUCKET[d.b]) { exotic = { hash: eq.hash, slot: BUCKET[d.b] }; break; }
+    }
+    // DIM statConstraints: array order = priority; Armor 3.0 DIM uses minStat/maxStat,
+    // legacy loadouts carry minTier/maxTier (×10). Unlisted stats append in default order.
+    const prio = [], min = {}, max = {};
+    for (const sc of (lo.parameters?.statConstraints || [])) {
+      const k = STAT[sc.statHash]; if (!k || prio.includes(k)) continue;
+      prio.push(k);
+      if (sc.minStat != null) min[k] = sc.minStat; else if (sc.minTier != null) min[k] = sc.minTier * 10;
+      if (sc.maxStat != null) max[k] = sc.maxStat; else if (sc.maxTier != null && sc.maxTier < 20) max[k] = sc.maxTier * 10;
+    }
+    for (const k of STATKEYS) if (!prio.includes(k)) prio.push(k);
+    const b = upsertBuild({
+      name: lo.name || 'DIM loadout', cls, classType: lo.classType, elem: elem || 'solar',
+      plugs, exotic, prio, min, max, watch: false, draft: true, src: 'dim', dimId: lo.id, notes: lo.notes || '',
+    });
+    imported.push({ id: b.id, name: b.name });
+  }
+  return { imported, skipped };
+}
+
 // ---------- profile fetch (shared by armor + weapons) ----------
 async function fetchProfile(e) {
   const tok = await accessToken(e);
@@ -671,12 +741,19 @@ async function fetchArmor(e) {
     }
     // base = live minus removable mod plugs (anything in an 'enhancements' plug category)
     const base = { ...live };
-    let archetype = '';
+    let archetype = '', tune = '', tuneKind = 'none';
     for (const s of sockets[id]?.sockets || []) {
       if (!s.plugHash || s.isEnabled === false) continue;
       const p = man.items[s.plugHash];
       if (!p) continue;
       if (ARCH_NAMES.has(p.n)) archetype = p.n;
+      // Armor 3.0 tuning socket (Build Crafter, 2026-07-12): expose the socketed tuning
+      // plug. "Balanced Tuning" carries NO inv (its +1×3-lowest stats are conditionally
+      // active, which the slimmer drops) — detect by name; "+X / -Y" stat tunings carry inv.
+      if (p.pc && p.pc.includes('tuning.mods') && !p.n.startsWith('Empty')) {
+        tune = p.n;
+        tuneKind = p.n === 'Balanced Tuning' ? 'balanced' : p.n.startsWith('+') ? 'stat' : 'none';
+      }
       if (p.inv && /enhancements|tuning/i.test(p.pc)) {
         for (const [k, v] of Object.entries(p.inv)) base[k] = Math.max(0, base[k] - v);
       }
@@ -697,7 +774,7 @@ async function fetchArmor(e) {
       tag: dim.tag || '', note: dim.note || '',
       x: def.tt === 6, t: inst.gearTier ?? 0,
       slot, cls: CLASS[def.c] || '—', src: def.src || '',
-      a: archetype, ter, mw: 0,
+      a: archetype, ter, mw: 0, tune, tuneKind,
       pwr: inst.primaryStat?.value || 0, own,
       lo: loadoutCount[id] || 0,
       s: base, tot: Object.values(base).reduce((a, b) => a + b, 0),
@@ -1312,6 +1389,171 @@ async function probe(nameLike) {
   if (hit) console.log('\nIf tier/archetype/base stats look wrong, paste this output back to Claude.');
 }
 
+// ---------- Build Crafter (2026-07-12, Diego: DIM-like loadout maker, but better) ----------
+// Subclass ability/aspect/fragment catalog grouped from the slim manifest's plug items.
+// pcs (verified live in slim6): <cls>.<elem>.supers|melee|class_abilities|movement|aspects;
+// STASIS aspects are <cls>.stasis.totems and stasis fragments shared.stasis.trinkets;
+// grenades = shared.<elem>.grenades + per-class <cls>.prism.grenades (the transcendence
+// <cls>.prism.prism_grenade is excluded); fragments = shared.<elem>.fragments +
+// shared.prism.fragments. An aspect's FRAGMENT-SLOT COUNT rides on its investmentStats
+// hash 2223994109 (kept in wi) — so no subclass-item (itemType 16) fetch is needed.
+let CATALOG = null;
+const FRAG_SLOT_STAT = '2223994109';
+function buildSubclassCatalog(man) {
+  if (CATALOG) return CATALOG;
+  const CLSN = { titan: 'Titan', hunter: 'Hunter', warlock: 'Warlock' };
+  const cat = {};
+  const bucketFor = (cls, elem) => {
+    cat[cls] = cat[cls] || {};
+    return (cat[cls][elem] = cat[cls][elem] || { supers: [], grenades: [], melee: [], classAbilities: [], movement: [], aspects: [], fragments: [] });
+  };
+  for (const [hash, d] of Object.entries(man.items)) {
+    const pc = d.pc || '';
+    if (!pc || !d.icon || !d.n || d.n.startsWith('Empty')) continue;
+    const entry = { h: Number(hash), n: d.n, icon: d.icon, dsc: d.dsc || '' };
+    let m;
+    if ((m = pc.match(/^(titan|hunter|warlock)\.(arc|solar|void|strand|prism|stasis)\.(supers|melee|class_abilities|movement|grenades)$/))) {
+      const key = { supers: 'supers', melee: 'melee', class_abilities: 'classAbilities', movement: 'movement', grenades: 'grenades' }[m[3]];
+      bucketFor(CLSN[m[1]], m[2])[key].push(entry);
+    } else if ((m = pc.match(/^(titan|hunter|warlock)\.(arc|solar|void|strand|prism)\.aspects$/))) {
+      bucketFor(CLSN[m[1]], m[2]).aspects.push({ ...entry, frag: (d.wi && d.wi[FRAG_SLOT_STAT]) || 0 });
+    } else if ((m = pc.match(/^(titan|hunter|warlock)\.stasis\.totems$/))) {
+      bucketFor(CLSN[m[1]], 'stasis').aspects.push({ ...entry, frag: (d.wi && d.wi[FRAG_SLOT_STAT]) || 0 });
+    } else if ((m = pc.match(/^shared\.(arc|solar|void|strand|stasis|prism)\.(grenades|fragments)$/))) {
+      for (const cls of Object.values(CLSN)) bucketFor(cls, m[1])[m[2]].push(m[2] === 'fragments' ? { ...entry, inv: d.inv || null } : entry);
+    } else if (pc === 'shared.stasis.trinkets') {
+      for (const cls of Object.values(CLSN)) bucketFor(cls, 'stasis').fragments.push({ ...entry, inv: d.inv || null });
+    }
+  }
+  // dedupe by name within each list (the manifest holds multiple hashes for some plugs)
+  for (const cls of Object.values(cat)) for (const el of Object.values(cls)) for (const [k, list] of Object.entries(el)) {
+    const seen = new Set();
+    el[k] = list.filter((x) => (seen.has(x.n) ? false : (seen.add(x.n), true))).sort((a, b) => a.n.localeCompare(b.n));
+  }
+  return (CATALOG = cat);
+}
+
+// builds store: builds.json {v:1, builds:[...]}. Each build carries a `rev` bumped on any
+// scoring-relevant edit (prio/min/max/exotic/cls) so the upgrade-checker's seen-keys
+// (buildId:rev:instanceId) orphan themselves and the whole vault re-evaluates (feed-only).
+const BUILDS_FILE = path.join(__dirname, 'builds.json');
+const loadBuilds = () => { const b = loadJson(BUILDS_FILE); return (b && Array.isArray(b.builds)) ? b.builds : []; };
+const saveBuilds = (builds) => saveJsonSafe(BUILDS_FILE, { v: 1, builds });
+const STATKEYS = ['w', 'h', 'c', 'g', 's', 'm'];
+function upsertBuild(input) {
+  const builds = loadBuilds();
+  const now = new Date().toISOString();
+  let b = input.id ? builds.find((x) => x.id === input.id) : null;
+  if (!b) {
+    b = { id: input.id || ('b' + Date.now()), rev: 1, createdAt: now, src: input.src || 'manual', dimId: input.dimId || '' };
+    builds.push(b);
+  } else {
+    // bump rev when anything that changes scoring changed
+    const scoringChanged = ['cls', 'exotic', 'prio', 'min', 'max'].some((k) => k in input && JSON.stringify(input[k]) !== JSON.stringify(b[k]));
+    if (scoringChanged) b.rev = (b.rev || 1) + 1;
+  }
+  for (const k of ['name', 'cls', 'classType', 'elem', 'plugs', 'exotic', 'prio', 'min', 'max', 'watch', 'draft', 'notes']) if (k in input) b[k] = input[k];
+  b.plugs = b.plugs || { super: 0, grenade: 0, melee: 0, classAbility: 0, movement: 0, aspects: [], fragments: [] };
+  b.prio = Array.isArray(b.prio) && b.prio.length === 6 ? b.prio : STATKEYS.slice();
+  b.min = b.min || {}; b.max = b.max || {};
+  for (const k of STATKEYS) { b.min[k] = Math.max(0, Math.min(200, +b.min[k] || 0)); b.max[k] = Math.max(0, Math.min(200, +(b.max[k] ?? 200))); }
+  b.updatedAt = now;
+  saveBuilds(builds);
+  return b;
+}
+
+// Build upgrade engine (v1: greedy per-slot swaps — every suggestion explainable in one
+// sentence). The champion set = your exotic anchor + the best non-exotic per other slot by
+// the build's weighted priorities (weights are separable per slot, so greedy = optimal for
+// the uncapped score). A candidate is an upgrade when it (tier 1) reduces the distance to a
+// MIN stat target, or (tier 2) raises the MAX-capped weighted sum. Cross-slot tradeoffs
+// (full DIM-Loadout-Optimizer search), mods, and Balanced Tuning's +1s are out of scope v1.
+const PRIO_W = [10, 6, 3, 2, 1, 0.5];
+const ARMOR_SLOTS = ['Helmet', 'Gauntlets', 'Chest', 'Leg', 'Class Item'];
+const STATN_B = { w: 'Weapons', h: 'Health', c: 'Class', g: 'Grenade', s: 'Super', m: 'Melee' };
+const KEY_BY_STATN = { weapons: 'w', health: 'h', class: 'c', grenade: 'g', super: 's', melee: 'm' };
+const weightOf = (build) => { const W = {}; STATKEYS.forEach((k) => { const ix = build.prio.indexOf(k); W[k] = PRIO_W[ix >= 0 ? ix : 5]; }); return W; };
+const pieceScoreB = (p, W) => STATKEYS.reduce((sum, k) => sum + W[k] * (p.s[k] || 0), 0);
+const setTotals = (pieces) => { const T = {}; STATKEYS.forEach((k) => { T[k] = pieces.reduce((sum, p) => sum + (p ? (p.s[k] || 0) : 0), 0); }); return T; };
+const cappedScore = (T, build, W) => STATKEYS.reduce((sum, k) => sum + W[k] * Math.min(T[k] || 0, build.max[k] ?? 200), 0);
+const minDeficit = (T, build) => STATKEYS.reduce((sum, k) => sum + Math.max(0, (build.min[k] || 0) - (T[k] || 0)), 0);
+
+function championSet(build, items) {
+  const W = weightOf(build);
+  const pool = items.filter((i) => i.cls === build.cls && ARMOR_SLOTS.includes(i.slot));
+  const slots = {}; let exoticMissing = false;
+  const exSlot = build.exotic?.slot || '';
+  for (const slot of ARMOR_SLOTS) {
+    let cands;
+    if (slot === exSlot) { cands = pool.filter((i) => i.slot === slot && i.hash === build.exotic.hash); if (!cands.length) { exoticMissing = true; cands = []; } }
+    else cands = pool.filter((i) => i.slot === slot && !i.x);
+    slots[slot] = cands.slice().sort((a, b) => pieceScoreB(b, W) - pieceScoreB(a, W))[0] || null;
+  }
+  const T = setTotals(Object.values(slots));
+  return { slots, T, W, score: cappedScore(T, build, W), deficit: minDeficit(T, build), exoticMissing };
+}
+
+function isUpgrade(build, champ, cand) {
+  const slot = cand.slot;
+  if (!ARMOR_SLOTS.includes(slot) || cand.cls !== build.cls) return null;
+  const cur = champ.slots[slot];
+  if (cur && cur.id === cand.id) return null;                    // already the champion piece
+  if (slot === (build.exotic?.slot || '')) { if (cand.hash !== build.exotic?.hash) return null; }
+  else if (cand.x) return null;                                  // never suggest a second exotic
+  const T2 = {}; STATKEYS.forEach((k) => { T2[k] = (champ.T[k] || 0) - (cur ? (cur.s[k] || 0) : 0) + (cand.s[k] || 0); });
+  const dNew = minDeficit(T2, build), dOld = champ.deficit;
+  if (dNew > dOld) return null;                                  // never move away from a min target
+  const s2 = cappedScore(T2, build, champ.W);
+  if (dNew < dOld) return { T2, why: `closes the stat-goal gap by ${dOld - dNew}`, s2 };
+  if (s2 > champ.score + 1) return { T2, why: 'raises the prioritized stats', s2 };
+  return null;
+}
+
+function tuneNoteFor(build, cand) {
+  if (cand.tuneKind === 'balanced') return 'Balanced Tuning: +1 to its three lowest stats — mild bonus, not counted in the comparison.';
+  if (cand.tuneKind === 'stat') {
+    const m = (cand.tune || '').match(/^\+(\w+) \/ -(\w+)$/);
+    if (m) {
+      const up = KEY_BY_STATN[m[1].toLowerCase()], dn = KEY_BY_STATN[m[2].toLowerCase()];
+      if (up && dn) {
+        const pi = build.prio.indexOf(up), di = build.prio.indexOf(dn);
+        return pi < di
+          ? `Tuning ${cand.tune} favors this build (${STATN_B[up]} is priority #${pi + 1}).`
+          : `Tuning ${cand.tune} works AGAINST this build (${STATN_B[dn]} matters more to it).`;
+      }
+    }
+    return `Tuning: ${cand.tune}.`;
+  }
+  if (!cand.tune && cand.t >= 3) return `Tuning socket still open — could be tuned toward ${STATN_B[build.prio[0]]}.`;
+  return '';
+}
+
+function buildAlertEntry(build, champ, cand, r) {
+  const cur = champ.slots[cand.slot];
+  const deltas = {}, lines = [];
+  for (const k of build.prio) {
+    const a = champ.T[k] || 0, b = r.T2[k] || 0;
+    if (a !== b) deltas[k] = [a, b];
+  }
+  for (const [k, [a, b]] of Object.entries(deltas)) {
+    const goal = (build.min[k] || 0) > 0 ? ` (goal ${build.min[k]}+)` : '';
+    lines.push(`${STATN_B[k]} ${a}→${b}${goal}`);
+  }
+  return {
+    at: Date.now(), buildId: build.id, buildName: build.name, id: cand.id, name: cand.n, slot: cand.slot,
+    swapOut: cur ? cur.n : '', swapOutId: cur ? cur.id : '', deltas,
+    text: `Swap '${cur ? cur.n : '(empty slot)'}' for '${cand.n}' in ${cand.slot}: ${lines.join(' · ') || 'stat mix improves'} — ${r.why}.`,
+    tuneNote: tuneNoteFor(build, cand), read: false, fresh: false,
+  };
+}
+
+// build alerts feed + seen-set (persistent — born from the 07-12 lost-log lesson)
+const BUILDS_SEEN_FILE = path.join(__dirname, 'builds-seen.json');
+const BUILDS_ALERTS_FILE = path.join(__dirname, 'builds-alerts.json');
+let BUILD_ALERTS_CACHE = null;   // in-memory mirror so /api/status never reads disk
+const loadBuildAlerts = () => { if (!BUILD_ALERTS_CACHE) { const a = loadJson(BUILDS_ALERTS_FILE); BUILD_ALERTS_CACHE = Array.isArray(a) ? a : []; } return BUILD_ALERTS_CACHE; };
+const saveBuildAlerts = () => saveJsonSafe(BUILDS_ALERTS_FILE, (BUILD_ALERTS_CACHE || []).slice(-200));
+
 // ---------- phase-2: live god-roll drop alerts ----------
 // A poller watches for fresh watched-weapon drops that clear the god-roll bar while
 // Destiny is running. On a hit it auto-locks the drop, beeps the PC, and writes
@@ -1578,6 +1820,7 @@ async function main() {
           dim: { off: DIM_OFF, at: DIM_TAGS_AT, err: DIM_LAST_ERR },
           auto: { at: AUTO_LOG.at, state: AUTO_LOG.state || '', enabled: !!loadAuto().enabled },
           activity: LAST_ACT,   // {safe,hash,mode,name,at} — the banner chip shows this
+          builds: { unread: loadBuildAlerts().filter((a) => !a.read).length },   // Builds-tab badge
         });
       }
       if (req.url.startsWith('/api/armor')) {
@@ -1590,6 +1833,58 @@ async function main() {
         if (fresh) await freshWeapons(0);            // explicit refresh always re-pulls (deduped)
         else await freshWeapons(SNAPSHOT_TTL);       // was cached FOREVER — the "not syncing" bug (2026-07-12)
         return json(wcache);
+      }
+      if (req.url.startsWith('/api/subclass-catalog')) {
+        const man = await loadManifest(e);
+        return json(buildSubclassCatalog(man));
+      }
+      if (req.url.startsWith('/api/builds/delete') && req.method === 'POST') {
+        const { id } = JSON.parse(await readBody(req) || '{}');
+        saveBuilds(loadBuilds().filter((b) => b.id !== id));
+        BUILD_ALERTS_CACHE = loadBuildAlerts().filter((a) => a.buildId !== id); saveBuildAlerts();
+        return json({ ok: true });
+      }
+      if (req.url.startsWith('/api/builds/import-dim') && req.method === 'POST') {
+        try { return json({ ok: true, ...(await importDimLoadouts(e)) }); }
+        catch (err) { return json({ error: err.message }); }
+      }
+      if (req.url.startsWith('/api/builds/suggestions')) {
+        // pure PREVIEW: runs the checker math on demand, writes no alerts and no seen-keys
+        const bid = new URL(req.url, 'http://x').searchParams.get('id');
+        if (!cache || Date.now() - aFetchedAt > SNAPSHOT_TTL) { cache = await fetchArmor(e); aFetchedAt = Date.now(); }
+        const armor = cache.items, outB = {};
+        for (const build of loadBuilds()) {
+          if ((bid && build.id !== bid) || !build.exotic?.hash) continue;
+          const champ = championSet(build, armor);
+          const suggestions = [];
+          for (const cand of armor) {
+            if (cand.cls !== build.cls || !ARMOR_SLOTS.includes(cand.slot)) continue;
+            const r = isUpgrade(build, champ, cand);
+            if (r) suggestions.push(buildAlertEntry(build, champ, cand, r));
+          }
+          outB[build.id] = {
+            champion: {
+              slots: Object.fromEntries(Object.entries(champ.slots).map(([s, p]) => [s, p ? { id: p.id, n: p.n, s: p.s, t: p.t, tune: p.tune, tuneKind: p.tuneKind, x: p.x } : null])),
+              totals: champ.T, deficit: champ.deficit, exoticMissing: champ.exoticMissing,
+            },
+            suggestions,
+          };
+        }
+        return json({ builds: outB });
+      }
+      if (req.url.startsWith('/api/builds/alerts/ack') && req.method === 'POST') {
+        const { buildId } = JSON.parse(await readBody(req) || '{}');
+        const alerts = loadBuildAlerts();
+        let n = 0; for (const a of alerts) if (!a.read && (!buildId || a.buildId === buildId)) { a.read = true; n++; }
+        if (n) saveBuildAlerts();
+        return json({ ok: true, acked: n });
+      }
+      if (req.url.startsWith('/api/builds/alerts')) {
+        return json(loadBuildAlerts().slice().reverse());   // newest first
+      }
+      if (req.url.startsWith('/api/builds')) {
+        if (req.method === 'POST') return json({ ok: true, build: upsertBuild(JSON.parse(await readBody(req) || '{}')) });
+        return json({ builds: loadBuilds() });
       }
       if (req.url.startsWith('/api/auto/run') && req.method === 'POST') {
         const { dryRun } = JSON.parse(await readBody(req) || '{}');
@@ -1766,6 +2061,7 @@ async function main() {
       if (req.url.startsWith('/vault')) return res.end(fs.readFileSync(path.join(__dirname, 'weapon-vault.html')));
       if (req.url.startsWith('/perks')) return res.end(fs.readFileSync(path.join(__dirname, 'perk-finder.html')));
       if (req.url.startsWith('/drops')) return res.end(fs.readFileSync(path.join(__dirname, 'weapon-drops.html')));
+      if (req.url.startsWith('/builds')) return res.end(fs.readFileSync(path.join(__dirname, 'builds.html')));
       if (req.url.startsWith('/auto')) return res.end(fs.readFileSync(path.join(__dirname, 'auto-manager.html')));
       if (req.url.startsWith('/settings')) return res.end(fs.readFileSync(path.join(__dirname, 'settings.html')));
       if (req.url.startsWith('/fashion')) return res.end(fs.readFileSync(path.join(__dirname, 'fashion.html')));
@@ -2009,6 +2305,61 @@ async function main() {
   // Keep the inventory snapshot warm even when Destiny is CLOSED (pollDrops only refreshes
   // while playing), so pages + the banner "Updated" chip always see data ≤ ~1 min old.
   setInterval(() => { freshWeapons(55000).catch((err) => console.warn('background refresh failed:', err.message)); }, 60000);
+
+  // ---------- Build Crafter: background upgrade watcher (60s) ----------
+  // Evaluates every armor piece ONCE per build+rev (builds-seen.json). First pass / a
+  // goal edit re-evaluates the whole vault into the FEED only; the TRMNL panel is only
+  // interrupted for a piece that appeared between two snapshots while the game runs.
+  // Armor is never acted on — notify only.
+  let buildsBusy = false, prevArmorIds = null;
+  async function checkBuilds() {
+    if (buildsBusy) return;
+    const builds = loadBuilds().filter((b) => b.watch && !b.draft && b.exotic?.hash);
+    if (!builds.length) { prevArmorIds = null; return; }
+    buildsBusy = true;
+    try {
+      if (!cache || Date.now() - aFetchedAt > 60000) { cache = await fetchArmor(e); aFetchedAt = Date.now(); }
+      const armor = cache.items;
+      const seen = loadJson(BUILDS_SEEN_FILE) || {};
+      const alerts = loadBuildAlerts();
+      const isFresh = (id) => !!prevArmorIds && !prevArmorIds.has(id);
+      let dirtySeen = false, dirtyAlerts = false;
+      for (const build of builds) {
+        const champ = championSet(build, armor);
+        for (const cand of armor) {
+          if (cand.cls !== build.cls || !ARMOR_SLOTS.includes(cand.slot)) continue;
+          const key = `${build.id}:${build.rev || 1}:${cand.id}`;
+          if (seen[key]) continue;
+          seen[key] = Date.now(); dirtySeen = true;   // evaluated once per piece+build+rev, hit or miss
+          const r = isUpgrade(build, champ, cand);
+          if (!r) continue;
+          const entry = buildAlertEntry(build, champ, cand, r);
+          entry.fresh = isFresh(cand.id);
+          alerts.push(entry); dirtyAlerts = true;
+          console.log(`[build] ${entry.fresh ? 'FRESH ' : ''}${build.name}: ${entry.text}`);
+          if (entry.fresh && gameUp) {   // brand-new drop while playing → panel alert + chime
+            try {
+              fs.writeFileSync(DROP_ALERT_FILE, JSON.stringify({
+                until: Date.now() + 60000, title: 'ARMOR UPGRADE',
+                weapon: cand.n, ty: `${build.name} · ${cand.slot}`, power: cand.pwr, pct: 0,
+                perks: [entry.text.slice(0, 140)], mw: '',
+                stats: build.prio.slice(0, 3).map((k) => ({ n: STATN_B[k], v: `${champ.T[k] || 0}→${r.T2[k] || 0}` })),
+              }));
+              beepUpgrade();
+            } catch {}
+          }
+        }
+      }
+      // prune seen-keys of deleted builds / old revs (checked against ALL builds, not just watched)
+      const live = new Set(loadBuilds().map((b) => `${b.id}:${b.rev || 1}`));
+      for (const k of Object.keys(seen)) { if (!live.has(k.split(':').slice(0, 2).join(':'))) { delete seen[k]; dirtySeen = true; } }
+      if (dirtySeen) saveJsonSafe(BUILDS_SEEN_FILE, seen);
+      if (dirtyAlerts) { BUILD_ALERTS_CACHE = alerts.slice(-200); saveBuildAlerts(); }
+      prevArmorIds = new Set(armor.map((i) => i.id));
+    } catch (err) { console.warn('build check error:', err.message); }
+    finally { buildsBusy = false; }
+  }
+  setInterval(() => { checkBuilds().catch(() => {}); }, 60000);
 
   // Auto-manage cadence (Diego 2026-07-12, "save API calls"): while Destiny is RUNNING,
   // pace by where you are — IN an activity the tick is just the cheap 1-call activity

@@ -94,6 +94,7 @@ Core priorities, in his words:
 | `auto-manager.html` | **Auto-Manager** control page (served at `/auto`): On/Off toggle (live account writes), rules/thresholds editor (junk-below unwatched/watched %, keep %, favorite %, junk-stage count, per-run safety caps), a **Preview next run (no writes)** button and a **Run now (live)** button, plus a decision-log table of the last run (from→to tag, score, watched/favorites basis, ▲ new-best flag, staging moves). Reads/writes `GET/POST /api/auto`, `POST /api/auto/run`. |
 | `settings.html` | **App-wide Settings page** (served at `/settings` on 8787, in the banner nav): Auto-Manager on/off + every threshold (fav/keep/watched-junk/unwatched-junk/comboFloor) + junk-staging character picker (`stageCid`, from `/api/account`) + safety caps + check cadence, each with plain-language help; PVE/PVP combo summary (`/api/combos`); favorites-by-grade summary (`/api/favorites`); god-roll alert rules (read-only); community-data refresh buttons (`/api/perks?fresh=1`, `/api/weapons?fresh=1`). All writes go through `GET/POST /api/auto` — same config as `/auto`, which keeps its own compact editor and links here. |
 | `artifacts.html` | **Artifact Mods** reference (served at `/artifacts`): all 7 Monument of Triumph artifacts × 3 columns × 7 mods, with a filter by subclass verb (Solar/Arc/Void/Stasis/Strand/Prismatic keywords) + keywords (Champions, grenade, Super, weapon types) + free text search. **Data is STATIC** (hand-transcribed from the neonlightsmedia Monument of Triumph guide) — if Bungie changes artifacts/mods, edit the `ARTIFACTS` array in this file. No API. |
+| `builds.html` | **Build Crafter** (served at `/builds`, in the banner nav): DIM-like loadout maker with stat goals + upgrade watching. Build list (super/exotic icons, prio summary, champion totals vs mins, upgrade chips), full editor (class tabs → element chips → ability/aspect/fragment icon grids with official Bungie art + perktip hover → owned-exotic anchor picker → drag-to-order stat priorities with min/max 0-200), per-build suggestions panel (champion 5-piece strip + explained swap suggestions + tuning notes), DIM-loadout import button. Data: `/api/builds*`, `/api/subclass-catalog`, `/api/armor`. |
 | `CLAUDE.md` | Working rules for agents: never drop features, test before push, and **mandatory upkeep of this file + `docs/NEXT_PHASE.md`**. |
 | `docs/NEXT_PHASE.md` | The pickup point: specs + open questions for upcoming features. |
 
@@ -518,6 +519,53 @@ Core priorities, in his words:
     Bungie token to a third party; the server process is not gated). Verified: 992 tags read,
     reversible write. The "Copy junk DIM query" button remains as a manual export too.
 
+  - **BUILD CRAFTER (`/builds`, shipped 2026-07-12 evening — Diego's plan-mode session):** a
+    DIM-Loadout-Optimizer-like system, "similar but better". Everything verified on an isolated
+    8799 instance + real browser (0 console errors); server-side lives in one
+    `// Build Crafter` section of vault-verdict.js.
+    - **Subclass catalog (`GET /api/subclass-catalog`, `buildSubclassCatalog`):** supers /
+      grenades / melees / class abilities / movement / ASPECTS / FRAGMENTS per class+element,
+      with official Bungie icons+names+descriptions — ALL already in the slim manifest (every
+      plug item is kept). **Manifest quirks (hard-won):** stasis aspects are pc
+      `<cls>.stasis.totems`, stasis fragments `shared.stasis.trinkets`; per-class prismatic
+      grenades `<cls>.prism.grenades` (exclude `prism_grenade` transcendence); an aspect's
+      FRAGMENT-SLOT COUNT is its investmentStat hash **2223994109** (in `wi`) — so no
+      itemType-16 subclass fetch is needed. Lists deduped by name.
+    - **builds.json** (gitignored, saveJsonSafe): `{v:1, builds:[{id,rev,name,cls,classType,
+      elem,plugs{super,grenade,melee,classAbility,movement,aspects[≤2],fragments[≤cap]},
+      exotic{hash,slot},prio[6 ordered stat keys],min{},max{} (0-200),watch,draft,src,dimId,
+      notes}]}`. `rev` bumps on any scoring-relevant edit (cls/exotic/prio/min/max via
+      `upsertBuild`) which orphans that build's seen-keys → full re-check, feed-only.
+    - **Upgrade engine (v1, greedy per-slot — deliberately explainable):** `championSet` =
+      exotic anchor fixed in its slot + best non-exotic per other slot by the build's weighted
+      priorities (PRIO_W [10,6,3,2,1,.5]; separable → greedy is optimal for the uncapped
+      score). `isUpgrade`: tier 1 = reduces min-target deficit (wins outright), tier 2 =
+      raises the max-capped weighted sum by >1; never a second exotic; never moves away from a
+      min. Known tier-1 tradeoff: a min-gap closer can drop other (min-less) stats — the text
+      says so honestly; protect a stat by giving it a min. Verified vs a hand-check.
+    - **Background watcher (60s in main(), separate from autoTick):** evaluates each piece
+      ONCE per build+rev (`builds-seen.json`), appends explained entries to
+      `builds-alerts.json` (cap 200, in-memory mirror for /api/status), and for a FRESH drop
+      while gameUp writes `drop-alert.json {title:'ARMOR UPGRADE',...}` (+`beepUpgrade`) —
+      render.js title override `a.title || 'GOD ROLL DROP'`, server.js untouched. Armor is
+      NEVER acted on — notify only. `/api/status` gains `builds:{unread}`; banner.js paints
+      the Builds nav tab as `Builds (N)` in gold.
+    - **Tuning notes (`tuneNoteFor`):** fetchArmor now emits per piece `tune` (plug name) +
+      `tuneKind` — stat tunings are named `+X / -Y` (carry inv), **Balanced Tuning (3122197216)
+      carries NO inv** (conditionally-active stats are dropped by the slimmer) so it's detected
+      by NAME and noted as "+1 to three lowest, not counted"; an empty tuning socket on T3+
+      gear notes "could be tuned toward <prio #1>". Verified live: 220 tuned pieces (120 stat
+      / 100 balanced).
+    - **Endpoints:** `GET/POST /api/builds` (POST=upsert), `POST /api/builds/delete`,
+      `GET /api/builds/suggestions[?id=]` (pure preview — no seen/alert writes),
+      `POST /api/builds/alerts/ack {buildId?}`, `GET /api/builds/alerts`,
+      `POST /api/builds/import-dim`.
+    - **DIM import (`dimReadLoadouts` — components=loadouts, separate from dimReadTags;
+      `importDimLoadouts`):** maps DIM loadouts → **drafts** (watch OFF until Diego finishes
+      + saves): subclass plugs classified BY pc (totems/trinkets fold to aspects/fragments),
+      exotic = first equipped tt6 armor, `parameters.statConstraints` order → prio with
+      minStat/maxStat (legacy minTier×10 fallback), dedupe by dimId. **Verified live: 90 of
+      Diego's DIM loadouts imported correctly** (real subclass configs, exotics, stat mins).
   - **Data freshness overhaul (2026-07-12 — the "DIM not syncing / taking too long" fix):**
     Diego reported DIM sync broken; the DIM cloud connection was actually healthy (direct probe:
     200 OK, 965 tags, ~290ms; token valid to 2026-08-02). **The real bug: `GET /api/weapons`

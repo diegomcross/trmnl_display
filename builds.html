@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Build Crafter — Destiny Vault</title>
+<style>
+:root{
+  --bg:#0c0e12; --panel:#151821; --panel2:#1b1f2b; --line:#2a2f3d;
+  --ink:#e9ebf2; --mut:#8b93a7; --dim:#5c6375;
+  --gold:#cfae42; --keep:#5fd0dd; --rev:#e8b64c; --junk:#ff6a52;
+  --clip:polygon(10px 0,100% 0,100% calc(100% - 10px),calc(100% - 10px) 100%,0 100%,0 10px);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--ink);font:15px/1.45 "Segoe UI",Roboto,system-ui,sans-serif;padding:12px;padding-bottom:60px}
+h1{font-size:22px;font-weight:600} h1 span{color:var(--gold)}
+.sub{color:var(--mut);font-size:12px;margin:2px 0 12px}
+.bar{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;align-items:center}
+.btn{background:var(--panel2);border:1px solid var(--gold);color:var(--gold);padding:8px 13px;font-size:12px;cursor:pointer;clip-path:var(--clip);font-family:inherit}
+.btn:active{background:var(--gold);color:#000}
+.btn.sm{padding:4px 9px;font-size:10.5px}
+.btn.red{border-color:var(--junk);color:var(--junk)}
+.btn.mut{border-color:var(--line);color:var(--mut)}
+.card{background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--gold);clip-path:var(--clip);margin-bottom:10px;padding:12px}
+.card.draft{border-left-color:var(--rev)}
+.bhead{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.bhead .nm{font-weight:700;font-size:17px;color:var(--gold)}
+.bhead .mini{color:var(--mut);font-size:11.5px}
+.chiprow{display:flex;gap:5px;flex-wrap:wrap;margin-top:6px}
+.chip{background:var(--panel2);border:1px solid var(--line);color:var(--mut);padding:3px 9px;font-size:10.5px;text-transform:uppercase;letter-spacing:.05em}
+.chip.on{border-color:var(--gold);color:var(--gold)}
+.chip.warn{border-color:var(--rev);color:var(--rev)}
+.chip.alert{border-color:var(--junk);color:var(--junk)}
+input[type=text],input[type=number]{background:var(--panel2);border:1px solid var(--line);color:var(--ink);padding:7px 10px;font-size:13px}
+input[type=number]{width:74px}
+.tab{background:var(--panel2);border:1px solid var(--line);color:var(--mut);padding:6px 12px;cursor:pointer;font-size:11.5px;text-transform:uppercase;letter-spacing:.05em;font-family:inherit}
+.tab.on{color:var(--ink);border-color:var(--gold);background:rgba(207,174,66,.15)}
+.grp{margin:12px 0}
+.grp h3{font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px}
+.grp h3 b{color:var(--mut)}
+.abgrid{display:flex;gap:6px;flex-wrap:wrap}
+.ab{position:relative;width:52px;height:52px;padding:0;border:1px solid var(--line);background:#0a0c10;cursor:pointer;flex:0 0 auto}
+.ab img{width:100%;height:100%;object-fit:cover;display:block;opacity:.75}
+.ab.on{border-color:var(--gold);box-shadow:0 0 0 1px var(--gold), 0 0 10px rgba(207,174,66,.45)}
+.ab.on img{opacity:1}
+.ab:hover img{opacity:1}
+.abname{font-size:10px;color:var(--mut);text-align:center;margin-top:2px;max-width:56px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.abwrap{display:flex;flex-direction:column;align-items:center;width:56px}
+.exrow{display:flex;gap:6px;flex-wrap:wrap}
+.exo{display:flex;gap:8px;align-items:center;background:var(--panel2);border:1px solid var(--line);padding:5px 10px 5px 5px;cursor:pointer}
+.exo img{width:36px;height:36px}
+.exo.on{border-color:var(--gold);box-shadow:0 0 8px rgba(207,174,66,.4)}
+.exo .xn{font-size:12px} .exo .xs{font-size:10px;color:var(--dim)}
+.statrows{max-width:560px}
+.statrow{display:flex;gap:10px;align-items:center;padding:7px 10px;border:1px solid var(--line);background:var(--panel2);margin-bottom:4px;cursor:grab}
+.statrow.dragging{opacity:.4}
+.statrow .grip{color:var(--dim);cursor:grab;font-size:15px}
+.statrow .sname{flex:1;font-weight:600}
+.statrow .rank{color:var(--gold);font-weight:700;width:26px}
+.statrow label{font-size:10px;color:var(--dim);display:flex;flex-direction:column;gap:2px}
+.statrow .cur{font-size:11px;color:var(--keep);width:78px;text-align:right}
+.champ{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0}
+.cpiece{background:var(--panel2);border:1px solid var(--line);padding:8px;width:150px}
+.cpiece .cs{font-size:10.5px;color:var(--mut);line-height:1.5}
+.cpiece .cn{font-size:12px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cpiece .ct{font-size:10px;color:var(--rev)}
+.cpiece.miss{border-color:var(--junk);color:var(--junk);font-size:11.5px}
+.totrow{display:flex;gap:12px;flex-wrap:wrap;font-size:12.5px;margin:6px 0}
+.totrow b.met{color:#6ede9b} .totrow b.unmet{color:var(--junk)}
+.sugg{border-top:1px dashed var(--line);padding:8px 0;font-size:12.5px}
+.sugg .tx{color:var(--ink)} .sugg .tn{color:var(--rev);font-size:11.5px} .sugg .fresh{color:var(--gold);font-weight:700}
+.note{font-size:11px;color:var(--dim);margin-top:6px}
+.count{color:var(--mut);font-size:12px}
+:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+@media(min-width:760px){body{max-width:1100px;margin:0 auto}}
+</style>
+<link rel="stylesheet" href="/theme.css">
+</head>
+<body>
+<div id="gbanner"></div>
+<h1 class="disp">Build <span>Crafter</span></h1>
+<p class="sub">Subclass builds with stat goals — the app watches your vault and suggests upgrades. It never moves or tags armor by itself.</p>
+<div class="bar" id="topBar">
+  <button class="btn" id="newBtn">+ New build</button>
+  <button class="btn mut" id="importBtn">Import DIM loadouts</button>
+  <span class="count" id="status"></span>
+</div>
+<div id="main"></div>
+
+<script>
+const $=id=>document.getElementById(id);
+const esc=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
+const BN='https://www.bungie.net';
+const STATKEYS=['w','h','c','g','s','m'];
+const STATN={w:'Weapons',h:'Health',c:'Class',g:'Grenade',s:'Super',m:'Melee'};
+const ELEMS=[['arc','Arc'],['solar','Solar'],['void','Void'],['stasis','Stasis'],['strand','Strand'],['prism','Prismatic']];
+const ELCOL={arc:'#7aecf3',solar:'#f1631d',void:'#a777c5',stasis:'#4d88ff',strand:'#35e366',prism:'#d9b3ff'};
+let BUILDS=[], CAT=null, ARMOR=null, SUG={}, edit=null, openSug=new Set();
+
+async function load(){
+  $('status').textContent='Loading…';
+  try{
+    const [b,c,a]=await Promise.all([
+      fetch('/api/builds').then(r=>r.json()),
+      CAT?Promise.resolve(null):fetch('/api/subclass-catalog').then(r=>r.json()),
+      fetch('/api/armor').then(r=>r.json()),
+    ]);
+    BUILDS=b.builds||[]; if(c)CAT=c; ARMOR=a;
+    // ability descriptions feed the shared perk hover popup
+    if(window.PerkTip&&CAT){
+      const pd={};
+      for(const cls of Object.values(CAT))for(const el of Object.values(cls))for(const list of Object.values(el))for(const x of list)if(x.dsc)pd[x.n]=x.dsc;
+      PerkTip.init({perkDescs:pd,perkInsights:{}});
+    }
+    $('status').textContent=`${BUILDS.length} build${BUILDS.length===1?'':'s'}`;
+    render();
+    refreshSug();
+  }catch(err){ $('status').textContent='Load failed: '+err.message; }
+}
+async function refreshSug(){
+  try{ const s=await fetch('/api/builds/suggestions').then(r=>r.json()); SUG=s.builds||{}; if(!edit) render(); }catch(e){}
+}
+window.GRELOAD=()=>load();   // banner auto-refresh hook
+
+function render(){ $('main').innerHTML=''; if(edit) renderEditor(); else renderList(); }
+
+// ---------- list ----------
+function renderList(){
+  if(!BUILDS.length){ $('main').innerHTML='<div class="card"><p class="count">No builds yet — press <b>+ New build</b>, or import your DIM loadouts.</p></div>'; return; }
+  $('main').innerHTML=BUILDS.map(b=>{
+    const cat=CAT&&CAT[b.cls]&&CAT[b.cls][b.elem];
+    const sup=cat&&cat.supers.find(s=>s.h===b.plugs.super);
+    const exo=ARMOR&&ARMOR.items.find(i=>i.hash===b.exotic?.hash);
+    const sug=SUG[b.id];
+    const nSug=sug?sug.suggestions.length:0;
+    const T=sug?sug.champion.totals:null;
+    const mins=STATKEYS.filter(k=>(b.min[k]||0)>0);
+    return `<div class="card ${b.draft?'draft':''}">
+      <div class="bhead">
+        ${sup?`<img src="${BN}${sup.icon}" width="44" height="44" alt="" style="border:1px solid var(--line)">`:''}
+        <div>
+          <div class="nm">${esc(b.name||'(unnamed build)')}</div>
+          <div class="mini">${b.cls} · <span style="color:${ELCOL[b.elem]||'#fff'}">${(ELEMS.find(e=>e[0]===b.elem)||['',b.elem])[1]}</span>
+            ${exo?` · ${esc(exo.n)}`:b.exotic?.hash?' · exotic not owned':' · <span style="color:var(--rev)">pick an exotic</span>'}
+            · prio ${b.prio.map(k=>STATN[k].slice(0,3).toUpperCase()).join(' › ')}</div>
+        </div>
+        <span style="flex:1"></span>
+        <button class="btn sm" data-edit="${b.id}">Edit</button>
+        <button class="btn sm mut" data-sug="${b.id}">${openSug.has(b.id)?'Hide':'Suggestions'}${nSug?` (${nSug})`:''}</button>
+      </div>
+      <div class="chiprow">
+        <span class="chip ${b.watch?'on':''}">${b.watch?'watching drops':'watch off'}</span>
+        ${b.draft?'<span class="chip warn">DRAFT — finish & save</span>':''}
+        ${b.src==='dim'?'<span class="chip">from DIM</span>':''}
+        ${nSug?`<span class="chip alert">${nSug} upgrade${nSug>1?'s':''} available</span>`:''}
+        ${sug&&sug.champion.exoticMissing?'<span class="chip warn">exotic not in vault</span>':''}
+      </div>
+      ${T?`<div class="totrow">${b.prio.map(k=>{const v=T[k]||0,min=b.min[k]||0;return `<span>${STATN[k]} <b class="${min?(v>=min?'met':'unmet'):''}">${v}</b>${min?`<span class="count">/${min}</span>`:''}</span>`;}).join('')}</div>`:''}
+      ${openSug.has(b.id)?renderSug(b):''}
+    </div>`;
+  }).join('');
+}
+
+function renderSug(b){
+  const sug=SUG[b.id];
+  if(!sug) return '<p class="note">No suggestion data yet — is the exotic picked?</p>';
+  const ch=sug.champion;
+  const strip=['Helmet','Gauntlets','Chest','Leg','Class Item'].map(slot=>{
+    const p=ch.slots[slot];
+    if(!p) return `<div class="cpiece miss">${slot}: none ${slot===b.exotic?.slot?'(exotic missing)':''}</div>`;
+    return `<div class="cpiece"><div class="cn" title="${esc(p.n)}">${p.x?'★ ':''}${esc(p.n)}</div>
+      <div class="cs">${slot} · T${p.t}<br>${b.prio.slice(0,3).map(k=>`${STATN[k].slice(0,3)} ${p.s[k]||0}`).join(' · ')}</div>
+      ${p.tune?`<div class="ct">${esc(p.tune)}</div>`:''}</div>`;
+  }).join('');
+  const suggs=sug.suggestions.length?sug.suggestions.map(x=>`<div class="sugg">
+      <div class="tx">${x.fresh?'<span class="fresh">NEW DROP · </span>':''}${esc(x.text)}</div>
+      ${x.tuneNote?`<div class="tn">${esc(x.tuneNote)}</div>`:''}
+    </div>`).join(''):'<p class="note">No upgrades in the vault right now — your current best set stands.</p>';
+  return `<div style="border-top:1px solid var(--line);margin-top:10px;padding-top:8px">
+    <h3 style="font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:.08em">Current best set</h3>
+    <div class="champ">${strip}</div>
+    <h3 style="font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:.08em">Upgrade suggestions</h3>
+    ${suggs}
+    <button class="btn sm mut" data-ack="${b.id}">Mark reviewed</button>
+  </div>`;
+}
+
+// ---------- editor ----------
+function blankBuild(){
+  return { name:'', cls:'Warlock', classType:2, elem:'solar',
+    plugs:{super:0,grenade:0,melee:0,classAbility:0,movement:0,aspects:[],fragments:[]},
+    exotic:{hash:0,slot:''}, prio:STATKEYS.slice(),
+    min:Object.fromEntries(STATKEYS.map(k=>[k,0])), max:Object.fromEntries(STATKEYS.map(k=>[k,200])),
+    watch:true, draft:false, src:'manual' };
+}
+function fragCap(){
+  const cat=CAT[edit.cls]&&CAT[edit.cls][edit.elem]; if(!cat) return 0;
+  return edit.plugs.aspects.reduce((n,h)=>n+((cat.aspects.find(a=>a.h===h)||{}).frag||0),0);
+}
+function abGrid(list,kind,sel,max){
+  return `<div class="abgrid">${list.map(x=>{
+    const on=Array.isArray(sel)?sel.includes(x.h):sel===x.h;
+    return `<div class="abwrap"><button class="ab ${on?'on':''}" data-ab="${kind}" data-h="${x.h}" data-pn="${esc(x.n)}" title="${esc(x.n)}">
+      <img src="${BN}${x.icon}" alt="" loading="lazy"></button><div class="abname">${esc(x.n)}</div></div>`;
+  }).join('')}</div>`;
+}
+function renderEditor(){
+  const b=edit;
+  const cat=(CAT[b.cls]&&CAT[b.cls][b.elem])||{supers:[],grenades:[],melee:[],classAbilities:[],movement:[],aspects:[],fragments:[]};
+  const cap=fragCap();
+  if(b.plugs.fragments.length>cap) b.plugs.fragments=b.plugs.fragments.slice(0,cap);
+  // owned exotics for this class, best copy per hash
+  const exos={};
+  for(const i of (ARMOR?ARMOR.items:[])) if(i.x&&i.cls===b.cls){ if(!exos[i.hash]||i.tot>exos[i.hash].tot) exos[i.hash]=i; }
+  const sug=SUG[b.id];
+  $('main').innerHTML=`<div class="card">
+    <div class="bar"><button class="btn mut sm" id="backBtn">← All builds</button>
+      <input type="text" id="bName" value="${esc(b.name)}" placeholder="Build name (e.g. Solar Melee Warlock)" style="flex:1;min-width:220px">
+      <label class="chip" style="cursor:pointer;display:flex;align-items:center;gap:6px">watch drops
+        <input type="checkbox" id="bWatch" ${b.watch?'checked':''} style="accent-color:var(--gold)"></label>
+    </div>
+    <div class="grp"><h3>Class</h3><div class="bar">${['Titan','Hunter','Warlock'].map(c=>`<button class="tab ${b.cls===c?'on':''}" data-cls="${c}">${c}</button>`).join('')}</div></div>
+    <div class="grp"><h3>Subclass</h3><div class="bar">${ELEMS.map(([v,t])=>`<button class="tab ${b.elem===v?'on':''}" data-elem="${v}" style="${b.elem===v?`border-color:${ELCOL[v]};color:${ELCOL[v]};background:transparent`:''}">${t}</button>`).join('')}</div></div>
+    <div class="grp"><h3>Super</h3>${abGrid(cat.supers,'super',b.plugs.super)}</div>
+    <div class="grp"><h3>Abilities — <b>class · movement · melee · grenade</b></h3>
+      ${abGrid(cat.classAbilities,'classAbility',b.plugs.classAbility)}<div style="height:6px"></div>
+      ${abGrid(cat.movement,'movement',b.plugs.movement)}<div style="height:6px"></div>
+      ${abGrid(cat.melee,'melee',b.plugs.melee)}<div style="height:6px"></div>
+      ${abGrid(cat.grenades,'grenade',b.plugs.grenade)}</div>
+    <div class="grp"><h3>Aspects — pick 2 <b>(fragment slots: ${cap})</b></h3>${abGrid(cat.aspects,'aspects',b.plugs.aspects,2)}</div>
+    <div class="grp"><h3>Fragments — up to ${cap}</h3>${abGrid(cat.fragments,'fragments',b.plugs.fragments,cap)}</div>
+    <div class="grp"><h3>Exotic armor anchor — the build revolves around it</h3>
+      <div class="exrow">${Object.values(exos).sort((a,z)=>a.n.localeCompare(z.n)).map(i=>`
+        <div class="exo ${b.exotic?.hash===i.hash?'on':''}" data-exo="${i.hash}" data-slot="${esc(i.slot)}">
+          <div><div class="xn">${esc(i.n)}</div><div class="xs">${i.slot} · best T${i.t} · ${i.tot} base</div></div>
+        </div>`).join('')||'<p class="note">No exotics of this class in the vault.</p>'}</div></div>
+    <div class="grp"><h3>Stat goals — drag to order (top = most important) · min / max 0–200</h3>
+      <div class="statrows" id="statRows">${b.prio.map((k,ix)=>{
+        const cur=sug?`now ${sug.champion.totals[k]||0}`:'';
+        return `<div class="statrow" draggable="true" data-k="${k}">
+          <span class="grip">⠿</span><span class="rank">#${ix+1}</span><span class="sname">${STATN[k]}</span>
+          <label>min<input type="number" min="0" max="200" data-min="${k}" value="${b.min[k]||0}"></label>
+          <label>max<input type="number" min="0" max="200" data-max="${k}" value="${b.max[k]??200}"></label>
+          <span class="cur">${cur}</span>
+        </div>`;}).join('')}</div>
+      <p class="note">The app hunts pieces that push the top stats toward their <b>min</b> targets, never past <b>max</b> (points above max are wasted). Editing goals re-checks the whole vault — suggestions go to the feed only.</p></div>
+    <div class="bar">
+      <button class="btn" id="saveBtn">Save build</button>
+      ${b.id?'<button class="btn red sm" id="delBtn">Delete build</button>':''}
+    </div>
+  </div>`;
+  wireEditor();
+}
+function wireEditor(){
+  const b=edit;
+  $('backBtn').onclick=()=>{ edit=null; render(); };
+  $('bName').onchange=e=>{ b.name=e.target.value; };
+  $('bWatch').onchange=e=>{ b.watch=e.target.checked; };
+  document.querySelectorAll('[data-cls]').forEach(x=>x.onclick=()=>{ b.cls=x.dataset.cls; b.classType={Titan:0,Hunter:1,Warlock:2}[b.cls]; b.plugs=blankBuild().plugs; b.exotic={hash:0,slot:''}; b.name=$('bName').value; renderEditor(); });
+  document.querySelectorAll('[data-elem]').forEach(x=>x.onclick=()=>{ b.elem=x.dataset.elem; b.plugs=blankBuild().plugs; b.name=$('bName').value; renderEditor(); });
+  document.querySelectorAll('[data-ab]').forEach(x=>x.onclick=()=>{
+    const kind=x.dataset.ab,h=+x.dataset.h;
+    b.name=$('bName').value;
+    if(kind==='aspects'){ const a=b.plugs.aspects; b.plugs.aspects=a.includes(h)?a.filter(v=>v!==h):(a.length<2?[...a,h]:[a[1],h]); }
+    else if(kind==='fragments'){ const f=b.plugs.fragments,cap=fragCap(); b.plugs.fragments=f.includes(h)?f.filter(v=>v!==h):(f.length<cap?[...f,h]:f); }
+    else b.plugs[kind]=b.plugs[kind]===h?0:h;
+    renderEditor();
+  });
+  document.querySelectorAll('[data-exo]').forEach(x=>x.onclick=()=>{ b.name=$('bName').value; b.exotic={hash:+x.dataset.exo,slot:x.dataset.slot}; renderEditor(); });
+  document.querySelectorAll('[data-min]').forEach(x=>x.onchange=()=>{ b.min[x.dataset.min]=Math.max(0,Math.min(200,+x.value||0)); });
+  document.querySelectorAll('[data-max]').forEach(x=>x.onchange=()=>{ b.max[x.dataset.max]=Math.max(0,Math.min(200,+x.value||0)); });
+  // drag-to-order stat priorities
+  let dragK=null;
+  document.querySelectorAll('.statrow').forEach(row=>{
+    row.addEventListener('dragstart',()=>{ dragK=row.dataset.k; row.classList.add('dragging'); });
+    row.addEventListener('dragend',()=>{ row.classList.remove('dragging'); });
+    row.addEventListener('dragover',e=>e.preventDefault());
+    row.addEventListener('drop',e=>{
+      e.preventDefault();
+      const tgt=row.dataset.k; if(!dragK||dragK===tgt) return;
+      const p=b.prio.filter(k=>k!==dragK);
+      p.splice(p.indexOf(tgt)+(b.prio.indexOf(dragK)<b.prio.indexOf(tgt)?1:0),0,dragK);
+      b.prio=p; b.name=$('bName').value; renderEditor();
+    });
+  });
+  $('saveBtn').onclick=async()=>{
+    b.name=$('bName').value||b.name||'Unnamed build';
+    b.draft=false;
+    const r=await fetch('/api/builds',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)}).then(r=>r.json());
+    if(r.ok){ edit=null; await load(); } else alert('Save failed: '+(r.error||'?'));
+  };
+  const del=$('delBtn'); if(del) del.onclick=async()=>{
+    if(!confirm(`Delete build "${b.name}"? This cannot be undone.`))return;
+    await fetch('/api/builds/delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:b.id})});
+    edit=null; load();
+  };
+}
+
+// ---------- events ----------
+document.body.addEventListener('click',async e=>{
+  const t=e.target.closest('[data-edit],[data-sug],[data-ack]');
+  if(!t)return;
+  if(t.dataset.edit){ edit=JSON.parse(JSON.stringify(BUILDS.find(b=>b.id===t.dataset.edit))); render(); }
+  else if(t.dataset.sug){ const id=t.dataset.sug; openSug.has(id)?openSug.delete(id):openSug.add(id); render(); }
+  else if(t.dataset.ack){ await fetch('/api/builds/alerts/ack',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({buildId:t.dataset.ack})}); render(); }
+});
+$('newBtn').onclick=()=>{ edit=blankBuild(); render(); };
+$('importBtn').onclick=async()=>{
+  $('importBtn').disabled=true; $('importBtn').textContent='Importing…';
+  try{
+    const r=await fetch('/api/builds/import-dim',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'}).then(r=>r.json());
+    if(r.error) alert('Import failed: '+r.error);
+    else alert(`Imported ${r.imported.length} DIM loadout${r.imported.length===1?'':'s'} as drafts${r.skipped.length?` · skipped ${r.skipped.length} (${r.skipped.map(s=>s.reason)[0]}…)`:''}. Open each draft, set stat goals, and save.`);
+    await load();
+  }catch(err){ alert('Import failed: '+err.message); }
+  $('importBtn').disabled=false; $('importBtn').textContent='Import DIM loadouts';
+};
+load();
+</script>
+<script src="/perktip.js"></script>
+<script src="/banner.js"></script>
+</body>
+</html>

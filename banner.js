@@ -7,7 +7,7 @@
   if (!el) return;
   const BN = 'https://www.bungie.net';
   const PAGES = [
-    ['/', 'Armor Vault'], ['/vault', 'Weapon Vault'], ['/weapons', 'Weapon Watch'],
+    ['/', 'Armor Vault'], ['/vault', 'Weapon Vault'], ['/weapons', 'Weapon Watch'], ['/builds', 'Builds'],
     ['/fashion', 'Fashion'], ['/perks', 'Perk Finder'], ['/drops', 'New Drops'], ['/auto', 'Auto-Manager'], ['/artifacts', 'Artifacts'], ['/settings', 'Settings'],
   ];
   const path = location.pathname.replace(/\/+$/, '') || '/';
@@ -61,6 +61,13 @@
     : Math.round(ms / 3600000) + 'h ago';
 
   function paintChip() {
+    // Builds-tab unread badge (Build Crafter upgrade suggestions waiting to be reviewed)
+    const bl = el.querySelector('.gnav-a[href="/builds"]');
+    if (bl) {
+      const n = (status && status.builds && status.builds.unread) || 0;
+      bl.textContent = n > 0 ? `Builds (${n})` : 'Builds';
+      if (n > 0 && !bl.classList.contains('on')) bl.style.color = 'var(--gold)'; else bl.style.color = '';
+    }
     const c = el.querySelector('#gbupd'); if (!c) return;
     if (refreshing) { c.className = 'gb-upd warn'; c.textContent = 'Refreshing…'; return; }
     if (!status) { c.className = 'gb-upd'; c.textContent = '…'; c.title = 'Waiting for the server'; return; }

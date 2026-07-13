@@ -57,6 +57,12 @@ auto-history.json
 auto-history.json.bak
 tag-history.json
 tag-history.json.bak
+builds.json
+builds.json.bak
+builds-seen.json
+builds-seen.json.bak
+builds-alerts.json
+builds-alerts.json.bak
 audit-backup-*/
 vault.log.old
 
