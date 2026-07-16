@@ -997,6 +997,16 @@ async function fetchWeapons(e) {
   // w.rollScore (-1 = no signal), w.rollBasis 'watched'|'favorites', w.comboFloored.
   {
     const watch = loadWatch(), fav = loadFav(), floor = loadAuto().thr?.comboFloor ?? 80;
+    // Tracked-perk union (Diego 2026-07-16: "app is not considering the tracked perks to
+    // score unwatched weapons — afraid it will junk actual good rolls"). Every perk tracked
+    // on ANY watched weapon counts as at least a 2★ favorite when scoring UNWATCHED weapons
+    // (22 tracked perks had no ★ at all, so rolls carrying them read 0% → junk). 2★, not 3★,
+    // on purpose: two tracked perks = 75% — above the junk bar (60) but below keep (80) and
+    // favorite (90), so tracking alone can never mass-keep/favorite; explicit 3★ stars win.
+    const favEff = { ...fav };
+    for (const cfg of Object.values(watch))
+      for (const n of Object.keys(cfg.perks || {}))
+        if (!(favEff[n] >= 2)) favEff[n] = 2;
     const byH = {};
     for (const w of weapons) (byH[w.hash] = byH[w.hash] || []).push(w);
     for (const [h, copies] of Object.entries(byH)) {
@@ -1011,7 +1021,7 @@ async function fetchWeapons(e) {
         for (const w of copies) { w.rollScore = scoreWeaponCopy(w, cfg, r).pct; w.rollBasis = 'watched'; w.rollCrit = crit; w.comboFloored = false; }
       } else {
         for (const w of copies) {
-          let sc = favRollScore(w, fav);
+          let sc = favRollScore(w, favEff);
           w.comboFloored = !!(w.combos || []).length && sc < floor;
           if (w.comboFloored) sc = floor;
           w.rollScore = sc; w.rollBasis = 'favorites';
@@ -1627,7 +1637,8 @@ function scoreWeaponCopy(w, cfg, rankOf) {
 // finds. Diego's rules (2026-07-06):
 //   - LEGENDARIES ONLY — exotics are never touched.
 //   - Watched weapons (you picked tracked perks): score = perk-match %; junk < god bar (75%).
-//   - Unwatched weapons: score = ★-favorite coverage of the copy's ACTUAL rolled perks;
+//   - Unwatched weapons: score = ★-favorite coverage of the copy's ACTUAL rolled perks
+//     (perks tracked on ANY watched weapon count as at least 2★ — 2026-07-16);
 //     favorite (+lock+beep) >= 90.
 //   - Per weapon: keep ALL favorites + ONE keep (highest copy >= 80%, only if no keep exists yet);
 //     junk the other duplicates. Never replaces an existing keep, never re-tags your manual junk.
@@ -1700,7 +1711,8 @@ const rolledNames = (w) => [...(w.cols[0] || []), ...(w.cols[1] || [])].map((p) 
 // Unwatched roll quality — GRADE-NORMALIZED (2026-07-09 fix). Each trait column contributes
 // its BEST favorited perk's ★-grade weight (1★=1 · 2★=1.5 · 3★=2); score = that sum vs the
 // max possible (a 3★ favorite in BOTH columns = 100%). So: 3★+3★=100 · 3★+2★=88 · 2★+2★=75 ·
-// 1★+1★=50 · one column favorited only ≤50.
+// 1★+1★=50 · one column favorited only ≤50. Callers pass the EFFECTIVE favorites map
+// (★ stars ∪ tracked-perk union from fetchWeapons), not raw perk-favorites.json.
 // WHY: the old formula was "what fraction of this roll's perks are favorited" — a standard
 // 1-perk-per-column drop that happened to land two of Diego's 87 grade-1 favorites read
 // 100% ≥ the 90% favorite bar, so the app mass-favorited mediocre weapons (the bug Diego

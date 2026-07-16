@@ -412,7 +412,15 @@ Core priorities, in his words:
     tile tooltip shows the basis. Cache rule: POSTs to `/api/watch`, `/api/favorites`, `/api/auto`
     (comboFloor), `/api/combos` all null `wcache` because rollScore is baked into the weapons payload.
     Perk Finder's 3-star grading (`perk-favorites.json`, weights 1★=1 · 2★=1.5 · 3★=2) is unchanged and
-    is what feeds the favorites-basis score.
+    is what feeds the favorites-basis score. **Tracked-perk union (2026-07-16, Diego: "app is not
+    considering the tracked perks to score unwatched weapons — afraid it will junk actual good rolls"):**
+    when scoring UNWATCHED weapons, every perk tracked on ANY watch config counts as at least a **2★
+    favorite** (explicit 3★ stars win; built as `favEff` in `fetchWeapons` right before the score loop).
+    22 tracked perks had no ★ at all (Slideshot, Snapshot Sights, Keep Away, Stopping Power, Lucky
+    Shot…), so unwatched rolls carrying them read 0–50% = junk band. 2★, not 3★, on purpose: two
+    tracked perks = 75% — above the unwatched junk bar (60) but below keep (80) and favorite (90), so
+    tracking alone can never mass-keep/favorite. Verified live 2026-07-16 (old 8787 vs patched 8788):
+    118 affected copies, junk band 150→122, keep band 178→263 (3★ + tracked = 88%), favorites 119→119.
   - **Perk Finder weapon cards + tag filter (2026-07-05, perk layout redone 2026-07-05 night):** click a
     **Best-Match** weapon (Inventory) → a smart card — perks cols 3/4 **side by side, listed vertically**
     (`.cols2`/`.pool.vert`, same layout as Weapon Watch's tracker; was stacked `.wccol` blocks), rolled perk
@@ -646,7 +654,9 @@ Core priorities, in his words:
       tracked perks in `weapon-watch.json`) scores by the server `scoreWeaponCopy` perk-match %; an
       **unwatched** weapon scores by `favRollScore`, now **grade-normalized**: each trait column
       contributes its BEST favorited perk's ★ weight (1★=1 · 2★=1.5 · 3★=2), score = sum ÷ (2×2★★★),
-      so **100% needs a 3★ favorite in BOTH columns; two 1★ favorites = 50%**. The old formula
+      so **100% needs a 3★ favorite in BOTH columns; two 1★ favorites = 50%**. Since 2026-07-16 the
+      favorites map used here is the **effective** one (`favEff`): perks tracked on ANY watched weapon
+      count as at least 2★, so unwatched rolls carrying Diego's tracked perks can't fall in the junk band. The old formula
       ("fraction of rolled perks favorited") hit 100% whenever a standard 1+1-perk roll landed two of
       Diego's ~94 grade-1 favorites → the app mass-favorited mediocre weapons (Diego's 2026-07-09 bug
       report; he suspected two scoring systems — the vault tile % IS a different, pool-based number,

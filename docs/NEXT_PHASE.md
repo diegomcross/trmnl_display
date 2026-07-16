@@ -3,7 +3,18 @@
 > Maintained per CLAUDE.md. When a feature ships, move it to HANDOFF.md
 > "What works now" and delete it here.
 
-## Where we are (2026-07-12 — DIM-sync audit: staleness + orbit-detection bugs FIXED, servers already rebooted)
+## Where we are (2026-07-16 — tracked-perk union fix shipped, needs Diego's REBOOT.cmd)
+
+Diego reported "app is not considering the tracked perks to score unwatched weapons — afraid it
+will junk actual good rolls." Confirmed: unwatched scoring (`favRollScore`) only read ★-starred
+favorites; 22 perks Diego tracks on watch configs had no star, so 118 unwatched copies carrying
+them scored 0–50% (junk band). Fixed in `vault-verdict.js`: tracked perks now count as ≥2★ when
+scoring unwatched weapons (`favEff` union in `fetchWeapons`). Verified live on a test instance
+(port 8788) against the old server; details in HANDOFF "Weapon Vault tile score". **Diego must
+double-click REBOOT.cmd to load the new code** — the running vault server still has the old
+scoring. Auto-Manager remains DISABLED, so nothing was junked in the meantime.
+
+## Previous status (2026-07-12 — DIM-sync audit: staleness + orbit-detection bugs FIXED, servers already rebooted)
 
 Diego reported "DIM not syncing / taking too long" + "activity detection unreliable" + asked for an
 always-visible last-update indicator. Audit found the DIM cloud connection HEALTHY — the real bugs
