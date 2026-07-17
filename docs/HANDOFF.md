@@ -421,6 +421,27 @@ Core priorities, in his words:
     tracked perks = 75% — above the unwatched junk bar (60) but below keep (80) and favorite (90), so
     tracking alone can never mass-keep/favorite. Verified live 2026-07-16 (old 8787 vs patched 8788):
     118 affected copies, junk band 150→122, keep band 178→263 (3★ + tracked = 88%), favorites 119→119.
+    **BEST-OF-BOTH for watched weapons (2026-07-16, Diego picked it from the scoring-review options):**
+    a WATCHED copy's `w.rollScore` = max(tracked-perk match %, ★-favorite score) — found by auditing
+    his manual tags: 23 of his 41 low-scoring keeps were watched weapons with great ALTERNATE rolls
+    (Fatebringer Timelost read 22% while rolling Kinetic Tremors + Firefly, both his 3★; now 100%).
+    New per-copy fields: `w.watchScore` (raw tracked-match %), `w.rollVia` ('perks'|'stars' — which
+    side won; vault tile tooltip shows "watched · via ★ favorites"). GUARDRAIL: auto-favorite still
+    requires the RAW tracked match ≥ thr.fav (folded into `favEligible` in `autoDecide`, so the
+    dedup's `isFav` inherits it) — without it 64 watched copies would have crossed 90% via stars.
+    Verified by dry-run: 0 star-rescued copies favorited; only 2 favorites, both legit unwatched 100%s.
+    Manual keeps scoring <60 dropped 41→18 (the rest are one-good-column raid/adept keeps — see
+    NEXT_PHASE "replaceability guard" idea, not built, Diego didn't pick it).
+  - **Perk Finder "★ Rate ungraded" review (2026-07-16, Diego picked it):** a toolbar button (shows a
+    live count) opens an overlay listing every trait perk that appears on rolls Diego HAND-tagged
+    keep/favorite (app-applied favorites excluded via `w.autoFav`) but has **no ★ grade and isn't
+    tracked** on any watched weapon — i.e. perks the Vault score is blind to (found 106: Rangefinder
+    on 18 kept rolls, Adagio 15, Swashbuckler/Eye of the Storm 14…). Rows show icon, count, up to 3
+    example weapons, and the standard 1–3★ widget; grading writes the normal `/api/favorites` map
+    (server nulls `wcache`, so scores refresh on next fetch). All client-side in `perk-finder.html`
+    (`perkGaps()`/`renderGaps()`/`updateGapBtn()`, `#gapOv` overlay) — computed from the already-
+    fetched `/api/weapons` + `/api/watch` + FAV; list is snapshotted on open so rows don't jump
+    away mid-grading. No server change, no restart needed.
   - **Perk Finder weapon cards + tag filter (2026-07-05, perk layout redone 2026-07-05 night):** click a
     **Best-Match** weapon (Inventory) → a smart card — perks cols 3/4 **side by side, listed vertically**
     (`.cols2`/`.pool.vert`, same layout as Weapon Watch's tracker; was stacked `.wccol` blocks), rolled perk
@@ -656,7 +677,9 @@ Core priorities, in his words:
       contributes its BEST favorited perk's ★ weight (1★=1 · 2★=1.5 · 3★=2), score = sum ÷ (2×2★★★),
       so **100% needs a 3★ favorite in BOTH columns; two 1★ favorites = 50%**. Since 2026-07-16 the
       favorites map used here is the **effective** one (`favEff`): perks tracked on ANY watched weapon
-      count as at least 2★, so unwatched rolls carrying Diego's tracked perks can't fall in the junk band. The old formula
+      count as at least 2★, so unwatched rolls carrying Diego's tracked perks can't fall in the junk band.
+      Watched copies score best-of-both (tracked match vs ★ score, `w.rollVia` says which won); the
+      auto-favorite gate additionally requires the raw tracked match (`w.watchScore`) ≥ thr.fav. The old formula
       ("fraction of rolled perks favorited") hit 100% whenever a standard 1+1-perk roll landed two of
       Diego's ~94 grade-1 favorites → the app mass-favorited mediocre weapons (Diego's 2026-07-09 bug
       report; he suspected two scoring systems — the vault tile % IS a different, pool-based number,

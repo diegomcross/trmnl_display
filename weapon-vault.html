@@ -349,7 +349,7 @@ function tile(w){
   const fs=scoreMode?favScore(w):-1;
   const num=scoreMode?(fs<0?'—':fs+'%'):(w.pwr||'');
   const pcls=scoreMode?('p '+scoreClass(fs)):'p';
-  return `<div class="wt ${ex?'exotic':''}${tg}${w.loc==='equipped'?' equipped':''}${w._st==='match'?' match':''}${w._st==='dim'?' dim':''}" data-id="${w.id}" title="${esc(d.n||'')}${w.loc==='equipped'?' · equipped':''}${scoreMode?' · '+(fs<0?'no score':fs+'% roll ('+(w.rollBasis==='watched'?'watched':'favorites')+')'):(' · ✦'+(w.pwr||'—'))}${w.tag?' · '+w.tag:''}">
+  return `<div class="wt ${ex?'exotic':''}${tg}${w.loc==='equipped'?' equipped':''}${w._st==='match'?' match':''}${w._st==='dim'?' dim':''}" data-id="${w.id}" title="${esc(d.n||'')}${w.loc==='equipped'?' · equipped':''}${scoreMode?' · '+(fs<0?'no score':fs+'% roll ('+(w.rollBasis==='watched'?(w.rollVia==='stars'?'watched · via ★ favorites':'watched'):'favorites')+')'):(' · ✦'+(w.pwr||'—'))}${w.tag?' · '+w.tag:''}">
     ${d.icon?`<img data-src="${BN}${d.icon}" alt="">`:''}
     <span class="tagc"></span>${w.locked?'<span class="lk">'+LKSVG(true)+'</span>':''}
     <span class="bot">${el}${w.fresh?'<span class="nwt" title="New drop">NEW</span>':''}<span class="${pcls}">${num}</span></span></div>`;

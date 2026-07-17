@@ -158,6 +158,7 @@ input:focus,select:focus{outline:none;border-color:var(--gold)}
   <button class="btn sm mut" id="ownedOnly">In my inventory</button>
   <button class="btn sm mut" id="popOnly">Hide unranked</button>
   <button class="btn sm mut" id="favOnly">★ Favorites</button>
+  <button class="btn sm mut" id="gapBtn" title="Perks that appear on rolls YOU tagged keep/favorite but have no ★ yet — grade them so the Vault score finally sees them">★ Rate ungraded</button>
   <span class="count" id="libcount"></span>
 </div>
 <div class="bar" id="tagbar" style="margin:-6px 0 12px"></div>
@@ -226,6 +227,19 @@ input:focus,select:focus{outline:none;border-color:var(--gold)}
 </div>
 
 <div id="wcard"><div class="wcbox" id="wcbox"></div></div>
+
+<!-- Rate-ungraded-perks review (Diego 2026-07-16): perks seen on his HAND-kept rolls that
+     have no ★ and aren't tracked anywhere — i.e. perks the Vault score is blind to. -->
+<div id="gapOv" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:60;overflow:auto;padding:30px 14px">
+  <div class="card" style="max-width:640px;margin:0 auto">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+      <b style="font-size:16px">Rate your ungraded perks</b>
+      <button class="btn sm mut" id="gapClose">✕ close</button>
+    </div>
+    <p class="hint">These perks appear on rolls <b>you tagged keep/favorite yourself</b>, but have no ★ yet — so the Vault score treats them as worthless. Tap <b style="color:var(--gold)">1–3 ★</b> (tap the same star again to clear). Skip anything you don't actually care about — sorted by how often it shows up on your keeps.</p>
+    <div id="gapList"></div>
+  </div>
+</div>
 
 <script>
 const $=id=>document.getElementById(id);
@@ -636,6 +650,47 @@ $('wcbox').addEventListener('click',e=>{
 });
 $('wcard').addEventListener('click',e=>{ if(e.target.id==='wcard') closeCard(); });
 
+// ---- rate-ungraded-perks review (Diego 2026-07-16: "the app doesn't know all the perks I like") ----
+// A gap = a trait perk on a roll Diego HAND-tagged keep/favorite (app-applied favorites excluded
+// via w.autoFav) that has no ★ grade and isn't tracked on any watched weapon — invisible to the
+// Vault score. Grading here writes the normal /api/favorites map, so scores update on next fetch.
+function perkGaps(){
+  const tracked=new Set(); for(const cfg of Object.values(WATCH||{})) for(const n of Object.keys((cfg&&cfg.perks)||{})) tracked.add(n);
+  const gaps={};
+  for(const w of (WEAPONS.weapons||[])){
+    if(!(w.tag==='keep'||w.tag==='favorite')||w.autoFav) continue;
+    const wn=((WEAPONS.defs||{})[w.hash]||{}).n||'';
+    for(const col of (w.cols||[])) for(const p of (col||[])){
+      if(!p||!p.n||FAV[p.n]||tracked.has(p.n)) continue;
+      const g=gaps[p.n]=gaps[p.n]||{n:p.n,count:0,ws:new Set()}; g.count++; if(wn) g.ws.add(wn);
+    }
+  }
+  return Object.values(gaps).sort((a,b)=>b.count-a.count||a.n.localeCompare(b.n));
+}
+let GAPSNAP=[];   // snapshot taken when the panel opens — rows stay put while grading (no jumpy list)
+function renderGaps(){
+  $('gapList').innerHTML=GAPSNAP.length?GAPSNAP.map(g=>`
+    <div class="prow" style="cursor:default">
+      ${iconFor(g.n)}
+      <div class="pmeta">
+        <div class="pname">${esc(g.n)}</div>
+        <div class="hint" style="margin:0">on ${g.count} kept roll${g.count>1?'s':''}${g.ws.size?` — ${esc([...g.ws].slice(0,3).join(', '))}${g.ws.size>3?'…':''}`:''}</div>
+      </div>
+      ${starWidget(g.n)}
+    </div>`).join(''):'<div class="big">Nothing to rate — every perk on your kept rolls already has a ★ or is tracked. 🎉</div>';
+}
+function updateGapBtn(){ const n=perkGaps().length; $('gapBtn').textContent=`★ Rate ungraded${n?` (${n})`:''}`; }
+$('gapBtn').onclick=()=>{ GAPSNAP=perkGaps(); renderGaps(); $('gapOv').style.display='block'; };
+const closeGaps=()=>{ $('gapOv').style.display='none'; updateGapBtn(); };
+$('gapClose').onclick=closeGaps;
+$('gapOv').addEventListener('click',e=>{
+  if(e.target.id==='gapOv') return closeGaps();
+  const star=e.target.closest('.favstars [data-g]'); if(!star) return;
+  const n=star.closest('[data-fav]').dataset.fav, g=+star.dataset.g;
+  if(FAV[n]===g) delete FAV[n]; else FAV[n]=g;
+  saveFav(); renderGaps(); renderLib();
+});
+
 async function load(){
   try{
     const [pk,cb,fv]=await Promise.all([
@@ -658,7 +713,7 @@ async function load(){
     for(const wp of w.weapons) for(const col of (wp.cols||[])) for(const pk of col) OWNED.add(pk.n);
     for(const d of Object.values(w.defs||{})) if(d.n) OWNEDW.add(d.n);
     WATCH=await fetch('/api/watch').then(r=>r.json()).catch(()=>({}))||{};   // for farmable → save watch perks
-    renderLib(); renderCombo();
+    renderLib(); renderCombo(); updateGapBtn();
   }catch(err){ $('plib').innerHTML=`<div class="big">Error: ${esc(err.message)}</div>`; }
 }
 load();

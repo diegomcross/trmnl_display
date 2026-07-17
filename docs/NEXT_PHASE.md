@@ -3,16 +3,20 @@
 > Maintained per CLAUDE.md. When a feature ships, move it to HANDOFF.md
 > "What works now" and delete it here.
 
-## Where we are (2026-07-16 — tracked-perk union fix shipped, needs Diego's REBOOT.cmd)
+## Where we are (2026-07-16 evening — scoring review round 2 shipped, needs Diego's REBOOT.cmd)
 
-Diego reported "app is not considering the tracked perks to score unwatched weapons — afraid it
-will junk actual good rolls." Confirmed: unwatched scoring (`favRollScore`) only read ★-starred
-favorites; 22 perks Diego tracks on watch configs had no star, so 118 unwatched copies carrying
-them scored 0–50% (junk band). Fixed in `vault-verdict.js`: tracked perks now count as ≥2★ when
-scoring unwatched weapons (`favEff` union in `fetchWeapons`). Verified live on a test instance
-(port 8788) against the old server; details in HANDOFF "Weapon Vault tile score". **Diego must
-double-click REBOOT.cmd to load the new code** — the running vault server still has the old
-scoring. Auto-Manager remains DISABLED, so nothing was junked in the meantime.
+Same-day follow-up to the tracked-perk union fix (which IS live and verified): Diego said "it
+isn't working still" and asked for scoring suggestions. Audited his manual tags as ground truth —
+41 hand-tagged keeps scored <60. Offered 4 fixes; **Diego picked #1 best-of-both watched scoring
+and #2 rate-ungraded-perks review** (both shipped, see HANDOFF "Weapon Vault tile score" and the
+Perk Finder "★ Rate ungraded" entries). He also ticked "Something else" in the picker **without
+saying what — ASK HIM what he meant** (BLOCKED: awaiting Diego). Not picked (offer again if junking
+worries return): **#3 replaceability guard** (never auto-junk raid/Trials/adept copies — dry-run
+showed 88% dupes of Tyranny of Heaven/Bane of Sorrow being junked) and **#4 gentler dupe rule**
+(60–79% dupes left untagged instead of junked). **Diego must double-click REBOOT.cmd** for the
+server-side best-of-both scoring; the Perk Finder review works already (HTML served from disk).
+Auto-Manager remains DISABLED. Manual-keeps-scoring-<60 went 41 → 18 (rest are one-good-column
+raid/adept keeps — exactly the #3 territory).
 
 ## Previous status (2026-07-12 — DIM-sync audit: staleness + orbit-detection bugs FIXED, servers already rebooted)
 

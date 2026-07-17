@@ -1018,7 +1018,18 @@ async function fetchWeapons(e) {
         const r = {};
         for (const s of (cfg.stats || [])) { const vals = [...new Set(copies.map((x) => x.statsMax[s] ?? -1))].sort((a, b) => b - a); r[s] = (v) => { const i = vals.indexOf(v); return i === 0 ? 's1' : i === 1 ? 's2' : i === 2 ? 's3' : ''; }; }
         const crit = Object.keys(cfg.perks || {}).length + (cfg.mw ? 1 : 0) + (cfg.stats || []).length;
-        for (const w of copies) { w.rollScore = scoreWeaponCopy(w, cfg, r).pct; w.rollBasis = 'watched'; w.rollCrit = crit; w.comboFloored = false; }
+        // BEST-OF-BOTH (Diego picked it 2026-07-16, after 23 of his 41 low-scoring manual keeps
+        // turned out to be watched weapons with great ALTERNATE rolls — e.g. Fatebringer
+        // (Timelost) at 22% tracked-match while rolling Kinetic Tremors + Firefly, both his 3★):
+        // a watched copy scores the BETTER of its tracked-perk match and its ★-favorite score.
+        // w.watchScore keeps the raw tracked-match % because auto-FAVORITE still requires IT
+        // (via favEligible in autoDecide) — the ★ side can rescue a copy from junk and earn the
+        // keep, but never spam favorites (64 watched copies would have crossed 90% otherwise).
+        for (const w of copies) {
+          const wp = scoreWeaponCopy(w, cfg, r).pct, fp = favRollScore(w, favEff);
+          w.watchScore = wp; w.rollScore = Math.max(wp, fp); w.rollVia = fp > wp ? 'stars' : 'perks';
+          w.rollBasis = 'watched'; w.rollCrit = crit; w.comboFloored = false;
+        }
       } else {
         for (const w of copies) {
           let sc = favRollScore(w, favEff);
@@ -1773,12 +1784,15 @@ function autoDecide(w, def, thr) {
   // when you track at least AUTO_FAV_MIN_CRIT criteria — one lone tracked perk that matches is
   // 100% but proves nothing (the source of the surprising mass favorites). Below the gate a
   // high score can still earn the (single) keep. Favorites-basis is already strict (needs 3★
-  // favorites in both columns), so it isn't gated.
-  const favEligible = !isWatched || (w.rollCrit ?? 0) >= AUTO_FAV_MIN_CRIT;
+  // favorites in both columns), so it isn't gated. Since best-of-both (2026-07-16) a watched
+  // copy's rollScore may come from ★ favorites (w.rollVia 'stars') — the favorite promotion
+  // additionally requires the RAW tracked-perk match (w.watchScore) to clear the fav bar, so
+  // ★-rescued copies top out at keep. The dedup's isFav inherits this via dec.favEligible.
+  const favEligible = !isWatched || ((w.rollCrit ?? 0) >= AUTO_FAV_MIN_CRIT && (w.watchScore ?? score) >= thr.fav);
   const base = { tag: null, score, isWatched, eligible: true, favEligible };
   if (score < 0) return { ...base, eligible: false, reason: 'no perk signal' };
   if (score >= thr.fav && favEligible) return cur === 'favorite' ? base : { ...base, tag: 'favorite', notify: 'high', reason: `${score}% >= ${thr.fav}${via}` };
-  if (score >= thr.keep) return (cur === 'keep' || cur === 'favorite') ? base : { ...base, tag: 'keep', reason: `${score}% >= ${thr.keep}${via}${favEligible ? '' : ` · fav needs ≥${AUTO_FAV_MIN_CRIT} tracked criteria (you track ${w.rollCrit ?? 0})`}` };
+  if (score >= thr.keep) return (cur === 'keep' || cur === 'favorite') ? base : { ...base, tag: 'keep', reason: `${score}% >= ${thr.keep}${via}${favEligible ? '' : ` · fav needs tracked-perk match ≥${thr.fav}% (this copy: ${w.watchScore ?? score}%) with ≥${AUTO_FAV_MIN_CRIT} tracked criteria (you track ${w.rollCrit ?? 0})`}` };
   const junkBar = isWatched ? thr.watchedJunk : thr.unwatchedJunk;
   if (score < junkBar && cur !== 'keep' && cur !== 'favorite') return cur === 'junk' ? base : { ...base, tag: 'junk', reason: `${score}% < ${junkBar}` };
   return base;                                                // in the "leave untouched" band
