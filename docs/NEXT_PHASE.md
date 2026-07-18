@@ -3,7 +3,20 @@
 > Maintained per CLAUDE.md. When a feature ships, move it to HANDOFF.md
 > "What works now" and delete it here.
 
-## Where we are (2026-07-16 evening — scoring review round 2 shipped, needs Diego's REBOOT.cmd)
+## Where we are (2026-07-17 — friend setup wizard shipped; REBOOT.cmd still pending from 07-16)
+
+Diego asked to let his friend use the app ("hosted on his pc, just like mine", friend knows less
+programming than Diego, should never touch .env). Shipped: SETUP MODE (server boots without .env
+and serves a 3-step `/setup` wizard — Bungie app keys form, Bungie OAuth login with paste-back,
+one-click DIM connect), `INSTALL.cmd`, `docs/FRIEND_SETUP.md` (distribution: GitHub ZIP + Diego
+privately sends `.env` + `.dim-app.json`). `/setup` is also the new re-auth path for Diego himself.
+All verified on an isolated no-.env instance; details in HANDOFF. Also same day: Rate-ungraded
+list fixed to trait-library perks only (106→68) and `docs/DIEGO_RULES.md` created (canonical
+Diego-rulings file — keep it updated!). **Diego's REBOOT.cmd is still pending** — it will load
+BOTH the 07-16 best-of-both scoring AND the setup wizard onto his live server. The friend's copy
+needs nothing special — a fresh GitHub ZIP already contains everything.
+
+## Previous status (2026-07-16 evening — scoring review round 2 shipped, needs Diego's REBOOT.cmd)
 
 Same-day follow-up to the tracked-perk union fix (which IS live and verified): Diego said "it
 isn't working still" and asked for scoring suggestions. Audited his manual tags as ground truth —

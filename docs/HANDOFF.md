@@ -98,6 +98,9 @@ Core priorities, in his words:
 | `CLAUDE.md` | Working rules for agents: never drop features, test before push, and **mandatory upkeep of this file + `docs/NEXT_PHASE.md`**. |
 | `docs/NEXT_PHASE.md` | The pickup point: specs + open questions for upcoming features. |
 | `docs/DIEGO_RULES.md` | **Canonical list of every rule/request Diego has given** (created 2026-07-17 at his ask). Read before changing scoring/tagging/UI; append new rulings immediately with date + verbatim quote. |
+| `setup.html` | **First-run setup wizard** (served at `/setup`, 2026-07-17): 3 steps — Bungie app keys (paste form + walkthrough, writes `.env`), Bungie login (opens bungie.net OAuth, paste-back the landing address, writes `tokens.json`), DIM sync connect (auto-registers `.dim-app.json` if missing, mints `.dim-token.json`). Also THE re-auth path now (replaces terminal `auth-and-snapshot.js` for re-login). Passwords are never typed into the app — bungie.net handles login. |
+| `INSTALL.cmd` | Friend-friendly first run: checks Node, starts `vault-verdict.js` minimized (logs to `vault.log`), opens `/setup` in the browser. |
+| `docs/FRIEND_SETUP.md` | Plain steps for giving the app to a friend: GitHub ZIP + Diego privately sends `.env` + `.dim-app.json` (app identity only — each person logs in with their own Bungie account), friend runs `INSTALL.cmd`. |
 
 ---
 
@@ -433,6 +436,20 @@ Core priorities, in his words:
     Verified by dry-run: 0 star-rescued copies favorited; only 2 favorites, both legit unwatched 100%s.
     Manual keeps scoring <60 dropped 41→18 (the rest are one-good-column raid/adept keeps — see
     NEXT_PHASE "replaceability guard" idea, not built, Diego didn't pick it).
+  - **First-run setup wizard + SETUP MODE (2026-07-17, "my friend is interested in utilizing the
+    app"):** `vault-verdict.js` now BOOTS WITHOUT `.env` instead of crashing — `main()`'s `const e`
+    became `let e` (null = setup mode); a request-handler gate 302s every page to `/setup` and
+    answers `{setup:true}` on `/api/*` (whitelist: /setup, /api/setup, /api/status, theme/banner/
+    fonts); all four background pollers (`pollDrops`, background refresh, `checkBuilds`, `autoTick`)
+    no-op while `e` is null. The wizard's endpoints (`/api/setup/status|keys|bungie|dim`) write
+    `.env` / `tokens.json` / `.dim-app.json` / `.dim-token.json` and REASSIGN `e` live — no restart.
+    A NEW Bungie login clears `wcache`/`cache` + deletes the DIM token (it belongs to the previous
+    account). OAuth flow is unchanged from auth-and-snapshot.js (authorize on bungie.net → paste the
+    landing address → code exchange); DIM app registration uses a random `vault-verdict-XXXXXX` id
+    to dodge global id collisions. Verified on an isolated no-.env instance (port 8790): gate 302s,
+    api gated, keys→env transition live, garbage-URL errors clean, all-green `ready:true`, both
+    wizard states screenshot-checked. Friend distribution: GitHub ZIP is clean (personal data all
+    gitignored) + Diego privately sends `.env` and `.dim-app.json` (see `docs/FRIEND_SETUP.md`).
   - **Perk Finder "★ Rate ungraded" review (2026-07-16, Diego picked it):** a toolbar button (shows a
     live count) opens an overlay listing every trait perk that appears on rolls Diego HAND-tagged
     keep/favorite (app-applied favorites excluded via `w.autoFav`) but has **no ★ grade and isn't

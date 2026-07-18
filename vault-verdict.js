@@ -1856,7 +1856,11 @@ const readBody = (req) => new Promise((ok) => {
 
 async function main() {
   if (process.argv[2] === 'probe') return probe(process.argv[3] || '');
-  const e = env();
+  // SETUP MODE (2026-07-17, for Diego's friend): with no .env yet the server still boots and
+  // serves the /setup wizard instead of crashing — the wizard writes .env + tokens.json and
+  // flips `e` live (no restart). `e` is reassigned by the /api/setup/* handlers below.
+  let e = null;
+  try { e = env(); } catch { console.warn(`No .env yet — SETUP MODE. Open http://127.0.0.1:${PORT}/setup to connect your Bungie account.`); }
   let cache = null, wcache = null, aFetchedAt = 0;
   // Shared weapons fetch: pollDrops (25s) and the auto-manage pass (30s) both need fresh
   // profile data — dedupe so overlapping callers share one Bungie pull, and a snapshot
@@ -1873,6 +1877,12 @@ async function main() {
   const server = http.createServer(async (req, res) => {
     try {
       const json = (obj) => { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(obj)); };
+      // SETUP-MODE gate: until .env exists, only the wizard (+ its assets/status) is reachable —
+      // pages redirect to /setup, API calls answer {setup:true} so frontends can show a hint.
+      if (!e && !['/setup', '/api/setup', '/api/status', '/theme.css', '/banner.js', '/fonts/'].some((p) => req.url.startsWith(p))) {
+        if (req.url.startsWith('/api/')) return json({ error: 'setup required', setup: true });
+        res.writeHead(302, { Location: '/setup' }); return res.end();
+      }
       if (req.url.startsWith('/api/status')) {
         // Lightweight heartbeat for the banner's "Updated" chip — NO Bungie/DIM calls.
         return json({
@@ -2077,6 +2087,92 @@ async function main() {
         try { return json({ ok: true, results: await applyLook(e, characterId, look) }); }
         catch (err) { return json({ error: err.message }); }
       }
+      // ---------- first-run setup wizard (2026-07-17, for Diego's friend) ----------
+      // The wizard NEVER sees a Bungie password: the user logs in on bungie.net itself and
+      // pastes back the landing address; we only exchange the ?code= for tokens (same flow
+      // auth-and-snapshot.js always used, minus the terminal).
+      if (req.url.startsWith('/api/setup/status')) {
+        let envOk = false;
+        try { const x = env(); envOk = !!(x.BUNGIE_API_KEY && x.BUNGIE_CLIENT_ID && x.BUNGIE_CLIENT_SECRET); } catch {}
+        let tok = null; try { tok = JSON.parse(fs.readFileSync(TOKENS_FILE, 'utf8')); } catch {}
+        const now = Date.now();
+        let dimTok = false; try { const t = JSON.parse(fs.readFileSync(DIM_TOKEN_FILE, 'utf8')); dimTok = !!t.token && now < t.exp - 60000; } catch {}
+        let authUrl = null;
+        if (envOk) { const x = env(); authUrl = `https://www.bungie.net/en/OAuth/Authorize?client_id=${x.BUNGIE_CLIENT_ID}&response_type=code&state=setup`; }
+        return json({
+          env: envOk,
+          tokens: tok ? { present: true, valid: now < (tok.refresh_expires_at || 0) } : { present: false, valid: false },
+          dim: { app: !!dimKey(), token: dimTok },
+          authUrl,
+          ready: envOk && !!tok && now < (tok?.refresh_expires_at || 0),
+        });
+      }
+      if (req.url.startsWith('/api/setup/keys') && req.method === 'POST') {
+        const { apiKey, clientId, clientSecret } = JSON.parse(await readBody(req) || '{}');
+        if (!apiKey || !clientId || !clientSecret) return json({ error: 'All three values are required.' });
+        let extra = [];   // preserve any non-Bungie lines already in .env
+        try { extra = fs.readFileSync(ENV_FILE, 'utf8').split(/\r?\n/).filter((l) => l.trim() && !/^(BUNGIE_API_KEY|BUNGIE_CLIENT_ID|BUNGIE_CLIENT_SECRET)\s*=/.test(l)); } catch {}
+        fs.writeFileSync(ENV_FILE, [`BUNGIE_API_KEY=${String(apiKey).trim()}`, `BUNGIE_CLIENT_ID=${String(clientId).trim()}`, `BUNGIE_CLIENT_SECRET=${String(clientSecret).trim()}`, ...extra, ''].join('\n'));
+        try { e = env(); } catch {}
+        return json({ ok: true });
+      }
+      if (req.url.startsWith('/api/setup/bungie') && req.method === 'POST') {
+        const { pastedUrl } = JSON.parse(await readBody(req) || '{}');
+        let x; try { x = env(); } catch { return json({ error: 'Save the Bungie app keys first (step 1).' }); }
+        let code = null;
+        try { code = new URL(String(pastedUrl).trim()).searchParams.get('code'); } catch {}
+        if (!code) code = String(pastedUrl || '').match(/[?&]code=([^&\s]+)/)?.[1] || null;
+        if (!code) return json({ error: 'No login code found — after clicking Authorize, copy the ENTIRE address from the browser bar (even if the page shows an error) and paste it here.' });
+        const basic = Buffer.from(`${x.BUNGIE_CLIENT_ID}:${x.BUNGIE_CLIENT_SECRET}`).toString('base64');
+        const r = await fetch(`${BASE}/App/OAuth/Token/`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-API-Key': x.BUNGIE_API_KEY, Authorization: `Basic ${basic}` },
+          body: new URLSearchParams({ grant_type: 'authorization_code', code }),
+        });
+        const text = await r.text();
+        if (!r.ok) return json({ error: `Bungie rejected the login (HTTP ${r.status}). Login codes expire in seconds — click the Bungie button again and paste the new address right away.` });
+        const t = JSON.parse(text);
+        fs.writeFileSync(TOKENS_FILE, JSON.stringify({
+          access_token: t.access_token, refresh_token: t.refresh_token,
+          expires_at: Date.now() + t.expires_in * 1000,
+          refresh_expires_at: Date.now() + (t.refresh_expires_in ?? 7776000) * 1000,
+          membership_id: t.membership_id,
+        }, null, 2));
+        try { e = env(); } catch {}
+        // A (possibly different) account just logged in: drop every per-account cache. The DIM
+        // token belongs to the PREVIOUS Bungie login, so it must be re-minted too.
+        wcache = null; cache = null;
+        try { fs.unlinkSync(DIM_TOKEN_FILE); } catch {}
+        DIM_TAGS = {}; DIM_TAGS_AT = 0; DIM_OFF = false; DIM_LAST_ERR = '';
+        let name = '';
+        try {
+          const ms = await bungie(`${BASE}/User/GetMembershipsById/${t.membership_id}/254/`, x, t.access_token);
+          const m = (ms.destinyMemberships || []).find((y) => y.membershipId === ms.primaryMembershipId) || (ms.destinyMemberships || [])[0];
+          name = m ? (m.bungieGlobalDisplayName || m.displayName || '') : '';
+        } catch {}
+        return json({ ok: true, name });
+      }
+      if (req.url.startsWith('/api/setup/dim') && req.method === 'POST') {
+        let x; try { x = env(); } catch { return json({ error: 'Finish steps 1–2 first.' }); }
+        try {
+          if (!dimKey()) {   // register a DIM app for THIS Bungie API key (random suffix avoids global id collisions)
+            const appId = 'vault-verdict-' + Math.random().toString(36).slice(2, 8);
+            const reg = await fetch(`${DIM_API}/new_app`, {
+              method: 'POST', headers: { 'Content-Type': 'application/json', Origin: DIM_ORIGIN },
+              body: JSON.stringify({ id: appId, bungieApiKey: x.BUNGIE_API_KEY, origin: DIM_ORIGIN }),
+            });
+            const rj = await reg.json().catch(() => ({}));
+            const k = rj?.app?.dimApiKey || rj?.dimApiKey;
+            if (!k) return json({ error: `DIM app registration failed (HTTP ${reg.status}) — try again in a minute.` });
+            fs.writeFileSync(DIM_APP_FILE, JSON.stringify({ appId, dimApiKey: k }, null, 2));
+          }
+          DIM_OFF = false; DIM_LAST_ERR = '';
+          await dimAuth(x);   // mints .dim-token.json for the CURRENT Bungie login
+          return json({ ok: true });
+        } catch (err) {
+          return json({ error: `${err.message} — a brand-new DIM app can take a minute to activate; try again shortly.` });
+        }
+      }
       if (req.url.startsWith('/api/perks')) {
         const lib = await buildPerkLibrary(e, req.url.includes('fresh=1'));
         // overlay "mine" = how often each perk is a TRACKED perk across your watched
@@ -2131,6 +2227,7 @@ async function main() {
         res.writeHead(404); return res.end('not found');
       }
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+      if (req.url.startsWith('/setup')) return res.end(fs.readFileSync(path.join(__dirname, 'setup.html')));
       if (req.url.startsWith('/weapons')) return res.end(fs.readFileSync(path.join(__dirname, 'weapon-watch.html')));
       if (req.url.startsWith('/vault')) return res.end(fs.readFileSync(path.join(__dirname, 'weapon-vault.html')));
       if (req.url.startsWith('/perks')) return res.end(fs.readFileSync(path.join(__dirname, 'perk-finder.html')));
@@ -2165,7 +2262,7 @@ async function main() {
   // Live god-roll drop watcher: only works while Destiny is running (saves API calls
   // and only alerts when you could actually be getting drops). Auto-locks + alerts.
   async function pollDrops() {
-    if (!gameUp) return;
+    if (!e || !gameUp) return;   // !e = setup mode, no credentials yet
     const watch = loadWatch();
     if (!Object.keys(watch).length) return;
     try {
@@ -2378,7 +2475,7 @@ async function main() {
   setInterval(pollDrops, 25000);
   // Keep the inventory snapshot warm even when Destiny is CLOSED (pollDrops only refreshes
   // while playing), so pages + the banner "Updated" chip always see data ≤ ~1 min old.
-  setInterval(() => { freshWeapons(55000).catch((err) => console.warn('background refresh failed:', err.message)); }, 60000);
+  setInterval(() => { if (!e) return; freshWeapons(55000).catch((err) => console.warn('background refresh failed:', err.message)); }, 60000);
 
   // ---------- Build Crafter: background upgrade watcher (60s) ----------
   // Evaluates every armor piece ONCE per build+rev (builds-seen.json). First pass / a
@@ -2387,7 +2484,7 @@ async function main() {
   // Armor is never acted on — notify only.
   let buildsBusy = false, prevArmorIds = null;
   async function checkBuilds() {
-    if (buildsBusy) return;
+    if (!e || buildsBusy) return;   // !e = setup mode
     const builds = loadBuilds().filter((b) => b.watch && !b.draft && b.exotic?.hash);
     if (!builds.length) { prevArmorIds = null; return; }
     buildsBusy = true;
@@ -2445,6 +2542,7 @@ async function main() {
   let autoTimer = null;
   const scheduleAuto = (sec) => { clearTimeout(autoTimer); autoTimer = setTimeout(autoTick, Math.max(10, sec) * 1000); };
   async function autoTick() {
+    if (!e) return scheduleAuto(30);   // setup mode — idle until credentials exist
     const cfg = loadAuto();
     let sec = cfg.idleSeconds || 120, state = 'paused';
     try {

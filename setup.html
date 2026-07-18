@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Vault Verdict — Setup</title>
+<link rel="stylesheet" href="/theme.css">
+<style>
+body{max-width:760px;margin:0 auto;padding:26px 16px 60px}
+h1{margin:0 0 6px}
+.sub{color:var(--mut);margin:0 0 22px;line-height:1.5}
+.step{background:var(--panel,#15171b);border:1px solid var(--line,#2a2d33);border-radius:8px;padding:16px 18px;margin:0 0 14px}
+.step h2{display:flex;align-items:center;gap:10px;font-size:15px;margin:0 0 8px}
+.pill{display:inline-block;min-width:74px;text-align:center;font-size:11px;letter-spacing:.06em;text-transform:uppercase;border-radius:20px;padding:3px 10px;border:1px solid var(--line)}
+.pill.ok{color:#35e366;border-color:#35e36655;background:#35e3660f}
+.pill.no{color:#ff6b6b;border-color:#ff6b6b55;background:#ff6b6b0f}
+.pill.wait{color:var(--mut)}
+.hint{color:var(--mut);font-size:13px;line-height:1.55;margin:6px 0}
+ol.hint{padding-left:20px}
+ol.hint li{margin:4px 0}
+code{background:#0009;border:1px solid var(--line);border-radius:4px;padding:1px 6px;font-size:12.5px;user-select:all}
+label{display:block;font-size:12px;color:var(--mut);margin:10px 0 3px;letter-spacing:.04em;text-transform:uppercase}
+input[type=text]{width:100%;box-sizing:border-box;background:#0007;border:1px solid var(--line);border-radius:6px;color:inherit;padding:9px 11px;font-size:14px;font-family:inherit}
+.btn{display:inline-block;background:transparent;border:1px solid var(--line);border-radius:6px;color:inherit;padding:9px 16px;font-size:13.5px;cursor:pointer;margin:10px 8px 0 0;text-decoration:none}
+.btn.gold{border-color:var(--gold,#cfae42);color:var(--gold,#cfae42)}
+.btn:disabled{opacity:.45;cursor:default}
+.msg{font-size:13px;margin:8px 0 0;line-height:1.5}
+.msg.err{color:#ff6b6b}
+.msg.ok{color:#35e366}
+#doneBox{border-color:#35e36655}
+#doneBox a{color:var(--gold,#cfae42)}
+.fold{display:none}
+.step.open .fold{display:block}
+</style>
+</head>
+<body>
+<h1 class="disp">Vault Verdict — <span>Setup</span></h1>
+<p class="sub">Three steps, once per PC. Your Bungie <b>password is never typed here</b> — you log in on Bungie's own website and this page just saves the resulting connection. Re-running any step later is safe (use step&nbsp;2 to log in again if your login ever expires).</p>
+
+<div class="step" id="s1">
+  <h2><span class="pill wait" id="p1">…</span> 1 · App keys</h2>
+  <div class="hint" id="s1have" style="display:none">Found on this PC — nothing to do. (If you got the app from a friend with the <code>.env</code> file included, this is already done.)</div>
+  <div class="fold" id="s1need">
+    <p class="hint">The app needs its own (free) Bungie identity. One person does this once, then the resulting <code>.env</code> file can be shared with the app.</p>
+    <ol class="hint">
+      <li>Open <a href="https://www.bungie.net/en/Application" target="_blank" rel="noopener">bungie.net/en/Application</a> and sign in → <b>Create New App</b></li>
+      <li>Application Name: anything (e.g. <code>Vault Verdict</code>) · Website: <code>https://localhost</code></li>
+      <li>OAuth Client Type: <b>Confidential</b></li>
+      <li>Redirect URL: <code>https://127.0.0.1/auth</code></li>
+      <li>Scope: tick <b>every</b> checkbox (read Destiny data, move and equip items)</li>
+      <li>Origin Header: leave empty · agree to the terms · <b>Save</b></li>
+      <li>Copy the three values from that page into the boxes below.</li>
+    </ol>
+    <label>API Key</label><input type="text" id="kApi" autocomplete="off">
+    <label>OAuth client_id</label><input type="text" id="kId" autocomplete="off">
+    <label>OAuth client_secret</label><input type="text" id="kSecret" autocomplete="off">
+    <button class="btn gold" id="saveKeys">Save keys</button>
+    <div class="msg" id="m1"></div>
+  </div>
+</div>
+
+<div class="step" id="s2">
+  <h2><span class="pill wait" id="p2">…</span> 2 · Log in with Bungie</h2>
+  <div class="fold">
+    <p class="hint">Click the button — Bungie's own site opens in a new tab. Sign in there and click <b>Authorize</b>. You'll land on a page that says the site can't be reached — <b>that's normal</b>. Copy the <b>entire address</b> from the browser's address bar, come back here, paste it, and press Connect.</p>
+    <a class="btn gold" id="authBtn" target="_blank" rel="noopener">Log in with Bungie ↗</a>
+    <label>Paste the full address you landed on</label><input type="text" id="pasteUrl" placeholder="https://127.0.0.1/auth?code=…" autocomplete="off">
+    <button class="btn" id="connectBungie">Connect</button>
+    <div class="msg" id="m2"></div>
+  </div>
+  <div class="hint" id="s2have" style="display:none"></div>
+</div>
+
+<div class="step" id="s3">
+  <h2><span class="pill wait" id="p3">…</span> 3 · DIM tag sync</h2>
+  <div class="fold">
+    <p class="hint">Connects your keep/favorite/junk tags to the DIM cloud (so tags made here show in the DIM app and vice-versa). Fully automatic — one click.</p>
+    <button class="btn gold" id="connectDim">Connect DIM sync</button>
+    <div class="msg" id="m3"></div>
+  </div>
+  <div class="hint" id="s3have" style="display:none">Connected — tags sync with DIM.</div>
+</div>
+
+<div class="step" id="doneBox" style="display:none">
+  <h2><span class="pill ok">READY</span> All set!</h2>
+  <p class="hint">Open the app: <a href="/vault">Weapon Vault</a> · <a href="/weapons">Weapon Watch</a> · <a href="/perks">Perk Finder</a> · <a href="/builds">Builds</a> — the first load builds a data cache and can take a couple of minutes.</p>
+  <p class="hint">To make the app start with Windows: right-click <code>start-vault.ps1</code> → Run with PowerShell once with <code>-Install</code> (ask Diego / see FRIEND_SETUP.md).</p>
+</div>
+
+<script>
+const $=id=>document.getElementById(id);
+let ST=null;
+async function refresh(){
+  ST=await fetch('/api/setup/status').then(r=>r.json()).catch(()=>null);
+  if(!ST){ $('m1').textContent='Cannot reach the app server.'; return; }
+  // step 1
+  set('p1', ST.env); $('s1have').style.display=ST.env?'block':'none';
+  $('s1').classList.toggle('open', !ST.env);
+  // step 2
+  const tokOk=ST.tokens.present&&ST.tokens.valid;
+  set('p2', tokOk); $('s2').classList.toggle('open', ST.env&&!tokOk);
+  $('s2have').style.display=tokOk?'block':'none';
+  if(tokOk&&!$('s2have').textContent) $('s2have').textContent='Logged in. (Open this fold again any time you need to re-login.)';
+  if(ST.authUrl) $('authBtn').href=ST.authUrl;
+  // step 3
+  const dimOk=ST.dim.app&&ST.dim.token;
+  set('p3', dimOk); $('s3').classList.toggle('open', tokOk&&!dimOk);
+  $('s3have').style.display=dimOk?'block':'none';
+  $('doneBox').style.display=(ST.env&&tokOk&&dimOk)?'block':'none';
+}
+function set(id,ok){ const p=$(id); p.className='pill '+(ok?'ok':'no'); p.textContent=ok?'DONE':'TO DO'; }
+// clicking a step header re-opens its fold (for re-login / re-connect)
+document.querySelectorAll('.step h2').forEach(h=>h.addEventListener('click',()=>h.parentElement.classList.toggle('open')));
+$('saveKeys').onclick=async()=>{
+  $('m1').className='msg'; $('m1').textContent='Saving…';
+  const r=await fetch('/api/setup/keys',{method:'POST',body:JSON.stringify({apiKey:$('kApi').value,clientId:$('kId').value,clientSecret:$('kSecret').value})}).then(r=>r.json()).catch(e=>({error:e.message}));
+  $('m1').className='msg '+(r.ok?'ok':'err'); $('m1').textContent=r.ok?'Saved.':(r.error||'Failed');
+  refresh();
+};
+$('connectBungie').onclick=async()=>{
+  $('m2').className='msg'; $('m2').textContent='Connecting…';
+  const r=await fetch('/api/setup/bungie',{method:'POST',body:JSON.stringify({pastedUrl:$('pasteUrl').value})}).then(r=>r.json()).catch(e=>({error:e.message}));
+  $('m2').className='msg '+(r.ok?'ok':'err');
+  $('m2').textContent=r.ok?('Connected'+(r.name?(' as '+r.name):'')+' ✓'):(r.error||'Failed');
+  if(r.ok){ $('pasteUrl').value=''; $('s2have').textContent='Logged in'+(r.name?(' as '+r.name):'')+'.'; }
+  refresh();
+};
+$('connectDim').onclick=async()=>{
+  $('m3').className='msg'; $('m3').textContent='Connecting… (a fresh DIM app can take up to a minute)';
+  const r=await fetch('/api/setup/dim',{method:'POST',body:'{}'}).then(r=>r.json()).catch(e=>({error:e.message}));
+  $('m3').className='msg '+(r.ok?'ok':'err'); $('m3').textContent=r.ok?'Connected ✓':(r.error||'Failed');
+  refresh();
+};
+refresh();
+</script>
+</body>
+</html>

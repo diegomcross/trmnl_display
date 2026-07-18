@@ -112,7 +112,17 @@
 - Tag colors: Diego's manual favorites pink, app favorites green.
 - Build Crafter: "take your time making this look good" (2026-07-13).
 
-## 7. Wanted / open (see NEXT_PHASE.md for detail)
+## 7. Sharing the app (2026-07-17)
+
+- Diego's friend gets his OWN copy on his OWN PC — no hosted multi-user version.
+  (Diego's clarified ask: "the app is hosted on his pc, just like mine".)
+- The friend must never need the terminal or hand-edit `.env`: the `/setup`
+  wizard collects everything. Diego shares `.env` + `.dim-app.json` privately
+  (app identity only); each person logs in with their own Bungie account.
+- **Passwords are NEVER typed into the app** — login happens on bungie.net
+  itself (OAuth). This is both the design and a hard line.
+
+## 8. Wanted / open (see NEXT_PHASE.md for detail)
 
 - **Armor auto-tagging** — top wanted feature, BLOCKED: spec with Diego first.
 - **Director/featured-activity weapon tracking** (2026-07-06) — BLOCKED: research +
