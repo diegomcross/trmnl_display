@@ -97,6 +97,7 @@ Core priorities, in his words:
 | `builds.html` | **Build Crafter** (served at `/builds`, in the banner nav): DIM-like loadout maker with stat goals + upgrade watching. Build list (super/exotic icons, prio summary, champion totals vs mins, upgrade chips), full editor (class tabs → element chips → ability/aspect/fragment icon grids with official Bungie art + perktip hover → owned-exotic anchor picker → drag-to-order stat priorities with min/max 0-200), per-build suggestions panel (champion 5-piece strip + explained swap suggestions + tuning notes), DIM-loadout import button. Data: `/api/builds*`, `/api/subclass-catalog`, `/api/armor`. |
 | `CLAUDE.md` | Working rules for agents: never drop features, test before push, and **mandatory upkeep of this file + `docs/NEXT_PHASE.md`**. |
 | `docs/NEXT_PHASE.md` | The pickup point: specs + open questions for upcoming features. |
+| `docs/DIEGO_RULES.md` | **Canonical list of every rule/request Diego has given** (created 2026-07-17 at his ask). Read before changing scoring/tagging/UI; append new rulings immediately with date + verbatim quote. |
 
 ---
 
@@ -441,7 +442,11 @@ Core priorities, in his words:
     (server nulls `wcache`, so scores refresh on next fetch). All client-side in `perk-finder.html`
     (`perkGaps()`/`renderGaps()`/`updateGapBtn()`, `#gapOv` overlay) — computed from the already-
     fetched `/api/weapons` + `/api/watch` + FAV; list is snapshotted on open so rows don't jump
-    away mid-grading. No server change, no restart needed.
+    away mid-grading. No server change, no restart needed. **2026-07-17 fix (Diego: "erroneously
+    you included exotic perks and weapon frames… heavily inflating it"):** the list is restricted
+    to LEGENDARY weapons (tt 5) and to perks present in the curated trait library LIB (the
+    `pc==='frames'` manifest rule from 2026-07-04's "drop exotic perks" ruling) — count 106 → 68.
+    All Diego rulings now live in **`docs/DIEGO_RULES.md`** (created same day at his request).
   - **Perk Finder weapon cards + tag filter (2026-07-05, perk layout redone 2026-07-05 night):** click a
     **Best-Match** weapon (Inventory) → a smart card — perks cols 3/4 **side by side, listed vertically**
     (`.cols2`/`.pool.vert`, same layout as Weapon Watch's tracker; was stacked `.wccol` blocks), rolled perk

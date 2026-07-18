@@ -656,12 +656,21 @@ $('wcard').addEventListener('click',e=>{ if(e.target.id==='wcard') closeCard(); 
 // Vault score. Grading here writes the normal /api/favorites map, so scores update on next fetch.
 function perkGaps(){
   const tracked=new Set(); for(const cfg of Object.values(WATCH||{})) for(const n of Object.keys((cfg&&cfg.perks)||{})) tracked.add(n);
+  // Diego 2026-07-17 fix: the first version counted EVERYTHING in kept weapons' trait columns —
+  // exotic perks, frames, catalyst fluff — inflating the list (106 rows). Restrict to (a) the
+  // curated trait-perk library LIB (buildPerkLibrary already excludes non-trait plugs — the
+  // pc==='frames' manifest rule) and (b) LEGENDARY weapons only (exotics are kept for being
+  // exotic; their fixed perks are not gradable taste signals, and the Auto-Manager never
+  // touches exotics anyway).
+  const lib=new Set(LIB.map(p=>p.n));
   const gaps={};
   for(const w of (WEAPONS.weapons||[])){
     if(!(w.tag==='keep'||w.tag==='favorite')||w.autoFav) continue;
-    const wn=((WEAPONS.defs||{})[w.hash]||{}).n||'';
+    const def=(WEAPONS.defs||{})[w.hash]||{};
+    if(def.tt!==5) continue;
+    const wn=def.n||'';
     for(const col of (w.cols||[])) for(const p of (col||[])){
-      if(!p||!p.n||FAV[p.n]||tracked.has(p.n)) continue;
+      if(!p||!p.n||!lib.has(p.n)||FAV[p.n]||tracked.has(p.n)) continue;
       const g=gaps[p.n]=gaps[p.n]||{n:p.n,count:0,ws:new Set()}; g.count++; if(wn) g.ws.add(wn);
     }
   }

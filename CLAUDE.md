@@ -21,6 +21,11 @@ ship working code, and verify pushes actually landed on GitHub.
 
 ## Mandatory documentation upkeep (do this every session)
 
+**`docs/DIEGO_RULES.md` is the canonical list of every rule and request Diego has
+ever given (created 2026-07-17 at his ask, recovered from code/docs/git history).
+Read it BEFORE changing scoring, tagging, or UI behavior; append every new Diego
+ruling to it the moment he states one — date + verbatim quote.**
+
 Before you finish any work session, update **both** docs so a brand-new agent
 with zero conversation context can pick up exactly where you left off:
 
