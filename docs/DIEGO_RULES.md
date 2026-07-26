@@ -76,6 +76,13 @@
 
 ## 4. Armor (2026-07-12 rules — commit a6320bd)
 
+> **`docs/ARMOR_ENGINE_VISION.md` is the loyal, verbatim-only record of everything Diego
+> has stated the armor-vault/build-crafting engine to be** — his words, in order, with
+> zero interpretation mixed in (created 2026-07-26 at his ask, after he felt the
+> interpretive summaries below were drifting from what he actually said). Read that file
+> first for the raw vision; the bullets below are this file's usual interpreted-summary
+> style layered on top of it.
+
 - **3 ordered exotic favorite stats** per exotic, weighted 3/2/1 sum, math shown on
   the card.
 - **Armor 2.0 legacy = junk always.**
