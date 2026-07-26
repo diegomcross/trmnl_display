@@ -276,7 +276,7 @@ function renderList(){
           · ${b.prio.slice(0,3).map(k=>STATN[k]).join(' › ')}…</div>
         ${T?`<div class="meters">${b.prio.slice(0,4).map(k=>{
           const v=T[k]||0,min=b.min[k]||0;
-          return `<div class="meter"><div class="ml"><span>${statIco(k)}${STATN[k]}</span><b class="${min?(v>=min?'met':'unmet'):''}">${v}${min?'<span style="color:var(--dim);font-weight:400">/'+min+'</span>':''}</b></div>
+          return `<div class="meter"><div class="ml"><span>${STATN[k]}</span><b class="${min?(v>=min?'met':'unmet'):''}">${v}${min?'<span style="color:var(--dim);font-weight:400">/'+min+'</span>':''}</b></div>
             <div class="mtrack"><div class="mfill" style="width:${Math.min(100,v/2)}%"></div>${min?`<div class="mmin" style="left:${Math.min(100,min/2)}%"></div>`:''}</div></div>`;
         }).join('')}</div>`:''}
         <div class="chiprow">
