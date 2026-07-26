@@ -628,13 +628,61 @@ Core priorities, in his words:
       **`loadClarity` now also builds `byItem`** (Clarity's `itemName` — how exotic ARMOR
       insight is keyed by the armor's own name, not its intrinsic perk); the cache shape
       gained `byItem` — old caches without it auto-refresh. fetchArmor emits `icon` per
-      piece. **Set-bonus selection per build** (`setBonus:{name,want:0|2|4}`, sets list from
-      /api/armor's owned-sets map, 2pc/4pc descriptions shown): 4pc locks the four
+      piece. **Set-bonus selection per build** (superseded 2026-07-26, see below —
+      originally single-select `setBonus:{name,want:0|2|4}`): 4pc locks the four
       non-exotic slots to set pieces (gap chip when a slot has none), 2pc converts the two
       cheapest slots; suggestion candidates respect locked slots. "Delete all DIM drafts"
       button (`POST /api/builds/delete {drafts:true}`). CSS gotcha that broke the first
       modal render: tile frames were `<span>`s — width/height silently ignored on inline
       elements; every sized span needs `display:block`.
+    - **Multi-select set bonus + stat-icon sliders + badge-clipping fix (2026-07-26).**
+      Diego: single-set dropdown wasn't enough ("let me select as many armor sets as I
+      wanted"), "watch drops" had no tooltip, min/max sliders were two separate bars with
+      no stat glyphs, and icons looked "misaligned/sloppy." All shipped, verified on an
+      isolated 8799 instance + real browser (0 console errors):
+      - **`setBonus` is now an array** of `{name,want:2|4}` (was a single object) — a build
+        can target several sets at once. `normalizeSetBonus`/`setBonusList`/
+        `buildSetVariants` in vault-verdict.js tolerate BOTH the old single-object shape
+        (already-saved builds) and the new array everywhere setBonus is read, so no data
+        migration was needed. `championSet(build, items, sb)` now takes `sb` as an
+        explicit param instead of deriving it from `build.setBonus` internally.
+      - **Sets never compete (Diego's AskUserQuestion pick: "show all as separate options,
+        no auto-pick")** — `/api/builds/suggestions` and the background watcher
+        (`checkBuilds`) both loop `buildSetVariants(build)` and compute one full
+        `championSet` + suggestion list PER selected set (or one "no set preference"
+        variant if none selected). Response shape changed: `outB[build.id]` is now
+        `{variants:[{setName,want,champion,suggestions}]}` (was flat `{champion,
+        suggestions}`) — `builds.html` renders each variant as its own "current best set"
+        block, stacked. Background watcher's seen-keys gained the variant into the key
+        (`buildId:rev:setName:want:candId`) so a piece is evaluated once per set-variant,
+        not just once per build.
+      - **Set bonus UI** (`builds.html`): single dropdown → filterable checkbox list
+        (`#sbFilter` + `.setrow` per known set, Off/2pc/4pc chips) showing every set from
+        `ARMOR.sets`. Filtering is a live DOM show/hide (`applySetFilter`), NOT a
+        re-render, so typing doesn't steal focus from the input.
+      - **Real stat icons:** manifest slimming now captures
+        `DestinyStatDefinition.displayProperties.icon` per stat (keyed by the existing
+        `STAT` hash→letter map) as `MANIFEST.statIcons`; served via
+        `GET /api/subclass-catalog` → `{catalog,insights,statIcons}`. Older cached
+        manifests get it patched in-place (small `DestinyStatDefinition`-only fetch,
+        mirrors the existing `sets.src` patch) rather than forcing a full manifest
+        re-download. `builds.html`'s `statIco(k)` renders the `<img>` next to stat names.
+      - **Combined min/max slider:** the old two-separate-`<input type=range>` layout
+        became one `.dualrange` — two range inputs absolutely stacked on the same track,
+        each thumb's own `::-webkit-slider-thumb`/`::-moz-range-thumb` set
+        `pointer-events:auto` while the input itself is `pointer-events:none`, so only the
+        thumb graphics are draggable and they don't fight each other. `sync()` clamps so
+        min can't pass max and vice versa (pushes the other handle along) and updates a
+        `.fill` div's `left`/`width` percentage live while dragging.
+      - **Checkmark badge clipping bug, root cause found:** the ✓ badge on selected
+        ability/perk/exotic tiles was a `::after` pseudo-element positioned
+        `top:-7px;right:-7px` INSIDE `.fr`/`.pk2 .fr` — but that same element has
+        `overflow:hidden` (needed to clip the `object-fit:cover` art), which silently
+        chopped off the top half of every badge (looked like a stray orange sliver, not a
+        checkmark). Fixed by moving the badge to a real sibling `<span class="badge">`
+        outside `.fr`, positioned absolutely relative to the button itself (which has no
+        overflow:hidden) — same fix applied to both `.pk2` (ability/perk grids) and
+        `.xpick` (exotic picker).
     - **DIM import (`dimReadLoadouts` — components=loadouts, separate from dimReadTags;
       `importDimLoadouts`):** maps DIM loadouts → **drafts** (watch OFF until Diego finishes
       + saves): subclass plugs classified BY pc (totems/trinkets fold to aspects/fragments),

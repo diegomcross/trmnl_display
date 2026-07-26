@@ -145,6 +145,15 @@ async function loadManifest(e) {
       fs.writeFileSync(cacheFile, JSON.stringify(MANIFEST));
       console.log(`Patched drop sources onto ${Object.keys(srcs).length} sets.`);
     }
+    if (!MANIFEST.statIcons) { // patch older caches missing stat glyph icons (small fetch only)
+      const paths = meta.jsonWorldComponentContentPaths.en;
+      const statsRaw = await fetch(`https://www.bungie.net${paths.DestinyStatDefinition}`).then((r) => r.json());
+      const statIcons = {};
+      for (const [h, d] of Object.entries(statsRaw)) if (STAT[h] && d.displayProperties?.icon) statIcons[STAT[h]] = d.displayProperties.icon;
+      MANIFEST.statIcons = statIcons;
+      fs.writeFileSync(cacheFile, JSON.stringify(MANIFEST));
+      console.log(`Patched stat icons onto manifest cache.`);
+    }
     return MANIFEST;
   }
   console.log(`Downloading manifest ${version} (one-time, the item table is a few hundred MB)...`);
@@ -234,10 +243,13 @@ async function loadManifest(e) {
   }
 
   const statNames = {};
-  for (const [h, d] of Object.entries(statsRaw))
+  const statIcons = {};
+  for (const [h, d] of Object.entries(statsRaw)) {
     if (d.displayProperties?.name) statNames[h] = d.displayProperties.name;
+    if (STAT[h] && d.displayProperties?.icon) statIcons[STAT[h]] = d.displayProperties.icon;
+  }
 
-  MANIFEST = { version, items: slimItems, sets: slimSets, plugSets: slimPlugSets, statNames };
+  MANIFEST = { version, items: slimItems, sets: slimSets, plugSets: slimPlugSets, statNames, statIcons };
   fs.writeFileSync(cacheFile, JSON.stringify(MANIFEST));
   for (const f of fs.readdirSync(CACHE_DIR)) if (f !== path.basename(cacheFile)) fs.unlinkSync(path.join(CACHE_DIR, f));
   console.log(`Manifest slimmed + cached (${Object.keys(slimItems).length} defs, ${Object.keys(slimPlugSets).length} trait plug sets).`);
@@ -1467,6 +1479,15 @@ const BUILDS_FILE = path.join(__dirname, 'builds.json');
 const loadBuilds = () => { const b = loadJson(BUILDS_FILE); return (b && Array.isArray(b.builds)) ? b.builds : []; };
 const saveBuilds = (builds) => saveJsonSafe(BUILDS_FILE, { v: 1, builds });
 const STATKEYS = ['w', 'h', 'c', 'g', 's', 'm'];
+// setBonus is an array of {name, want:2|4} — a build can name several sets it's willing to
+// chase (2026-07-26, Diego: "let me select as many armor sets as I wanted"). Old saved builds
+// stored a single {name,want} object; tolerate both shapes everywhere this is read.
+function normalizeSetBonus(raw) {
+  const arr = Array.isArray(raw) ? raw : (raw && raw.name ? [raw] : []);
+  return arr.filter((s) => s && s.name && (s.want === 2 || s.want === 4)).map((s) => ({ name: s.name, want: s.want }));
+}
+const setBonusList = (build) => normalizeSetBonus(build.setBonus);
+const buildSetVariants = (build) => { const list = setBonusList(build); return list.length ? list : [null]; };
 function upsertBuild(input) {
   const builds = loadBuilds();
   const now = new Date().toISOString();
@@ -1481,7 +1502,7 @@ function upsertBuild(input) {
   }
   for (const k of ['name', 'cls', 'classType', 'elem', 'plugs', 'exotic', 'prio', 'min', 'max', 'setBonus', 'watch', 'draft', 'notes']) if (k in input) b[k] = input[k];
   b.plugs = b.plugs || { super: 0, grenade: 0, melee: 0, classAbility: 0, movement: 0, aspects: [], fragments: [] };
-  b.setBonus = b.setBonus || { name: '', want: 0 };   // want: 0=off, 2=2-piece, 4=4-piece
+  b.setBonus = normalizeSetBonus(b.setBonus);   // array of {name, want:2|4} — a build can target several sets
   b.prio = Array.isArray(b.prio) && b.prio.length === 6 ? b.prio : STATKEYS.slice();
   b.min = b.min || {}; b.max = b.max || {};
   for (const k of STATKEYS) { b.min[k] = Math.max(0, Math.min(200, +b.min[k] || 0)); b.max[k] = Math.max(0, Math.min(200, +(b.max[k] ?? 200))); }
@@ -1506,12 +1527,12 @@ const setTotals = (pieces) => { const T = {}; STATKEYS.forEach((k) => { T[k] = p
 const cappedScore = (T, build, W) => STATKEYS.reduce((sum, k) => sum + W[k] * Math.min(T[k] || 0, build.max[k] ?? 200), 0);
 const minDeficit = (T, build) => STATKEYS.reduce((sum, k) => sum + Math.max(0, (build.min[k] || 0) - (T[k] || 0)), 0);
 
-function championSet(build, items) {
+function championSet(build, items, sb) {
   const W = weightOf(build);
   const pool = items.filter((i) => i.cls === build.cls && ARMOR_SLOTS.includes(i.slot));
   const slots = {}; let exoticMissing = false;
   const exSlot = build.exotic?.slot || '';
-  const sb = (build.setBonus && build.setBonus.name && build.setBonus.want) ? build.setBonus : null;
+  sb = (sb && sb.name && sb.want) ? sb : null;
   const bestIn = (cands) => cands.slice().sort((a, b) => pieceScoreB(b, W) - pieceScoreB(a, W))[0] || null;
   const setGaps = [], lockedSetSlots = new Set();
   for (const slot of ARMOR_SLOTS) {
@@ -1583,7 +1604,7 @@ function tuneNoteFor(build, cand) {
   return '';
 }
 
-function buildAlertEntry(build, champ, cand, r) {
+function buildAlertEntry(build, champ, cand, r, sb) {
   const cur = champ.slots[cand.slot];
   const deltas = {}, lines = [];
   for (const k of build.prio) {
@@ -1595,7 +1616,7 @@ function buildAlertEntry(build, champ, cand, r) {
     lines.push(`${STATN_B[k]} ${a}→${b}${goal}`);
   }
   return {
-    at: Date.now(), buildId: build.id, buildName: build.name, id: cand.id, name: cand.n, slot: cand.slot,
+    at: Date.now(), buildId: build.id, buildName: build.name, setName: sb ? sb.name : '', id: cand.id, name: cand.n, slot: cand.slot,
     swapOut: cur ? cur.n : '', swapOutId: cur ? cur.id : '', deltas,
     text: `Swap '${cur ? cur.n : '(empty slot)'}' for '${cand.n}' in ${cand.slot}: ${lines.join(' · ') || 'stat mix improves'} — ${r.why}.`,
     tuneNote: tuneNoteFor(build, cand), read: false, fresh: false,
@@ -1917,7 +1938,7 @@ async function main() {
         for (const d of Object.values(man.items)) if (d.it === 2 && d.tt === 6 && d.n && !insights[d.n]) {
           const b = insightBullets(d.n); if (b && b.length) insights[d.n] = b;
         }
-        return json({ catalog: cat, insights });
+        return json({ catalog: cat, insights, statIcons: man.statIcons || {} });
       }
       if (req.url.startsWith('/api/builds/delete') && req.method === 'POST') {
         const { id, drafts } = JSON.parse(await readBody(req) || '{}');
@@ -1939,20 +1960,26 @@ async function main() {
         const armor = cache.items, outB = {};
         for (const build of loadBuilds()) {
           if ((bid && build.id !== bid) || !build.exotic?.hash) continue;
-          const champ = championSet(build, armor);
-          const suggestions = [];
-          for (const cand of armor) {
-            if (cand.cls !== build.cls || !ARMOR_SLOTS.includes(cand.slot)) continue;
-            const r = isUpgrade(build, champ, cand);
-            if (r) suggestions.push(buildAlertEntry(build, champ, cand, r));
-          }
-          outB[build.id] = {
-            champion: {
-              slots: Object.fromEntries(Object.entries(champ.slots).map(([s, p]) => [s, p ? { id: p.id, n: p.n, s: p.s, t: p.t, tune: p.tune, tuneKind: p.tuneKind, x: p.x } : null])),
-              totals: champ.T, deficit: champ.deficit, exoticMissing: champ.exoticMissing, setGaps: champ.setGaps || [],
-            },
-            suggestions,
-          };
+          // one variant per selected set bonus (or a single "no set preference" variant) —
+          // sets never compete, each is shown as its own independent option (Diego 2026-07-26)
+          const variants = buildSetVariants(build).map((sb) => {
+            const champ = championSet(build, armor, sb);
+            const suggestions = [];
+            for (const cand of armor) {
+              if (cand.cls !== build.cls || !ARMOR_SLOTS.includes(cand.slot)) continue;
+              const r = isUpgrade(build, champ, cand);
+              if (r) suggestions.push(buildAlertEntry(build, champ, cand, r, sb));
+            }
+            return {
+              setName: sb ? sb.name : '', want: sb ? sb.want : 0,
+              champion: {
+                slots: Object.fromEntries(Object.entries(champ.slots).map(([s, p]) => [s, p ? { id: p.id, n: p.n, s: p.s, t: p.t, tune: p.tune, tuneKind: p.tuneKind, x: p.x } : null])),
+                totals: champ.T, deficit: champ.deficit, exoticMissing: champ.exoticMissing, setGaps: champ.setGaps || [],
+              },
+              suggestions,
+            };
+          });
+          outB[build.id] = { variants };
         }
         return json({ builds: outB });
       }
@@ -2496,28 +2523,31 @@ async function main() {
       const isFresh = (id) => !!prevArmorIds && !prevArmorIds.has(id);
       let dirtySeen = false, dirtyAlerts = false;
       for (const build of builds) {
-        const champ = championSet(build, armor);
-        for (const cand of armor) {
-          if (cand.cls !== build.cls || !ARMOR_SLOTS.includes(cand.slot)) continue;
-          const key = `${build.id}:${build.rev || 1}:${cand.id}`;
-          if (seen[key]) continue;
-          seen[key] = Date.now(); dirtySeen = true;   // evaluated once per piece+build+rev, hit or miss
-          const r = isUpgrade(build, champ, cand);
-          if (!r) continue;
-          const entry = buildAlertEntry(build, champ, cand, r);
-          entry.fresh = isFresh(cand.id);
-          alerts.push(entry); dirtyAlerts = true;
-          console.log(`[build] ${entry.fresh ? 'FRESH ' : ''}${build.name}: ${entry.text}`);
-          if (entry.fresh && gameUp) {   // brand-new drop while playing → panel alert + chime
-            try {
-              fs.writeFileSync(DROP_ALERT_FILE, JSON.stringify({
-                until: Date.now() + 60000, title: 'ARMOR UPGRADE',
-                weapon: cand.n, ty: `${build.name} · ${cand.slot}`, power: cand.pwr, pct: 0,
-                perks: [entry.text.slice(0, 140)], mw: '',
-                stats: build.prio.slice(0, 3).map((k) => ({ n: STATN_B[k], v: `${champ.T[k] || 0}→${r.T2[k] || 0}` })),
-              }));
-              beepUpgrade();
-            } catch {}
+        for (const sb of buildSetVariants(build)) {
+          const champ = championSet(build, armor, sb);
+          const variantTag = sb ? `${sb.name}:${sb.want}` : 'none';
+          for (const cand of armor) {
+            if (cand.cls !== build.cls || !ARMOR_SLOTS.includes(cand.slot)) continue;
+            const key = `${build.id}:${build.rev || 1}:${variantTag}:${cand.id}`;
+            if (seen[key]) continue;
+            seen[key] = Date.now(); dirtySeen = true;   // evaluated once per piece+build+rev+set-variant, hit or miss
+            const r = isUpgrade(build, champ, cand);
+            if (!r) continue;
+            const entry = buildAlertEntry(build, champ, cand, r, sb);
+            entry.fresh = isFresh(cand.id);
+            alerts.push(entry); dirtyAlerts = true;
+            console.log(`[build] ${entry.fresh ? 'FRESH ' : ''}${build.name}${sb ? ' (' + sb.name + ')' : ''}: ${entry.text}`);
+            if (entry.fresh && gameUp) {   // brand-new drop while playing → panel alert + chime
+              try {
+                fs.writeFileSync(DROP_ALERT_FILE, JSON.stringify({
+                  until: Date.now() + 60000, title: 'ARMOR UPGRADE',
+                  weapon: cand.n, ty: `${build.name}${sb ? ' · ' + sb.name : ''} · ${cand.slot}`, power: cand.pwr, pct: 0,
+                  perks: [entry.text.slice(0, 140)], mw: '',
+                  stats: build.prio.slice(0, 3).map((k) => ({ n: STATN_B[k], v: `${champ.T[k] || 0}→${r.T2[k] || 0}` })),
+                }));
+                beepUpgrade();
+              } catch {}
+            }
           }
         }
       }

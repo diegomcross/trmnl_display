@@ -73,20 +73,41 @@ input[type=number]{background:rgba(0,0,0,.35);border:1px solid rgba(255,255,255,
 .abico img{width:100%;height:100%;object-fit:cover;display:block}
 .abico.emptyab{border-style:dashed;display:grid;place-items:center;color:var(--dim);font-size:14px}
 .abico.frag{width:38px;height:38px}
+/* stat icons (real in-game glyphs from the manifest) */
+.staticon{width:15px;height:15px;object-fit:contain;vertical-align:-3px;margin-right:5px;flex:0 0 auto}
 /* stat goal rows */
-.statrow{display:grid;grid-template-columns:24px 24px 92px 1fr 1fr 70px;gap:10px;align-items:center;
+.statrow{display:grid;grid-template-columns:22px 24px 20px 84px 1fr 132px 58px;gap:10px;align-items:center;
   padding:9px 12px;border:1px solid rgba(255,255,255,.08);background:rgba(0,0,0,.25);margin-bottom:5px;cursor:grab}
 .statrow.dragging{opacity:.35;border-color:var(--gold)}
 .statrow .grip{color:var(--dim);font-size:14px}
 .statrow .rank{color:var(--el);font-weight:800;font-variant-numeric:tabular-nums}
+.statrow .sicon{display:flex;align-items:center;justify-content:center}
+.statrow .sicon .staticon{margin-right:0;width:17px;height:17px}
 .statrow .sname{font-weight:700;letter-spacing:.02em}
-.sctl{display:flex;align-items:center;gap:8px}
-.sctl .t{font-size:9px;color:var(--dim);text-transform:uppercase;width:24px}
-.sctl input[type=range]{flex:1;-webkit-appearance:none;appearance:none;height:3px;background:rgba(255,255,255,.14);cursor:pointer;min-width:70px}
-.sctl input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:13px;background:var(--el);border:1px solid #000;cursor:pointer}
-.sctl input[type=range]::-moz-range-thumb{width:13px;height:13px;background:var(--el);border:1px solid #000;border-radius:0;cursor:pointer}
+/* combined min+max dual-handle slider — one track, two thumbs */
+.dualrange{position:relative;height:22px;min-width:120px}
+.dualrange .track{position:absolute;top:50%;left:0;right:0;height:3px;background:rgba(255,255,255,.14);transform:translateY(-50%)}
+.dualrange .fill{position:absolute;top:50%;height:3px;background:var(--el);opacity:.85;transform:translateY(-50%)}
+.dualrange input[type=range]{position:absolute;top:0;left:0;width:100%;height:22px;margin:0;background:none;
+  -webkit-appearance:none;appearance:none;pointer-events:none}
+.dualrange input[type=range]::-webkit-slider-runnable-track{background:transparent;height:22px}
+.dualrange input[type=range]::-moz-range-track{background:transparent;height:22px;border:none}
+.dualrange input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;pointer-events:auto;width:13px;height:13px;
+  margin-top:4.5px;background:var(--el);border:1px solid #000;cursor:pointer}
+.dualrange input[type=range]::-moz-range-thumb{pointer-events:auto;width:13px;height:13px;background:var(--el);
+  border:1px solid #000;border-radius:0;cursor:pointer}
+.dualrange input.rmax{z-index:3}
+.mmnum{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--dim)}
+.mmnum input[type=number]{width:52px;padding:5px 4px;text-align:center}
 .nowv{font-size:11.5px;color:var(--keep);text-align:right;font-variant-numeric:tabular-nums}
-@media(max-width:760px){.statrow{grid-template-columns:20px 20px 76px 1fr;row-gap:6px}.statrow .sctl:nth-of-type(2){grid-column:3/5}.nowv{grid-column:4;text-align:left}}
+@media(max-width:820px){.statrow{grid-template-columns:18px 20px 18px 70px 1fr;row-gap:6px}
+  .statrow .mmnum{grid-column:1/6}.statrow .nowv{grid-column:1/6;text-align:left}}
+/* multi-select set bonus list */
+.setlist{max-height:280px;overflow-y:auto;display:flex;flex-direction:column;border:1px solid rgba(255,255,255,.08)}
+.setrow{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:8px 10px;border-bottom:1px solid rgba(255,255,255,.06)}
+.setrow:last-child{border-bottom:none}
+.setname{flex:1;min-width:150px;font-size:12.5px;font-weight:600}
+.setrow .setdesc{flex-basis:100%;margin-top:0}
 /* element tabs */
 .eltabs{display:flex;gap:6px;flex-wrap:wrap}
 .eltab{background:rgba(0,0,0,.35);border:1px solid rgba(255,255,255,.16);color:var(--mut);padding:7px 14px;cursor:pointer;
@@ -105,12 +126,16 @@ input[type=number]{background:rgba(0,0,0,.35);border:1px solid rgba(255,255,255,
 .msec h4{font-size:10.5px;color:var(--el);text-transform:uppercase;letter-spacing:.12em;margin-bottom:8px;display:flex;gap:10px;align-items:baseline}
 .msec h4 small{color:var(--dim);letter-spacing:.03em;text-transform:none;font-size:10.5px}
 .pgrid{display:flex;gap:10px;flex-wrap:wrap}
-.pk2{width:66px;cursor:pointer;background:none;border:none;padding:0;font-family:inherit}
+.pk2{width:66px;cursor:pointer;background:none;border:none;padding:0;font-family:inherit;position:relative}
 .pk2 .fr{display:block;overflow:hidden;width:58px;height:58px;margin:0 auto;border:1px solid rgba(255,255,255,.18);background:#0a0c0d;position:relative;transition:box-shadow .12s,border-color .12s}
 .pk2 .fr img{width:100%;height:100%;object-fit:cover;display:block;opacity:.82}
 .pk2:hover .fr img{opacity:1}
 .pk2.on .fr{border-color:var(--el);box-shadow:0 0 0 1px var(--el),0 0 14px color-mix(in srgb,var(--el) 60%,transparent)}
-.pk2.on .fr::after{content:'✓';position:absolute;top:-7px;right:-7px;width:16px;height:16px;background:var(--el);color:#000;font-size:11px;font-weight:800;display:grid;place-items:center}
+/* badge sits OUTSIDE .fr (not a ::after inside it) — .fr has overflow:hidden for the cover
+   image, which was clipping the top half of an ::after badge positioned at top:-7px */
+.pk2 .badge{position:absolute;top:-6px;right:4px;width:16px;height:16px;background:var(--el);color:#000;
+  font-size:11px;font-weight:800;line-height:1;display:none;align-items:center;justify-content:center;z-index:2}
+.pk2.on .badge{display:flex}
 .pk2.on .fr img{opacity:1}
 .pk2 .nm2{display:block;font-size:9.5px;color:var(--mut);margin-top:4px;text-align:center;line-height:1.25;max-height:24px;overflow:hidden}
 .pk2.on .nm2{color:var(--ink)}
@@ -118,12 +143,15 @@ input[type=number]{background:rgba(0,0,0,.35);border:1px solid rgba(255,255,255,
 .pk2.sm{width:54px}.pk2.sm .fr{width:46px;height:46px}
 /* exotic modal tiles */
 .xg{display:flex;gap:12px;flex-wrap:wrap}
-.xpick{width:96px;cursor:pointer;background:none;border:none;padding:0;font-family:inherit}
+.xpick{width:96px;cursor:pointer;background:none;border:none;padding:0;font-family:inherit;position:relative}
 .xpick .fr{display:block;overflow:hidden;width:72px;height:72px;margin:0 auto;border:1.5px solid #6a5a1e;background:#0a0c0d;position:relative}
 .xpick .fr img{width:100%;height:100%;object-fit:cover;display:block}
 .xpick:hover .fr{border-color:var(--gold)}
 .xpick.on .fr{border-color:var(--gold);box-shadow:0 0 0 1px var(--gold),0 0 16px rgba(205,174,50,.5)}
-.xpick.on .fr::after{content:'✓';position:absolute;top:-7px;right:-7px;width:16px;height:16px;background:var(--gold);color:#000;font-size:11px;font-weight:800;display:grid;place-items:center}
+/* badge sits OUTSIDE .fr — see .pk2 .badge comment above for why */
+.xpick .badge{position:absolute;top:-6px;right:12px;width:16px;height:16px;background:var(--gold);color:#000;
+  font-size:11px;font-weight:800;line-height:1;display:none;align-items:center;justify-content:center;z-index:2}
+.xpick.on .badge{display:flex}
 .xpick .nm2{display:block;font-size:9.5px;color:var(--mut);margin-top:4px;text-align:center;line-height:1.25}
 .xpick.on .nm2{color:var(--gold)}
 .xpick .sl{display:block;font-size:8.5px;color:var(--dim);text-align:center}
@@ -173,10 +201,13 @@ const esc=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'
 const BN='https://www.bungie.net';
 const STATKEYS=['w','h','c','g','s','m'];
 const STATN={w:'Weapons',h:'Health',c:'Class',g:'Grenade',s:'Super',m:'Melee'};
+const statIco=(k,cls)=>STATICONS[k]?`<img class="staticon ${cls||''}" src="${BN}${STATICONS[k]}" alt="${STATN[k]}" title="${STATN[k]}">`:'';
+// setBonus is an array of {name,want:2|4} — tolerate old single-object saves too
+const normSetBonus=raw=>{ const arr=Array.isArray(raw)?raw:(raw&&raw.name?[raw]:[]); return arr.filter(s=>s&&s.name&&(s.want===2||s.want===4)); };
 const ELEMS=[['arc','Arc'],['solar','Solar'],['void','Void'],['stasis','Stasis'],['strand','Strand'],['prism','Prismatic']];
 const ELCOL={arc:'#7aecf3',solar:'#f1631d',void:'#a777c5',stasis:'#4d88ff',strand:'#35e366',prism:'#d9b3ff'};
 const SLOTS=['Helmet','Gauntlets','Chest','Leg','Class Item'];
-let BUILDS=[], CAT=null, INSIGHTS={}, ARMOR=null, SUG={}, edit=null, openSug=new Set();
+let BUILDS=[], CAT=null, INSIGHTS={}, ARMOR=null, SUG={}, edit=null, openSug=new Set(), STATICONS={}, setFilter='';
 
 function tipInit(){
   if(!window.PerkTip||!CAT) return;
@@ -193,7 +224,7 @@ async function load(){
       fetch('/api/armor').then(r=>r.json()),
     ]);
     BUILDS=b.builds||[];
-    if(c){ CAT=c.catalog||c; INSIGHTS=c.insights||{}; }
+    if(c){ CAT=c.catalog||c; INSIGHTS=c.insights||{}; STATICONS=c.statIcons||{}; }
     ARMOR=a;
     tipInit();
     $('status').textContent=`${BUILDS.length} build${BUILDS.length===1?'':'s'}`;
@@ -229,8 +260,11 @@ function renderList(){
     const sup=plugOf(b,'supers',b.plugs.super);
     const exo=exoOf(b);
     const sug=SUG[b.id];
-    const nSug=sug?sug.suggestions.length:0;
-    const T=sug?sug.champion.totals:null;
+    const variants=sug?sug.variants:null;
+    const nSug=variants?variants.reduce((n,v)=>n+v.suggestions.length,0):0;
+    const v0=variants?variants[0]:null;
+    const T=v0?v0.champion.totals:null;
+    const selSets=normSetBonus(b.setBonus);
     return `<div class="bcard" style="--el:${col}">
       <div class="sdia">${sup?`<img src="${BN}${sup.icon}" alt="" loading="lazy" data-pn="${esc(sup.n)}">`:''}</div>
       <div class="xtile ${exo?'':'empty'}" ${exo?`data-pn="${esc(exo.n)}"`:''} title="${exo?esc(exo.n):'no exotic picked'}">${exo&&exo.icon?`<img src="${BN}${exo.icon}" alt="" loading="lazy">`:(exo?'':'NO<br>EXOTIC')}</div>
@@ -238,11 +272,11 @@ function renderList(){
         <div class="bname">${esc(b.name||'(unnamed build)')}</div>
         <div class="bmeta">${b.cls} · <span class="elname" style="color:${col}">${elName(b.elem)}</span>
           ${exo?` · ${esc(exo.n)}`:b.exotic?.hash?' · exotic not owned':''}
-          ${b.setBonus&&b.setBonus.want?` · ${b.setBonus.want}pc ${esc(b.setBonus.name)}`:''}
+          ${selSets.length?` · ${selSets.length} set target${selSets.length>1?'s':''}`:''}
           · ${b.prio.slice(0,3).map(k=>STATN[k]).join(' › ')}…</div>
         ${T?`<div class="meters">${b.prio.slice(0,4).map(k=>{
           const v=T[k]||0,min=b.min[k]||0;
-          return `<div class="meter"><div class="ml"><span>${STATN[k]}</span><b class="${min?(v>=min?'met':'unmet'):''}">${v}${min?'<span style="color:var(--dim);font-weight:400">/'+min+'</span>':''}</b></div>
+          return `<div class="meter"><div class="ml"><span>${statIco(k)}${STATN[k]}</span><b class="${min?(v>=min?'met':'unmet'):''}">${v}${min?'<span style="color:var(--dim);font-weight:400">/'+min+'</span>':''}</b></div>
             <div class="mtrack"><div class="mfill" style="width:${Math.min(100,v/2)}%"></div>${min?`<div class="mmin" style="left:${Math.min(100,min/2)}%"></div>`:''}</div></div>`;
         }).join('')}</div>`:''}
         <div class="chiprow">
@@ -250,8 +284,8 @@ function renderList(){
           ${b.draft?'<span class="chip warn">draft — finish &amp; save</span>':''}
           ${b.src==='dim'?'<span class="chip">from DIM</span>':''}
           ${nSug?`<span class="chip alert">${nSug} upgrade${nSug>1?'s':''}</span>`:''}
-          ${sug&&sug.champion.exoticMissing?'<span class="chip warn">exotic not in vault</span>':''}
-          ${sug&&sug.champion.setGaps&&sug.champion.setGaps.length?`<span class="chip warn">set gap: ${esc(String(sug.champion.setGaps[0]))}</span>`:''}
+          ${v0&&v0.champion.exoticMissing?'<span class="chip warn">exotic not in vault</span>':''}
+          ${v0&&v0.champion.setGaps&&v0.champion.setGaps.length?`<span class="chip warn">set gap: ${esc(String(v0.champion.setGaps[0]))}</span>`:''}
         </div>
       </div>
       <div class="bacts">
@@ -263,10 +297,8 @@ function renderList(){
   }).join('');
 }
 
-function renderSug(b){
-  const sug=SUG[b.id];
-  if(!sug) return '<p class="note">No suggestion data yet — pick the exotic anchor first.</p>';
-  const ch=sug.champion;
+function renderVariant(b,v){
+  const ch=v.champion;
   const strip=SLOTS.map(slot=>{
     const p=ch.slots[slot];
     if(!p) return `<div class="cpiece miss">${slot}: none${slot===b.exotic?.slot?' (exotic missing)':''}</div>`;
@@ -276,26 +308,32 @@ function renderSug(b){
       <div class="cs">${slot} · T${p.t} · ${b.prio.slice(0,2).map(k=>`${STATN[k].slice(0,3)} ${p.s[k]||0}`).join(' · ')}</div>
       ${p.tune?`<div class="ct">${esc(p.tune)}</div>`:''}</div></div>`;
   }).join('');
-  const suggs=sug.suggestions.length?sug.suggestions.slice(0,20).map(x=>`<div class="sugg ${x.fresh?'fresh':''}">
+  const suggs=v.suggestions.length?v.suggestions.slice(0,20).map(x=>`<div class="sugg ${x.fresh?'fresh':''}">
       ${x.fresh?'<div class="fb">NEW DROP</div>':''}<div>${esc(x.text)}</div>
       ${x.tuneNote?`<div class="tn">${esc(x.tuneNote)}</div>`:''}
-    </div>`).join('')+(sug.suggestions.length>20?`<p class="note">…and ${sug.suggestions.length-20} more.</p>`:'')
+    </div>`).join('')+(v.suggestions.length>20?`<p class="note">…and ${v.suggestions.length-20} more.</p>`:'')
     :'<p class="note">No upgrades in the vault right now — your current best set stands.</p>';
   return `<div style="border-top:1px solid rgba(255,255,255,.08);margin-top:10px;padding-top:10px">
-    <h3 style="font-size:10.5px;color:var(--dim);text-transform:uppercase;letter-spacing:.1em;margin-bottom:6px">Current best set</h3>
+    <h3 style="font-size:10.5px;color:var(--dim);text-transform:uppercase;letter-spacing:.1em;margin-bottom:6px">
+      ${v.setName?`${esc(v.setName)} · ${v.want}pc`:'No set preference'} — current best set</h3>
     <div class="champ">${strip}</div>
-    <div class="totrow">${b.prio.map(k=>{const v=ch.totals[k]||0,min=b.min[k]||0;return `<span>${STATN[k]} <b class="${min?(v>=min?'met':'unmet'):''}">${v}</b>${min?`<span class="count">/${min}</span>`:''}</span>`;}).join('')}</div>
+    <div class="totrow">${b.prio.map(k=>{const val=ch.totals[k]||0,min=b.min[k]||0;return `<span>${statIco(k)}${STATN[k]} <b class="${min?(val>=min?'met':'unmet'):''}">${val}</b>${min?`<span class="count">/${min}</span>`:''}</span>`;}).join('')}</div>
     <h3 style="font-size:10.5px;color:var(--dim);text-transform:uppercase;letter-spacing:.1em;margin:8px 0 6px">Upgrade suggestions</h3>
     ${suggs}
-    <button class="btn sm mut" data-ack="${b.id}">Mark reviewed</button>
   </div>`;
+}
+function renderSug(b){
+  const sug=SUG[b.id];
+  if(!sug||!sug.variants) return '<p class="note">No suggestion data yet — pick the exotic anchor first.</p>';
+  return sug.variants.map(v=>renderVariant(b,v)).join('')
+    +`<button class="btn sm mut" data-ack="${b.id}" style="margin-top:8px">Mark reviewed</button>`;
 }
 
 /* ---------------- editor ---------------- */
 function blankBuild(){
   return { name:'', cls:'Warlock', classType:2, elem:'solar',
     plugs:{super:0,grenade:0,melee:0,classAbility:0,movement:0,aspects:[],fragments:[]},
-    exotic:{hash:0,slot:''}, setBonus:{name:'',want:0}, prio:STATKEYS.slice(),
+    exotic:{hash:0,slot:''}, setBonus:[], prio:STATKEYS.slice(),
     min:Object.fromEntries(STATKEYS.map(k=>[k,0])), max:Object.fromEntries(STATKEYS.map(k=>[k,200])),
     watch:true, draft:false, src:'manual' };
 }
@@ -311,13 +349,14 @@ function renderEditor(){
   const exo=exoOf(b);
   const sug=SUG[b.id];
   const sets=ARMOR?Object.keys(ARMOR.sets||{}).sort():[];
-  const sb=b.setBonus||{name:'',want:0};
-  const setInfo=sb.name&&ARMOR.sets[sb.name];
+  const selSets=normSetBonus(b.setBonus);
+  const wantOf=(bb,name)=>{ const f=normSetBonus(bb.setBonus).find(s=>s.name===name); return f?f.want:0; };
   $('main').innerHTML=`<div style="--el:${col}">
   <div class="bar">
     <button class="btn mut sm" id="backBtn">← All builds</button>
     <input type="text" id="bName" value="${esc(b.name)}" placeholder="Build name (e.g. Solar Melee Warlock)" style="flex:1;min-width:220px" class="disp">
-    <label class="chip" style="cursor:pointer;display:flex;align-items:center;gap:7px;padding:6px 12px">watch drops
+    <label class="chip" style="cursor:pointer;display:flex;align-items:center;gap:7px;padding:6px 12px"
+      title="While ON, the app checks new armor drops against this build's stat goals and set choices in the background. A real upgrade pops an alert in the feed (and interrupts the TRMNL panel + beeps if it happens while you're playing). It never tags, moves, or dismantles anything by itself.">watch drops
       <input type="checkbox" id="bWatch" ${b.watch?'checked':''} style="accent-color:var(--gold);width:14px;height:14px"></label>
   </div>
   <div class="bar">
@@ -360,23 +399,36 @@ function renderEditor(){
       </div>`:'<p class="note">Every build revolves around one exotic armor piece — choose it to unlock suggestions.</p>'}
     </div>
     <div class="ecard">
-      <h3>Set bonus</h3>
-      <select id="sbName"><option value="">No set preference</option>${sets.map(s=>`<option ${sb.name===s?'selected':''}>${esc(s)}</option>`).join('')}</select>
-      <div class="wantchips">
-        ${[[0,'Off'],[2,'2-piece'],[4,'4-piece']].map(([v,t])=>`<button class="btn sm ${sb.want===v?'':'mut'}" data-want="${v}">${t}</button>`).join('')}
+      <h3>Set bonuses <span class="count" style="margin-left:auto">${selSets.length} selected</span></h3>
+      <input type="text" id="sbFilter" placeholder="Filter sets…" value="${esc(setFilter)}">
+      <div class="setlist" id="setList" style="margin-top:8px">
+        ${sets.map(s=>{
+          const w=wantOf(b,s), info=ARMOR.sets[s];
+          return `<div class="setrow" data-sname="${esc(s.toLowerCase())}">
+            <span class="setname">${esc(s)}</span>
+            <span class="wantchips">${[[0,'Off'],[2,'2pc'],[4,'4pc']].map(([v,t])=>`<button class="btn sm ${w===v?'':'mut'}" data-setname="${esc(s)}" data-want="${v}">${t}</button>`).join('')}</span>
+            ${w&&info?`<div class="setdesc">${w>=2?`<b>2pc — ${esc(info.p2[0])}:</b> ${esc(info.p2[1])}`:''}${w===4?`<br><b>4pc — ${esc(info.p4[0])}:</b> ${esc(info.p4[1])}`:''}</div>`:''}
+          </div>`;
+        }).join('')}
       </div>
-      ${setInfo?`<div class="setdesc"><b>2pc — ${esc(setInfo.p2[0])}:</b> ${esc(setInfo.p2[1])}<br><b>4pc — ${esc(setInfo.p4[0])}:</b> ${esc(setInfo.p4[1])}${setInfo.src?`<br><span class="count">drops: ${esc(setInfo.src)}</span>`:''}</div>`:'<p class="note">Pick a set to hold 2 or 4 of its pieces in the best-set math (only sets you own show here).</p>'}
+      <p class="note">Pick as many sets as you want to chase for this build — each gets its own suggestions below, side by side. They never compete with each other.</p>
     </div>
   </div>
 
   <div class="ecard">
     <h3>Stat goals — drag rows to order, top = most important</h3>
     <div id="statRows">${b.prio.map((k,ix)=>{
-      const now=sug?(sug.champion.totals[k]||0):null;
+      const now=(sug&&sug.variants&&sug.variants[0])?(sug.variants[0].champion.totals[k]||0):null;
+      const mn=b.min[k]||0, mx=b.max[k]??200;
       return `<div class="statrow" draggable="true" data-k="${k}">
-        <span class="grip">⠿</span><span class="rank">#${ix+1}</span><span class="sname">${STATN[k]}</span>
-        <span class="sctl"><span class="t">min</span><input type="range" min="0" max="200" step="5" value="${b.min[k]||0}" data-rmin="${k}"><input type="number" min="0" max="200" value="${b.min[k]||0}" data-min="${k}"></span>
-        <span class="sctl"><span class="t">max</span><input type="range" min="0" max="200" step="5" value="${b.max[k]??200}" data-rmax="${k}"><input type="number" min="0" max="200" value="${b.max[k]??200}" data-max="${k}"></span>
+        <span class="grip">⠿</span><span class="rank">#${ix+1}</span>
+        <span class="sicon">${statIco(k)}</span><span class="sname">${STATN[k]}</span>
+        <div class="dualrange">
+          <div class="track"></div><div class="fill" data-fill="${k}" style="left:${mn/2}%;width:${Math.max(0,mx-mn)/2}%"></div>
+          <input type="range" class="rmin" min="0" max="200" step="5" value="${mn}" data-rmin="${k}">
+          <input type="range" class="rmax" min="0" max="200" step="5" value="${mx}" data-rmax="${k}">
+        </div>
+        <span class="mmnum"><input type="number" min="0" max="200" value="${mn}" data-min="${k}" title="min">–<input type="number" min="0" max="200" value="${mx}" data-max="${k}" title="max"></span>
         <span class="nowv">${now!=null?'now '+now:''}</span>
       </div>`;}).join('')}</div>
     <p class="note">The app hunts pieces that push the top stats toward their <b>min</b> targets and treats points past <b>max</b> as wasted. Editing goals re-checks the whole vault — those suggestions go to the feed only, never the panel alert.</p>
@@ -398,12 +450,30 @@ function wireEditor(){
   $('editExoBtn').onclick=()=>{ keepName(); openExoModal(); };
   document.querySelectorAll('.clstab').forEach(x=>x.onclick=()=>{ keepName(); b.cls=x.dataset.cls; b.classType={Titan:0,Hunter:1,Warlock:2}[b.cls]; b.plugs=blankBuild().plugs; b.exotic={hash:0,slot:''}; renderEditor(); });
   document.querySelectorAll('.eltab').forEach(x=>x.onclick=()=>{ keepName(); b.elem=x.dataset.elem; b.plugs=blankBuild().plugs; renderEditor(); openSubModal(); });
-  $('sbName').onchange=e=>{ keepName(); b.setBonus={name:e.target.value,want:e.target.value?(b.setBonus.want||4):0}; renderEditor(); };
-  document.querySelectorAll('[data-want]').forEach(x=>x.onclick=()=>{ keepName(); b.setBonus.want=+x.dataset.want; if(b.setBonus.want&&!b.setBonus.name) return; renderEditor(); });
-  // sliders + numbers stay in sync (no re-render needed while dragging)
-  const sync=(k,v,isMin)=>{ v=Math.max(0,Math.min(200,+v||0)); (isMin?b.min:b.max)[k]=v;
-    document.querySelector(`[data-r${isMin?'min':'max'}="${k}"]`).value=v;
-    document.querySelector(`[data-${isMin?'min':'max'}="${k}"]`).value=v; };
+  // set-bonus multi-select: filter is a live DOM hide/show (no re-render, keeps focus)
+  const applySetFilter=()=>{ const q=setFilter.trim().toLowerCase();
+    document.querySelectorAll('.setrow').forEach(r=>{ r.style.display=(!q||r.dataset.sname.includes(q))?'':'none'; }); };
+  const fEl=$('sbFilter');
+  if(fEl){ fEl.oninput=()=>{ setFilter=fEl.value; applySetFilter(); }; if(setFilter) applySetFilter(); }
+  document.querySelectorAll('[data-setname]').forEach(x=>x.onclick=()=>{
+    keepName();
+    const name=x.dataset.setname, want=+x.dataset.want;
+    let list=normSetBonus(b.setBonus).filter(s=>s.name!==name);
+    if(want) list.push({name,want});
+    b.setBonus=list; renderEditor();
+  });
+  // sliders + numbers stay in sync (no re-render needed while dragging); min can't pass max, max can't pass min
+  const sync=(k,v,isMin)=>{
+    v=Math.max(0,Math.min(200,+v||0));
+    if(isMin){ if(v>(b.max[k]??200)) b.max[k]=v; b.min[k]=v; }
+    else { if(v<(b.min[k]||0)) b.min[k]=v; b.max[k]=v; }
+    document.querySelector(`[data-rmin="${k}"]`).value=b.min[k];
+    document.querySelector(`[data-rmax="${k}"]`).value=b.max[k];
+    document.querySelector(`[data-min="${k}"]`).value=b.min[k];
+    document.querySelector(`[data-max="${k}"]`).value=b.max[k];
+    const fill=document.querySelector(`[data-fill="${k}"]`);
+    if(fill){ fill.style.left=(b.min[k]/2)+'%'; fill.style.width=Math.max(0,b.max[k]-b.min[k])/2+'%'; }
+  };
   document.querySelectorAll('[data-rmin]').forEach(x=>x.oninput=()=>sync(x.dataset.rmin,x.value,true));
   document.querySelectorAll('[data-rmax]').forEach(x=>x.oninput=()=>sync(x.dataset.rmax,x.value,false));
   document.querySelectorAll('[data-min]').forEach(x=>x.onchange=()=>sync(x.dataset.min,x.value,true));
@@ -444,6 +514,7 @@ function modalShell(title,inner){
 function pkBtn(x,kind,on,small){
   return `<button class="pk2 ${on?'on':''} ${small?'sm':''}" data-mab="${kind}" data-h="${x.h}" data-pn="${esc(x.n)}">
     <span class="fr"><img src="${BN}${x.icon}" alt="" loading="lazy"></span>
+    <span class="badge">✓</span>
     <span class="nm2">${esc(x.n)}</span>
     ${x.inv?`<span class="statchip">${Object.entries(x.inv).map(([k,v])=>`${v>0?'+':''}${v} ${STATN[k]||k}`).join(' ')}</span>`:''}
   </button>`;
@@ -481,6 +552,7 @@ function openExoModal(){
     return `<div class="msec"><h4 style="color:var(--gold)">${slot} <small>${list.length}</small></h4>
       <div class="xg">${list.map(i=>`<button class="xpick ${b.exotic?.hash===i.hash?'on':''}" data-mexo="${i.hash}" data-slot="${esc(i.slot)}" data-pn="${esc(i.n)}">
         <span class="fr">${i.icon?`<img src="${BN}${i.icon}" alt="" loading="lazy">`:''}</span>
+        <span class="badge">✓</span>
         <span class="nm2">${esc(i.n)}</span><span class="sl">best T${i.t} · ${i.tot} base</span>
       </button>`).join('')}</div></div>`;
   }).join('');

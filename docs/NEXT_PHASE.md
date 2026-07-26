@@ -3,6 +3,203 @@
 > Maintained per CLAUDE.md. When a feature ships, move it to HANDOFF.md
 > "What works now" and delete it here.
 
+## Where we are (2026-07-26 — Build Crafter UI fixes shipped; declutter engine still a preview to build)
+
+Diego flagged four `/builds` usability problems (single-select set bonus, no tooltip on
+"watch drops", split min/max sliders with no stat icons, misaligned checkmark badges) —
+all four **shipped and verified**, full technical detail in HANDOFF's Build Crafter
+section ("Multi-select set bonus + stat-icon sliders + badge-clipping fix"). Headline:
+`setBonus` is now an array (a build can target several sets, not just one), each
+selected set gets its own independent suggestions block, real in-game stat icons now
+render next to stat names, min/max collapsed into one dual-handle slider, and the
+checkmark-clipping bug (badge was a `::after` clipped by its own parent's
+`overflow:hidden`) is fixed everywhere it appeared.
+
+**Mid-session correction (2026-07-26, important — changes the destination, not the UI
+just shipped):** Diego clarified the multi-select isn't just a suggestions-comparison
+feature — it's the direct input to the still-unbuilt vault decluttering engine from the
+2026-07-25 FINAL MODEL below: *"Once the builds are created and set bonuses are selected,
+the app curates the best armor pieces to keep in the vault... It's an optimization tool
+to keep the good builds while maintaining the vault decluttered."* This **supersedes**
+the FINAL MODEL's data source (rule 4 in DIEGO_RULES.md said "sets Diego has rated" via
+the separate `vv-ratings` panel — that panel is client-side/localStorage only and never
+reached the server anyway). The real data source is now: the set(s) picked directly on
+each exotic's build(s) in `/builds`.
+
+**NEXT (not started): the vault declutter/keep-junk engine itself.** Per CLAUDE.md's hard
+rule on high-blast-radius changes, this must be a **read-only preview** Diego reviews
+before any real junk-tagging goes live — same caution as the FINAL MODEL below already
+called for. Design carries over almost unchanged from the FINAL MODEL, with the set
+source swapped: for each owned exotic with a tuned favorite stat (or its `watch:true`
+Build Crafter build's real `prio`/`min`/`max`), for each set selected on that exotic's
+build(s), keep the single best-scoring piece per open slot within that set — sets don't
+compete, all qualifying sets' picks are kept in parallel. Where to surface the preview
+(Vault Verdict page vs. a new panel) not yet decided — natural fit is vault-verdict.html
+since that's where keep/junk verdicts already live.
+
+**Reminder for whoever builds this next:** the always-on server (`vault-verdict.js`,
+`server.js`) is running Diego's OLD code until he double-clicks `REBOOT.cmd` — the
+`/builds` backend changes (array `setBonus`, `variants` shape on `/api/builds/suggestions`,
+`statIcons` on `/api/subclass-catalog`) do NOT go live until then. `builds.html` itself is
+served from disk (no restart needed for HTML/CSS), but it now calls the NEW response
+shapes, so **the page will look broken against the OLD server** until Diego reboots.
+
+## Where we are (2026-07-25 — Armor Vault redesign: build-crafting model, spec in progress, BLOCKED: awaiting Diego confirmation)
+
+Diego reviewed two preview artifacts of a richer keep/junk explanation layer for Vault
+Verdict's armor engine and said the underlying model is wrong, not just under-explained
+(verbatim, 2026-07-25): *"there's nothing taking into consideration maximizing stats for
+build crafting and in my specs originally, this was a great influence, the main purpose
+of the tool. It consider the exotic armors, then tries to maximize stats with the set
+bonuses while trying to keep a minimum of pieces in the vault. So for TechSec armor set,
+it would try to keep the minimum number of pieces that gives max stats for the exotic
+armor pieces. It would try to do the same with other set bonuses."* Full ruling recorded
+in `docs/DIEGO_RULES.md` §4.
+
+**The gap, proven with real data:** pulled his live `/api/armor` (824 pieces) and ran the
+current `compute()` niche engine (from `vault-verdict.html`) against it. For Warlock
+Techsec alone (excluding Chest, which an exotic would occupy): **13 pieces across 4 slots,
+0 junked** — because every piece has a distinct archetype×tertiary combo, so every piece
+is its own unique "niche" and nothing is ever compared against anything else. This includes
+`Techsec Boots · Powerhouse/Grenade · T3 · tot 66` surviving as a keep purely because no
+other Leg piece shares its exact niche — even though a flat-out better Grenadier/Melee
+T5/tot93 Leg piece sits right next to it in the same set. The engine's own tie-break ladder
+(tier → total stats) would junk that T3 piece instantly if the two were ever compared, but
+the niche key keeps them apart. This is the core proof that "one keeper per niche" isn't
+the same tool as "minimum pieces to cover every exotic build's max stats."
+
+**Diego's model, restated:** builds are anchored on an exotic (one per class, occupies one
+slot). For every other slot, pick the legendary — from whichever set — that maximizes the
+exotic's tuned favorite stat(s) (reuse the existing `favScoreOf` weighting: 3×primary +
+2×secondary + 1×tertiary), preferring pieces from the SAME set across those slots to also
+land the set's 2pc/4pc bonus. The vault should keep the smallest set of legendaries that
+covers this for every exotic build worth building — not a separate "best" piece for every
+theoretical archetype×tertiary combination regardless of whether any real build wants it.
+
+**Worked example (real data, Warlock Techsec, all in `docs/DIEGO_RULES.md` §4 + the chat):**
+for a Starfire Protocol build (favorite stat: Grenade), the minimum-piece answer is 4
+pieces — one per non-Chest slot, each the highest-Grenade Techsec piece in that slot
+(Helmet: Grenadier/Melee T5 g30, Gauntlets: Grenadier/Weapons T5 g30, Leg: Grenadier/Melee
+T5 g30, Class Item: Specialist/Melee T5 g6 — the weakest link, since no Grenadier-archetype
+Techsec class item exists in his collection). That's 4 kept vs. today's 13, and it also
+lands the Techsec 4-piece bonus for free since all 4 are the same set.
+
+**BLOCKED — needs Diego's answers before implementation** (asked via AskUserQuestion in
+chat, record verbatim once given):
+1. Does "minimum pieces" mean the union across **every exotic with a tuned favorite stat**
+   (so Techsec might keep more than 4 pieces if a second exotic wants a different stat),
+   or only exotics that have an actual **saved Build Crafter build** (`/builds`)?
+2. Should this **replace** the niche/tier/total-stat engine for legendaries entirely, or
+   run as a second pass that overrides it only where an exotic/set pairing applies (with
+   the old engine as fallback for legendaries no exotic build touches)?
+3. "Maximize stats" — the exotic's tuned favorite stat(s) specifically (matches the
+   existing exotic-favorites formula), or the full Build Crafter stat-priority/min-max
+   system already built for `/builds`?
+
+**Answers received (2026-07-25, all in chat, verbatim where quoted):**
+1. Exotic scope: *"if an exotic matches the tracked stats for that exotic, than use that
+   exotic. Consider the exotics currently in the vault until a better one drops. For
+   bonuses that 4-pieces were selected, you have to consider builds with 4 pieces for
+   that set bonus"* — every owned exotic with a tuned favorite stat counts (not only ones
+   with a saved Build Crafter entry); uses whichever copy is currently owned (recomputes
+   live, no special-case needed for upgrades); a 4pc set bonus must actually be filled by
+   4 same-set pieces, not shortcut to fewer.
+2. Replace vs. layer: **"Replace entirely."** The niche/tier/total-stat engine goes away
+   for legendaries — build-driven picking takes over completely (exotics' own tie-break
+   logic is unchanged, this only touches legendaries).
+3. Stat target: **"Full Build Crafter stat priorities."** Use each build's real `prio`
+   (ordered stat list) + `min`/`max`, not just the simpler favorite-stat 3/2/1 formula.
+   **Fallback for exotics with no saved build:** none stated yet — my working assumption
+   is fall back to the existing favorite-stat weighting; flag to Diego if this matters.
+
+**CORRECTION (2026-07-25, same session) — the model was still wrong after answers 1–3.**
+First pass treated the candidate sets as *competing* — picked one "winning" set per
+exotic build by comparing their 4-piece totals against each other (e.g. ran Starfire
+Protocol's real saved build "Perpetual Protocol" — prio `g>w>h>c>s>m`, min g/w/h=100 —
+against all 18 of his sets with full open-slot coverage; Sage Protector scored highest
+at 1530 vs Techsec's 1417, so v1 kept only Sage Protector's 4 pieces and would have
+junked Techsec entirely). **Diego corrected this directly: "We're not decided who's the
+winner based on set bonus higher stats. Each set bonus is different in build crafting...
+for every exotic, you have to keep the best armor pieces in all sets chosen that
+maximize stats."** Sets don't compete — each is an independently valid build. Corrected
+model: for a given exotic, iterate every **rated** set (see below) *separately*; within
+each one, keep only the single best-scoring piece per open slot (still collapses TechSec's
+13 owned non-Chest pieces down to 1-per-slot = 4, same for Sage Protector = 4, but BOTH
+sets' 4 survive — 8 kept for this one exotic, not 4). Verified numbers (Warlock, Starfire
+Protocol, prio-weighted score = 6/5/4/3/2/1 × stat value for priority positions 1–6):
+Techsec best-per-slot = Hood·Gunner/Super·T5 (380) / Gloves·Grenadier/Weapons·T5 (370) /
+Boots·Gunner/Class·T5 (360) / Bond·Specialist/Melee·T5 (307); Sage Protector best-per-slot
+= Cover·Grenadier/Weapons·T5 (370) / Gloves·Gunner/Class·T4 (395) / Boots·Bulwark/Weapons·T5
+(349) / Bond·Gunner/Health·T5 (416).
+
+**"All sets chosen" = confirmed (2026-07-25, Diego: "those that I have rated")** — the
+sets already rated 4-piece or 2-piece in the existing set-ratings panel (`ratings` /
+`vv-ratings`), not literally every set in the game. Ignore/Undecided sets are out of scope
+for this algorithm and keep falling back to the existing simpler rules.
+
+**FINAL MODEL (2026-07-25, ready to preview against real data):**
+1. Armor 2.0 legacy / manually-tagged-junk: unchanged, instant junk (no change here).
+2. For each class, for each **owned exotic** with a tuned favorite stat: find its saved
+   Build Crafter build(s) for `prio`/`min`/`max` (fallback to the favorite-stat 3/2/1
+   formula if none saved — unconfirmed assumption, flag if wrong). **Open sub-question:**
+   several exotics have 2–5 saved builds with different priorities (often near-duplicate
+   DIM-import drafts, e.g. two "Sanguine Alchemy", two "Boots of the Assembler") — using
+   every one as a separate protected build could balloon the kept count against the
+   "minimum pieces" goal; needs a dedupe/selection rule when this gets implemented
+   (candidates: only `watch:true` builds, only the newest per exotic, or union of all with
+   near-duplicates collapsed) — ask Diego if it comes up in practice.
+3. For each set **Diego has rated 4pc or 2pc** that has at least one owned legendary in
+   every one of that exotic's open (non-exotic) slots: **within that set only**, keep the
+   single highest-scoring piece per slot (score = sum of stat × weight-by-priority-rank
+   from the build's `prio`). Every other set-rated-4pc/2pc is evaluated the same way,
+   independently — sets never compete against each other, all qualifying sets' picks are
+   kept in parallel.
+4. Every legendary in a rated set that ISN'T the best pick for any owned exotic's open
+   slot is a junk candidate (same safety nets as today: manual favorite tag, DIM loadout
+   use pull it back to Review, never straight to Junk).
+5. Legendaries in Ignore/Undecided-rated sets, or belonging to a set with no full-slot
+   coverage for any current exotic build, fall back to today's existing rules unchanged
+   (Ignore = must beat everything globally for the 180 target; Undecided = protected/
+   flagged).
+6. Exotic-vs-exotic tie-breaking (same exotic, multiple copies) is UNCHANGED — still the
+   existing favorite-stat weighted score from the exotics panel.
+
+**Diego exported his real ratings (2026-07-25)** — pasted in chat, saved to
+`scratchpad` for this session (not committed; his real `vv-ratings`/`vv-exofavs`
+values). 15 sets rated 4pc, 2 rated 2pc (Techeun's Regalia, AION Adapter), rest
+Ignore. 37 owned exotics have a tuned favorite stat.
+
+**Multi-build-per-exotic resolved (2026-07-25):** ran the model for real and hit the
+predicted problem immediately — `Winter's Guile` alone has 3 saved builds with 3
+different priority orders, and with 15-17 rated sets qualifying per exotic, treating
+every saved build as a separate protected scenario produced 305 kept / 217 junk out of
+522 rated-set legendaries — a real but modest cut, not the dramatic reduction the
+TechSec/Starfire single-exotic demo implied (that demo only showed ONE exotic; the real
+run unions 37). **Diego's answer: only builds with `watch:true` count.**
+
+**Practical consequence, found by actually running it: today only 1 of his 37 tuned
+exotics has a real watched build.** `builds.json` has 92 saved builds but only 2 have
+`watch:true` — and both are identical duplicates, both for **Winter's Guile**
+(prio Melee>Weapons>Health>Class>Grenade>Super, min Melee=175). The other 36 exotics
+have zero watched builds and fall back to the simpler favorite-stat formula (3×primary +
+2×secondary + 1×tertiary from `exoFavs`) until Diego watches more real builds. Re-run
+with this rule: **240 kept / 282 junk** of the 522 rated-set legendaries — a better cut
+than the all-builds version, mostly because the fallback formula is simpler (one
+scenario per exotic instead of several near-duplicate ones).
+
+**Where this leaves it:** the model itself is now fully specified and matches Diego's
+corrected intent (verified §4 of DIEGO_RULES.md). The remaining gap is DATA, not design —
+most of his 90-odd imported Build Crafter drafts have never been curated (`watch:false`,
+many literal duplicates of the same exotic/build). **Diego should go into `/builds` and
+mark his real, currently-used builds as watched** (delete or ignore the DIM-import
+duplicates) to get the full benefit of "full Build Crafter stat priorities" — otherwise
+most exotics run on the simpler fallback. Next step once he's done that (or decides to
+proceed with the fallback-heavy state as-is): build the real interactive preview/UI for
+this model, then wire it into `vault-verdict.js`'s `compute()`, replacing the old
+niche engine for legendaries in rated sets (exotics' own logic is unchanged). **Still do
+not implement into the live app until Diego has seen and confirmed a preview** — CLAUDE.md
+rule, and this is a large enough behavior change to warrant it.
+
 ## Where we are (2026-07-17 — friend setup wizard shipped; REBOOT.cmd still pending from 07-16)
 
 Diego asked to let his friend use the app ("hosted on his pc, just like mine", friend knows less

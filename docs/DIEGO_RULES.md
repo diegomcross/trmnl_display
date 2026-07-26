@@ -84,6 +84,54 @@
 - Armor auto-tagging is the next wanted feature but **must be specced with Diego
   first** (NEXT_PHASE).
 
+- **CORE PURPOSE RE-STATED (2026-07-25, verbatim — the current niche-based engine
+  does NOT match this and needs redesign):** *"there's nothing taking into
+  consideration maximizing stats for build crafting and in my specs originally,
+  this was a great influence, the main purpose of the tool. It consider the
+  exotic armors, then tries to maximize stats with the set bonuses while trying
+  to keep a minimum of pieces in the vault. So for TechSec armor set, it would
+  try to keep the minimum number of pieces that gives max stats for the exotic
+  armor pieces. It would try to do the same with other set bonuses."* Reading:
+  builds are **anchored on exotics** (one per class, one slot each); for every
+  slot an exotic doesn't fill, the tool should pick the **legendary in a given
+  set that maximizes the exotic's favorite stat(s)** (reusing the existing
+  favorite-stat weighting), while also completing that set's bonus — and the
+  vault should keep the **minimum piece count** that covers every viable
+  exotic/set pairing, not one piece per every distinct archetype×tertiary
+  **niche** regardless of whether that niche is useful for any real build. This
+  is the gap: today's engine's tertiary-stat split makes almost every piece its
+  own unique niche, so **nothing meaningfully gets junked within a set** — see
+  NEXT_PHASE for the real TechSec/Warlock proof (13 pieces kept across 4 slots,
+  zero junked, including a Tier-3 piece nothing ever compared it against).
+  Model **not yet confirmed built** — spec in progress, see NEXT_PHASE.
+- **Sets don't compete (2026-07-25, verbatim, correcting my first attempt):** *"We're not
+  decided who's the winner based on set bonus higher stats. Each set bonus is different in
+  build crafting. If I say maximize stats, it means that for every exotic, you have to
+  keep the best armor pieces in all sets chosen that maximize stats."* For a given exotic,
+  every set Diego has RATED (4pc or 2pc — his answer to "which sets": *"those that I have
+  rated"*) is evaluated **independently** and keeps its own single best piece per open
+  slot; sets are never ranked against each other to pick one "winner." Full final model
+  in NEXT_PHASE.md — this is the corrected, current spec, supersedes any earlier draft.
+- **Set selection lives on the BUILD, not a separate rating panel (2026-07-26, verbatim):**
+  *"Once the builds are created and set bonuses are selected, the app curates the best
+  armor pieces to keep in the vault taking into consideration max stats for builds that
+  use the same set bonus while trying to maintain unecessary armor in the vault. It's an
+  optimization tool to keep the good builds while maintaining the vault decluttered."*
+  This refines rule 4's "sets Diego has rated" data source: the input is now the set(s)
+  picked directly on each exotic's build(s) in `/builds` (multi-select, shipped
+  2026-07-26 — see HANDOFF), not the separate `vv-ratings` panel in Vault Verdict (that
+  panel is client-side/per-browser only anyway, never reached the server). The vault
+  declutter/keep-junk engine itself (compute() in vault-verdict.js) is **not yet wired to
+  this** — still a read-only preview to build next, per the hard rule below.
+- **Multi-set UI behavior (2026-07-26, AskUserQuestion, Diego picked):** "Show all as
+  separate options, no auto-pick" — when a build has several sets selected, compute and
+  display a champion set + suggestions for EACH one side by side; never auto-pick a
+  "winner" set for the build. Matches rule 4's "sets don't compete."
+- **Never wire a big armor-vault behavior change live without a preview** (CLAUDE.md hard
+  rule, reaffirmed here because armor junk/keep changes are high-blast-radius): the
+  build-driven declutter engine must be shown to Diego and confirmed before any real
+  junk-tagging goes live.
+
 ## 5. Perk lists & Perk Finder
 
 - **No exotic perks / frames / non-trait plugs in perk lists** (2026-07-04 commit
