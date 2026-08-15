@@ -1738,6 +1738,15 @@ function armorDeclutter(items, ratings) {
   const report = [];
   let usingWatched = 0;
 
+  // Diego 2026-08-15, asked what "prioritized" should mean: *"favorites are set at the floor, the
+  // other exotics just help decision with uneeded dupes."* So ONLY the ★ favorite exotics run the
+  // full floor-aimed solve and generate legendary keeps. A non-favorite tuned exotic still keeps
+  // its own best copy and junks its weaker duplicates — that's the "unneeded dupes" job — but it
+  // protects no legendaries. SAFETY: with nothing starred yet, every tuned exotic drives keeps
+  // (the old behaviour), otherwise a fresh install would junk the whole vault.
+  const anyStarred = Object.values(exotics).some((v) => v.fav && v.favs.length);
+  const drivesKeeps = (name) => !anyStarred || !!exotics[name]?.fav;
+
   // Diego's FAVORITE exotics solve first (2026-08-15, max 7). Solve order is what "prioritized"
   // means to the engine: the first solve gets first pick of the vault, and it is the hook the
   // spec's step-5 reuse bias will hang off.
@@ -1762,6 +1771,19 @@ function armorDeclutter(items, ratings) {
     say(working.id, 'keep', `${copies.length > 1 ? `Best of ${copies.length} copies` : 'Only copy'} — ${favMath} = ${favScoreOf(working, favs)}.`);
     for (const c of ranked.slice(1)) {
       say(c.id, 'junk', `Outclassed copy — ${favScoreOf(c, favs)} vs ${favScoreOf(working, favs)} on the keeper.`);
+    }
+
+    // A non-favorite exotic stops here: its own duplicate copies are decided above (that's the
+    // "help decision with unneeded dupes" job) but it runs no solve and protects no legendaries.
+    if (!drivesKeeps(name)) {
+      report.push({
+        name, cls, slot: working.slot, copies: copies.length, favs, floor, fav: false, dupesOnly: true,
+        floorSource: ex.floor != null ? 'exotic' : 'global',
+        workingId: working.id, favScore: favScoreOf(working, favs),
+        favStats: Object.fromEntries(favs.map((k) => [k, working.s[k] || 0])),
+        usingWatchedBuild: false, buildNames: [], bestDeficit: null, variants: [],
+      });
+      continue;
     }
 
     // ---- step 2: stat target ----
@@ -1824,6 +1846,7 @@ function armorDeclutter(items, ratings) {
   // "junk candidate" — his whole Hunter/Titan vault, judged by nothing. Diego's own rule is that
   // the engine decides "based on what exists in the vault and user choices"; with no choices made
   // for a class there is no decision to make, so that class is left out of scope entirely.
+  // (with favorites in play this is "classes that have a ★ favorite exotic")
   const solvedClasses = new Set(report.filter((r) => !r.untuned && r.variants.length).map((r) => r.cls));
   const inScope = new Set([...ratedSets.map((s) => s.name), ...watched.flatMap((b) => setBonusList(b).map((s) => s.name))]);
   const lastOfSlot = {};   // cls|slot -> count, for the never-junk-your-last-copy net
@@ -1853,7 +1876,9 @@ function armorDeclutter(items, ratings) {
       continue;
     }
     if (!solvedClasses.has(it.cls)) {
-      say(it.id, 'oos', `No ${it.cls} exotic has favorite stats set — nothing to judge this piece against. Tune a ${it.cls} exotic above to bring this class into the engine.`);
+      say(it.id, 'oos', anyStarred
+        ? `No ★ favorite ${it.cls} exotic — nothing to judge this piece against. Star a tuned ${it.cls} exotic to bring this class into the engine.`
+        : `No ${it.cls} exotic has favorite stats set — nothing to judge this piece against. Tune a ${it.cls} exotic above to bring this class into the engine.`);
       continue;
     }
     if (!it.sb || !inScope.has(it.sb)) {
@@ -1866,7 +1891,9 @@ function armorDeclutter(items, ratings) {
       const mine = Math.round(pieceScoreB(it, w.W)), theirs = Math.round(pieceScoreB(w.piece, w.W));
       why = `Beaten in ${it.sb} ${it.slot} by ${w.piece.n} (T${w.piece.t}, ${w.piece.tot} base) — ${mine} vs ${theirs} on ${w.label}'s priorities.`;
     } else {
-      why = `No build target picked a ${it.sb} ${it.slot} — nothing in your watched builds or rated sets needs this piece.`;
+      why = anyStarred
+        ? `Unneeded duplicate — no ★ favorite exotic's build wants a ${it.sb} ${it.slot}.`
+        : `No build target picked a ${it.sb} ${it.slot} — nothing in your watched builds or rated sets needs this piece.`;
     }
     if (it.tag === 'favorite') say(it.id, 'review', why + ' Kept from junk: you tagged it favorite.');
     else if (it.lo > 0) say(it.id, 'review', why + ` Kept from junk: in ${it.lo} DIM loadout${it.lo > 1 ? 's' : ''}.`);
@@ -1883,8 +1910,9 @@ function armorDeclutter(items, ratings) {
   report.sort((a, b) => (a.fav ? 0 : 1) - (b.fav ? 0 : 1) || a.cls.localeCompare(b.cls)
     || (ARMOR_SLOT_IX[a.slot] ?? 9) - (ARMOR_SLOT_IX[b.slot] ?? 9) || a.name.localeCompare(b.name));
   return {
-    at: Date.now(), floorDefault, preview: true, maxFavExotics: MAX_FAV_EXOTICS,
+    at: Date.now(), floorDefault, preview: true, maxFavExotics: MAX_FAV_EXOTICS, anyStarred,
     favExotics: report.filter((r) => r.fav).map((r) => r.name),
+    dupesOnlyCount: report.filter((r) => r.dupesOnly).length,
     exoticCount: report.length, tunedCount: report.filter((r) => !r.untuned).length, usingWatched,
     ratedSets: ratedSets.map((s) => s.name), verdicts, exotics: report, perClass,
   };

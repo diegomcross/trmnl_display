@@ -137,3 +137,11 @@ a ruling, surfaced as a dismissible suggestion, never auto-applied):
 
 > "also no need to show per exotic armor combinations, this is long in the page an
 > unnecessary"
+
+---
+
+**2026-08-15** — asked what "prioritized" should mean for favorite exotics: solve order only,
+only the 7 favorites driving keeps, or a middle option:
+
+> "favorites are set at the floor, the other exotics just help decision with uneeded
+> dupes"

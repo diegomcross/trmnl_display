@@ -27,12 +27,15 @@ is not live.
 7. The `rearrange` alert kind on the existing builds-alerts feed (§5) — suggestions, never applied.
 8. **Delete the niche key from `compute()`** — LAST, once the replacement is proven.
 
-**Open question for Diego, asked 2026-08-15 — BLOCKED: awaiting his answer.** He asked for favorite
-exotics "so they are prioritized". Today that means solve order. It could also mean *only* the 7
-favorites drive keeps, which is a much bigger cut: on a 17-rated-set run his Warlock keeps
-**280 of 623** pieces today (25 tuned exotics × 17 sets, sets never competing, is simply a lot of
-solves), versus roughly a third of that if only 7 exotics counted. Record his answer verbatim in
-`docs/ARMOR_ENGINE_VISION.md` and `DIEGO_RULES.md` §4b when he gives it.
+**ANSWERED 2026-08-15 and shipped** — asked what "prioritized" should do to the keep list, Diego
+said: *"favorites are set at the floor, the other exotics just help decision with uneeded dupes."*
+Only ★ favorites solve and decide keeps; non-favorites just settle their own duplicate copies.
+Test run (7 stars, 17 rated sets): Warlock **280 keep / 174 junk → 207 keep / 244 junk**.
+
+**Remaining lever on the keep count, worth raising with him:** with sets never competing, the
+driver is now **how many sets he rates**, not how many exotics he stars — 7 favorites × 17 rated
+sets × 4 open slots is still ~200 distinct pieces. If 207 keeps still feels like too little
+decluttering, the honest answer is to rate fewer sets 4pc, not to change the algorithm.
 
 **Data caveat for whoever picks this up:** the real numbers depend on two things that still live in
 Diego's BROWSER, not on disk — his set ratings (`vv-ratings`) and, until he loads the page once

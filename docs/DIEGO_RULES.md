@@ -168,8 +168,13 @@ Two more the same day, while the preview was being built:
 
 6. **Favorite exotics, max 7** (verbatim): *"there should actually be an option to tag certain
    exotics as favorites, so they are prioritized. Up to 7 exotics."* Stored as `fav:true` in
-   `exotics.json`, hard-capped at 7. Today it drives **solve order** (favorites solve first, which
-   is the hook the spec's step-5 reuse bias needs) and pins them to the top of the preview.
+   `exotics.json`, hard-capped at 7 on both client and server.
+   **What "prioritized" means — asked directly, answered verbatim:** *"favorites are set at the
+   floor, the other exotics just help decision with uneeded dupes."* So: only ★ favorites run the
+   floor-aimed solve and decide which **legendaries** are kept. A non-favorite tuned exotic still
+   keeps its own best copy and junks its weaker duplicates — that's its whole job — but protects
+   no legendaries. **Safety default:** with nothing starred, every tuned exotic drives keeps, so a
+   fresh install can never junk the vault. A class with no ★ favorite is out of scope entirely.
 7. **Don't print the per-exotic armor combinations** (verbatim): *"also no need to show per exotic
    armor combinations, this is long in the page an unnecessary"* — the preview's Keeps section is a
    flat list of the pieces to keep, NOT an exotic → set → slot tree. The tree was thousands of rows.

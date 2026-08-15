@@ -162,8 +162,10 @@ details.panel[open] summary::after{content:" –"}
   <summary>Exotics — favorite stat tuning</summary>
   <p class="savenote">Pick up to <b>three</b> stats that synergize with the exotic's function — first pick is the <b>primary</b>, then <b>secondary</b>, then <b>tertiary</b>. Copies are ranked by the <b>weighted sum: primary ×3 + secondary ×2 + tertiary ×1</b> (every pick always matters — one huge primary alone doesn't beat two good stats), and only the best copy is kept; the card shows the math. No favorite set: falls back to per-archetype niches and the exotic is flagged pending. Saves automatically.</p>
   <p class="savenote">Tap the <b>☆</b> next to an exotic to mark it a <b>favorite exotic</b> (max <b>7</b>).
-  Favorites are solved <b>first</b> by the declutter engine, so they get first pick of the vault, and they
-  lead the preview and this list.</p>
+  Diego 2026-08-15: <i>"favorites are set at the floor, the other exotics just help decision with uneeded
+  dupes."</i> Only ★ favorites are aimed at the <b>stat floor</b> and decide which legendaries the declutter
+  engine keeps; every other tuned exotic just settles its own duplicate copies. Star nothing and every tuned
+  exotic drives keeps (the safe default).</p>
   <div class="bar" id="exoClsTabs" style="margin-top:8px"></div>
   <p class="savenote" id="exoStarCount"></p>
   <div id="exoList"></div>
@@ -171,12 +173,13 @@ details.panel[open] summary::after{content:" –"}
 
 <details class="panel" id="dcPanel">
   <summary>Build-driven declutter — preview (read-only)</summary>
-  <p class="savenote">The engine from <b>docs/ARMOR_DECLUTTER_SPEC.md</b>: per class, per exotic, it solves
-  your <b>watched</b> Build Crafter builds — or, for exotics with no watched build, the exotic's favorite
-  stats aimed at the <b>stat floor</b> — against every set that build picks (or, with no watched build,
-  every set you rated <b>4-piece / 2-pc only</b> above). Sets never compete: each is solved on its own and
-  every set's picks survive. What those solves actually use is a <b>keep</b>; everything else in a
-  selected/rated set is a <b>junk candidate</b>.<br>
+  <p class="savenote">The engine from <b>docs/ARMOR_DECLUTTER_SPEC.md</b>: for each of your <b>★ favorite
+  exotics</b> it solves the <b>watched</b> Build Crafter build — or, with no watched build, that exotic's
+  favorite stats aimed at the <b>stat floor</b> — against every set that build picks (or, with no watched
+  build, every set you rated <b>4-piece / 2-pc only</b> above). Sets never compete: each is solved on its
+  own and every set's picks survive. What those solves actually use is a <b>keep</b>; everything else in a
+  selected/rated set is a <b>junk candidate</b>. Non-favorite tuned exotics only settle their own duplicate
+  copies.<br>
   <b>Nothing here is tagged, moved, or written.</b> The verdicts on the cards below still come from the old
   niche engine — this panel only shows what the replacement would decide.</p>
   <div class="bar" style="margin-top:8px">
@@ -539,18 +542,24 @@ function renderDeclutter(){
   // 3 — floor status (partial farming report — the full §4 report is a later step)
   const floorHtml=DC.exotics.filter(x=>!x.untuned).map(x=>{
     const best=x.bestDeficit;
-    const st=best===0?'<span class="ok">✓ reaches its goals</span>':best==null?'<span class="warn">not solved</span>':`<span class="bad">short by ${best}</span>`;
+    const st=best===0?'<span class="ok">✓ reaches its goals</span>'
+      :x.dupesOnly?'<span style="color:var(--dim)">dupes only — not a ★ favorite, so no floor and no keeps</span>'
+      :best==null?'<span class="warn">not solved</span>':`<span class="bad">short by ${best}</span>`;
     const gaps=[...new Set(x.variants.flatMap(v=>v.setGaps||[]))];
-    return `<div class="dcj"><b>${x.fav?'<span style="color:var(--gold)">★ </span>':''}${esc(x.name)}</b> <span style="color:var(--dim)">· ${x.cls} · ${x.usingWatchedBuild?'watched build':`floor ${x.floor}${x.floorSource==='exotic'?' (per-exotic)':' (global)'}`}</span> — ${st}
+    return `<div class="dcj"><b>${x.fav?'<span style="color:var(--gold)">★ </span>':''}${esc(x.name)}</b> <span style="color:var(--dim)">· ${x.cls}${x.dupesOnly?'':` · ${x.usingWatchedBuild?'watched build':`floor ${x.floor}${x.floorSource==='exotic'?' (per-exotic)':' (global)'}`}`}</span> — ${st}
       <br><span style="color:var(--dim)">best copy: ${x.favs.map(k=>`${STATN[k]} ${x.favStats[k]}`).join(' › ')} (fav score ${x.favScore})${x.copies>1?` · ${x.copies-1} weaker cop${x.copies-1>1?'ies':'y'} junked`:''}${gaps.length?` · gaps: ${gaps.map(esc).join(', ')}`:''}</span></div>`;
   }).join('');
 
   $('dcOut').innerHTML=`
     <div class="dcsum">${clsRows}</div>
-    <p class="savenote"><b>${DC.usingWatched} of ${DC.tunedCount} tuned exotics</b> are using a real watched
-    Build Crafter build; the rest run on the favorite-stats + stat-floor fallback. Mark your real builds
-    <b>watch</b> in <a href="/builds">Build Crafter</a> to give them their own priorities.
-    ${untuned.length?`<br><b class="warn">${untuned.length} owned exotics have no favorite stats set and were skipped</b> — and a class with no tuned exotic at all is left entirely out of scope, so nothing of it is ever junked.`:''}</p>
+    <p class="savenote">${DC.anyStarred
+      ? `<b>${DC.favExotics.length} ★ favorite exotic${DC.favExotics.length>1?'s':''}</b> are aimed at the stat floor and decide what's kept: ${DC.favExotics.map(esc).join(' · ')}.
+         The other <b>${DC.dupesOnlyCount}</b> tuned exotics only settle their own duplicate copies — they protect no legendaries.`
+      : `<b class="warn">No exotic is starred yet</b>, so every tuned exotic is driving keeps. Star up to 7 favorites in the exotics panel to aim the floor at the builds you actually run.`}
+    <br><b>${DC.usingWatched} of ${DC.tunedCount} tuned exotics</b> are using a real watched Build Crafter
+    build; the rest run on the favorite-stats + stat-floor fallback. Mark your real builds <b>watch</b> in
+    <a href="/builds">Build Crafter</a> to give them their own priorities.
+    ${untuned.length?`<br><b class="warn">${untuned.length} owned exotics have no favorite stats set and were skipped</b> — and a class with no ${DC.anyStarred?'★ favorite':'tuned'} exotic is left entirely out of scope, so nothing of it is ever junked.`:''}</p>
     <div class="dcsec"><h3>Keep (${keep.length})</h3>${keepsHtml||'<p class="savenote">Nothing solved — no exotic has favorite stats set.</p>'}
       ${untuned.length?`<details style="margin-top:8px"><summary class="savenote" style="cursor:pointer">${untuned.length} untuned exotics skipped — tap to list</summary>
         <p class="savenote">${untuned.map(x=>`${esc(x.name)} <span style="color:var(--dim)">(${x.cls})</span>`).join(' · ')}</p></details>`:''}</div>

@@ -127,10 +127,14 @@ Core priorities, in his words:
     Vault Verdict's exotics panel (blank = inherit). Nothing else in `thr` touches armor.
   - **Favorite exotics, max 7** (Diego 2026-08-15). `fav:true` in `exotics.json`, ★ toggle on the
     exotic card with a `n / 7` counter. Capped on BOTH sides — the client refuses the 8th and
-    `saveExotics()` trims a forced 9-fav POST down to 7 (verified). Today "prioritized" means
-    **solve order**: favorites solve first, so they get first pick of the vault, and they're
-    pinned to the top of the exotics panel and the preview. That ordering is exactly the hook the
-    spec's step-5 reuse bias needs.
+    `saveExotics()` trims a forced 9-fav POST down to 7 (verified). Diego on what "prioritized"
+    means: *"favorites are set at the floor, the other exotics just help decision with uneeded
+    dupes."* So **only ★ favorites run the floor-aimed solve and decide which legendaries are
+    kept**; a non-favorite tuned exotic keeps its own best copy and junks its weaker duplicates
+    but protects no legendaries (`drivesKeeps()` / the `dupesOnly` flag on its report row).
+    Favorites also solve **first**, which is the hook the spec's step-5 reuse bias needs.
+    **Safety default: with nothing starred, every tuned exotic drives keeps** (`anyStarred`) —
+    otherwise a fresh install with no stars would junk the whole vault.
   - **The solver** — `armorDeclutter(items, ratings)` in `vault-verdict.js`. Per class, per exotic
     (never one global solve). Best copy by the 3/2/1 fav weighting is the **working copy** and the
     other copies are junk candidates; the losers are filtered out of the pool so `championSet()`'s
@@ -145,9 +149,10 @@ Core priorities, in his words:
     MUST stay above `/api/armor` in the handler — that route is a `startsWith` prefix of it.
   - **Two safety nets found by running it against his real vault** (both matter — this is a
     mass-junk-shaped feature): (1) a piece that's a manual favorite, in a DIM loadout, or the last
-    legendary in its class+slot is held at **review**, never junk; (2) **a class with no tuned
-    exotic is left entirely out of scope**. Without (2) the first real run junked his whole
-    Hunter and Titan vault — no tuned exotic means no solve, so every piece fell through to junk.
+    legendary in its class+slot is held at **review**, never junk; (2) **a class with no ★ favorite
+    (or, with nothing starred, no tuned) exotic is left entirely out of scope**. Without (2) the
+    first real run junked his whole Hunter and Titan vault — no solve means every piece fell
+    through to junk.
   - **Preview UI** — a read-only panel in `vault-verdict.html`: a per-class summary table, then
     flat **Keep / Junk candidates / Review** piece lists (60 at a time) and a per-exotic **floor
     status** line. Diego 2026-08-15: *"no need to show per exotic armor combinations, this is long
