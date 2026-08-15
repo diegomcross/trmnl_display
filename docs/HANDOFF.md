@@ -95,9 +95,12 @@ Core priorities, in his words:
 | `settings.html` | **App-wide Settings page** (served at `/settings` on 8787, in the banner nav): Auto-Manager on/off + every threshold (fav/keep/watched-junk/unwatched-junk/comboFloor) + junk-staging character picker (`stageCid`, from `/api/account`) + safety caps + check cadence, each with plain-language help; PVE/PVP combo summary (`/api/combos`); favorites-by-grade summary (`/api/favorites`); god-roll alert rules (read-only); community-data refresh buttons (`/api/perks?fresh=1`, `/api/weapons?fresh=1`). All writes go through `GET/POST /api/auto` — same config as `/auto`, which keeps its own compact editor and links here. |
 | `artifacts.html` | **Artifact Mods** reference (served at `/artifacts`): all 7 Monument of Triumph artifacts × 3 columns × 7 mods, with a filter by subclass verb (Solar/Arc/Void/Stasis/Strand/Prismatic keywords) + keywords (Champions, grenade, Super, weapon types) + free text search. **Data is STATIC** (hand-transcribed from the neonlightsmedia Monument of Triumph guide) — if Bungie changes artifacts/mods, edit the `ARTIFACTS` array in this file. No API. |
 | `builds.html` | **Build Crafter** (served at `/builds`, in the banner nav): DIM-like loadout maker with stat goals + upgrade watching. Build list (super/exotic icons, prio summary, champion totals vs mins, upgrade chips), full editor (class tabs → element chips → ability/aspect/fragment icon grids with official Bungie art + perktip hover → owned-exotic anchor picker → drag-to-order stat priorities with min/max 0-200), per-build suggestions panel (champion 5-piece strip + explained swap suggestions + tuning notes), DIM-loadout import button. Data: `/api/builds*`, `/api/subclass-catalog`, `/api/armor`. |
+| `exotics.json` | Gitignored: **exotic tuning, server-side** (2026-08-15, moved off browser localStorage `vv-exofavs`). `{v:1, at, exotics:{ "<exotic name>": {favs:[≤3 stat keys], floor:number|null, fav:bool} }}` — `favs` = the ordered favorite stats (3/2/1 weighting), `floor` = per-exotic stat-floor override (null inherits `thr.statFloor`), `fav` = one of Diego's **7 favorite exotics** (hard-capped server-side). GET/POST `/api/exotics`. `VV_EXOTICS_FILE` env var redirects it for isolated tests. |
+| `docs/ARMOR_DECLUTTER_SPEC.md` | **Diego's own spec** for the build-driven armor keep/junk engine (written by him 2026-08-15). Supersedes NEXT_PHASE's FINAL MODEL where they disagree. §9 is the build order — steps 1-4 are shipped, 5-8 are not. |
 | `CLAUDE.md` | Working rules for agents: never drop features, test before push, and **mandatory upkeep of this file + `docs/NEXT_PHASE.md`**. |
 | `docs/NEXT_PHASE.md` | The pickup point: specs + open questions for upcoming features. |
 | `docs/DIEGO_RULES.md` | **Canonical list of every rule/request Diego has given** (created 2026-07-17 at his ask). Read before changing scoring/tagging/UI; append new rulings immediately with date + verbatim quote. |
+| `docs/ARMOR_ENGINE_VISION.md` | **Verbatim-only record of everything Diego has said the armor engine should be** (created 2026-07-26 at his ask). His words, in order, zero interpretation. Append new quotes; never edit or summarize one away. |
 | `setup.html` | **First-run setup wizard** (served at `/setup`, 2026-07-17): 3 steps — Bungie app keys (paste form + walkthrough, writes `.env`), Bungie login (opens bungie.net OAuth, paste-back the landing address, writes `tokens.json`), DIM sync connect (auto-registers `.dim-app.json` if missing, mints `.dim-token.json`). Also THE re-auth path now (replaces terminal `auth-and-snapshot.js` for re-login). Passwords are never typed into the app — bungie.net handles login. |
 | `INSTALL.cmd` | Friend-friendly first run: checks Node, starts `vault-verdict.js` minimized (logs to `vault.log`), opens `/setup` in the browser. |
 | `docs/FRIEND_SETUP.md` | Plain steps for giving the app to a friend: GitHub ZIP + Diego privately sends `.env` + `.dim-app.json` (app identity only — each person logs in with their own Bungie account), friend runs `INSTALL.cmd`. |
@@ -105,6 +108,57 @@ Core priorities, in his words:
 ---
 
 ## What works now (current state)
+
+- **Build-driven armor declutter — READ-ONLY PREVIEW (2026-08-15, spec §9 steps 1-4 of 8).**
+  Implements `docs/ARMOR_DECLUTTER_SPEC.md`. **It never tags, moves, or writes anything**, and the
+  old niche engine (`compute()` in `vault-verdict.html`) still produces the live verdicts — spec
+  step 8 (deleting the niche key) is deliberately LAST, after Diego confirms this preview.
+  - **`exotics.json` + `GET/POST /api/exotics`** (§2.1). Exotic tuning moved off browser
+    localStorage onto the server, because the engine runs server-side and `localStorage` never
+    reaches it — the same trap that made `vv-ratings` useless. **One-time migration**: `GET`
+    reports `exists:false` when there's no file; the page then POSTs `{migrate:true, exotics}`
+    from its local `vv-exofavs` and reads the server from then on. A `migrate:true` POST when the
+    file already exists is a **no-op** (verified) so it can never clobber. The page keeps writing
+    a localStorage mirror (`vv-exofavs`/`vv-exofloors`/`vv-exostars`) and falls back to it
+    entirely if `/api/exotics` isn't there yet — so the page never breaks before a REBOOT.
+  - **Stat floor** (§2.2, Diego: *"150 is a good start, but add an option to adjust that"*).
+    `thr.statFloor` (default **150**) in `auto-manage.json`, editable in `/settings`
+    ("Armor declutter — build stat floor"); per-exotic override is the number box on each card in
+    Vault Verdict's exotics panel (blank = inherit). Nothing else in `thr` touches armor.
+  - **Favorite exotics, max 7** (Diego 2026-08-15). `fav:true` in `exotics.json`, ★ toggle on the
+    exotic card with a `n / 7` counter. Capped on BOTH sides — the client refuses the 8th and
+    `saveExotics()` trims a forced 9-fav POST down to 7 (verified). Today "prioritized" means
+    **solve order**: favorites solve first, so they get first pick of the vault, and they're
+    pinned to the top of the exotics panel and the preview. That ordering is exactly the hook the
+    spec's step-5 reuse bias needs.
+  - **The solver** — `armorDeclutter(items, ratings)` in `vault-verdict.js`. Per class, per exotic
+    (never one global solve). Best copy by the 3/2/1 fav weighting is the **working copy** and the
+    other copies are junk candidates; the losers are filtered out of the pool so `championSet()`'s
+    own prio-weighted pick can't override the fav-weighted choice. Target = that exotic's
+    `watch:true` build, else a **synthetic build** (prio = favs then the rest; `min[fav1]` and
+    `min[fav2]` = the floor). Candidate sets = the sets on that watched build, else the sets rated
+    4pc/2pc; each solved **independently** (sets never compete). **`championSet()` is called
+    completely unchanged** — it already anchors the exotic, fills the open slots and enforces the
+    2pc/4pc rule. Union of every solve's picks = keep.
+  - **`POST /api/armor/declutter {ratings}`** — read-only. It's a POST because Diego's **set
+    ratings still live in his browser** (`vv-ratings`), so the client hands them in. ⚠ This route
+    MUST stay above `/api/armor` in the handler — that route is a `startsWith` prefix of it.
+  - **Two safety nets found by running it against his real vault** (both matter — this is a
+    mass-junk-shaped feature): (1) a piece that's a manual favorite, in a DIM loadout, or the last
+    legendary in its class+slot is held at **review**, never junk; (2) **a class with no tuned
+    exotic is left entirely out of scope**. Without (2) the first real run junked his whole
+    Hunter and Titan vault — no tuned exotic means no solve, so every piece fell through to junk.
+  - **Preview UI** — a read-only panel in `vault-verdict.html`: a per-class summary table, then
+    flat **Keep / Junk candidates / Review** piece lists (60 at a time) and a per-exotic **floor
+    status** line. Diego 2026-08-15: *"no need to show per exotic armor combinations, this is long
+    in the page an unnecessary"* — so there is deliberately **no exotic → set → slot tree** (it
+    was 26 exotics × 17 sets × 5 rows ≈ 460KB of DOM; the flat version is 43KB).
+  - **Reason strings carry the math**: keeps say which builds need the piece grouped by set, and
+    distinguish "best Techsec Helmet for A, B" from "stands in for CODA's missing Helmet on A, B"
+    (championSet falls back to the global best when a set owns nothing in a slot). Junk says which
+    piece beat it and by how much under whose priorities.
+  - **NOT built yet** (spec §9 steps 5-8): reuse bias + `armor-keeps.json` stickiness, the full
+    farming report, the `rearrange` alert kind, and deleting the niche key from `compute()`.
 
 - **Auth + profile fetch** end-to-end (non-interactive refresh in `server.js`).
 - **Content model** (`buildModel`): gathers **orders, quests/bounties, seals (titles), and a

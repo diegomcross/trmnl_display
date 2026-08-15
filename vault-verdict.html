@@ -98,6 +98,34 @@ details.panel[open] summary::after{content:" –"}
 .xseg button{background:var(--panel2);border:1px solid var(--line);color:var(--mut);padding:6px 9px;font-size:10.5px;cursor:pointer;text-transform:uppercase;letter-spacing:.05em;font-family:inherit;clip-path:polygon(6px 0,100% 0,100% calc(100% - 6px),calc(100% - 6px) 100%,0 100%,0 6px)}
 .xseg button.on{background:rgba(207,174,66,.2);color:var(--gold);border-color:var(--gold)}
 .st.fv{outline:1px solid var(--gold);outline-offset:-1px}
+.star{background:none;border:none;color:var(--dim);font-size:16px;line-height:1;cursor:pointer;padding:0 2px;font-family:inherit}
+.star.on{color:var(--gold)}
+.flr{display:flex;align-items:center;gap:7px;margin-top:7px;font-size:10.5px;color:var(--mut);text-transform:uppercase;letter-spacing:.05em}
+.flr input{background:var(--panel2);border:1px solid var(--line);color:var(--ink);padding:5px 7px;font-size:12px;width:74px;font-variant-numeric:tabular-nums;font-family:inherit}
+.flr span{text-transform:none;letter-spacing:0;color:var(--dim);font-size:10.5px}
+.flr a{color:var(--gold)}
+/* declutter preview */
+.dctab{width:100%;border-collapse:collapse;margin:10px 0;font-size:12px;font-variant-numeric:tabular-nums}
+.dctab th{color:var(--dim);font-weight:400;font-size:9.5px;text-transform:uppercase;letter-spacing:.06em;padding:4px 6px;text-align:right}
+.dctab tr>th:first-child{text-align:left;color:var(--ink);font-size:12px;font-weight:600;text-transform:none;letter-spacing:0}
+.dctab td{border-top:1px solid var(--line);padding:6px;text-align:right;color:var(--mut)}
+.dctab td.k{color:var(--keep)}.dctab td.j{color:var(--junk)}.dctab td.r{color:var(--rev)}.dctab td.u{color:var(--und)}
+.dctab tr.tt th,.dctab tr.tt td{border-top:1px solid var(--gold);color:var(--ink)}
+.dcsec{border-top:1px solid var(--line);margin-top:12px;padding-top:10px}
+.dcsec h3{font-size:11.5px;color:var(--gold);text-transform:uppercase;letter-spacing:.09em;font-family:Bahnschrift,"Roboto Condensed",sans-serif;margin-bottom:6px}
+.dcx{border-top:1px dashed var(--line);padding:8px 0}
+.dcx:first-child{border-top:none}
+.dcxh{font-weight:600;font-size:13px;color:var(--gold)}
+.dcxh small{color:var(--dim);font-weight:400;font-size:10.5px;text-transform:none;letter-spacing:0}
+.dcv{margin:6px 0 0 8px;border-left:2px solid var(--line);padding-left:9px}
+.dcvh{font-size:11.5px;color:var(--mut)}
+.dcvh b{color:var(--ink)}
+.ok{color:var(--keep)}.bad{color:var(--junk)}.warn{color:var(--rev)}
+.dcp{font-size:11.5px;color:var(--mut);display:flex;gap:6px;padding:1px 0}
+.dcp i{font-style:normal;color:var(--dim);width:70px;flex-shrink:0}
+.dcp b{color:var(--ink);font-weight:600}
+.dcj{font-size:11.5px;color:var(--mut);border-top:1px dashed var(--line);padding:6px 0}
+.dcj b{color:var(--ink)}
 :focus-visible{outline:2px solid var(--gold);outline-offset:2px}
 @media(prefers-reduced-motion:no-preference){.card{animation:in .18s ease both}@keyframes in{from{opacity:0;transform:translateY(4px)}to{opacity:1}}}
 @media(min-width:760px){body{max-width:880px;margin:0 auto}}
@@ -133,8 +161,29 @@ details.panel[open] summary::after{content:" –"}
 <details class="panel" id="exoPanel">
   <summary>Exotics — favorite stat tuning</summary>
   <p class="savenote">Pick up to <b>three</b> stats that synergize with the exotic's function — first pick is the <b>primary</b>, then <b>secondary</b>, then <b>tertiary</b>. Copies are ranked by the <b>weighted sum: primary ×3 + secondary ×2 + tertiary ×1</b> (every pick always matters — one huge primary alone doesn't beat two good stats), and only the best copy is kept; the card shows the math. No favorite set: falls back to per-archetype niches and the exotic is flagged pending. Saves automatically.</p>
+  <p class="savenote">Tap the <b>☆</b> next to an exotic to mark it a <b>favorite exotic</b> (max <b>7</b>).
+  Favorites are solved <b>first</b> by the declutter engine, so they get first pick of the vault, and they
+  lead the preview and this list.</p>
   <div class="bar" id="exoClsTabs" style="margin-top:8px"></div>
+  <p class="savenote" id="exoStarCount"></p>
   <div id="exoList"></div>
+</details>
+
+<details class="panel" id="dcPanel">
+  <summary>Build-driven declutter — preview (read-only)</summary>
+  <p class="savenote">The engine from <b>docs/ARMOR_DECLUTTER_SPEC.md</b>: per class, per exotic, it solves
+  your <b>watched</b> Build Crafter builds — or, for exotics with no watched build, the exotic's favorite
+  stats aimed at the <b>stat floor</b> — against every set that build picks (or, with no watched build,
+  every set you rated <b>4-piece / 2-pc only</b> above). Sets never compete: each is solved on its own and
+  every set's picks survive. What those solves actually use is a <b>keep</b>; everything else in a
+  selected/rated set is a <b>junk candidate</b>.<br>
+  <b>Nothing here is tagged, moved, or written.</b> The verdicts on the cards below still come from the old
+  niche engine — this panel only shows what the replacement would decide.</p>
+  <div class="bar" style="margin-top:8px">
+    <button class="btn sm" id="dcRun">Run preview</button>
+    <span class="count" id="dcStatus" style="margin:0;align-self:center"></span>
+  </div>
+  <div id="dcOut"></div>
 </details>
 
 <details class="panel">
@@ -175,8 +224,22 @@ const isClassItem = s => ['Bond','Cloak','Mark'].includes(s);
 const RLBL = {'4pc':'4-piece','2pc':'2-pc only','ignore':'Ignore','und':'Undecided'};
 
 // ---------- persistence ----------
-let ratings = {};   // set name -> 4pc|2pc|ignore|und
-let exoFavs = {};   // exotic name -> array of stat keys, e.g. ['s','c']
+let ratings = {};    // set name -> 4pc|2pc|ignore|und   (still browser-only — see NEXT_PHASE)
+let exoFavs = {};    // exotic name -> array of stat keys, e.g. ['s','c']
+let exoFloors = {};  // exotic name -> per-exotic stat-floor override (number) | undefined = inherit
+let exoStars = {};   // exotic name -> true = one of Diego's FAVORITE exotics (max MAXFAV)
+const MAXFAV = 7;    // Diego 2026-08-15: "Up to 7 exotics."
+let GFLOOR = 150;    // global default (thr.statFloor from /api/auto)
+// Exotic tuning moved SERVER-SIDE 2026-08-15 (exotics.json + /api/exotics) because the declutter
+// engine runs on the server and localStorage never reaches it. EXO_SERVER stays false against a
+// server that predates the route (Diego hasn't run REBOOT.cmd yet) — then we keep using
+// localStorage exactly as before, so this page never breaks mid-upgrade.
+let EXO_SERVER = false;
+async function getJSON(url,opt){
+  const r = await fetch(url,opt);
+  if(!(r.headers.get('content-type')||'').includes('application/json')) return null;   // old server → HTML fallthrough
+  return await r.json();
+}
 async function loadStore(key){
   try{ if(window.storage){ const r=await window.storage.get(key); if(r&&r.value) return JSON.parse(r.value); } }catch(e){}
   try{ const s=localStorage.getItem(key); if(s) return JSON.parse(s); }catch(e){}
@@ -188,7 +251,28 @@ async function saveStore(key,obj){
   try{ localStorage.setItem(key,s); }catch(e){}
 }
 const saveRatings=()=>saveStore('vv-ratings',ratings);
-const saveFavs=()=>saveStore('vv-exofavs',exoFavs);
+const starCount=()=>Object.values(exoStars).filter(Boolean).length;
+const exoPayload=()=>{
+  const p={};
+  for(const n of new Set([...Object.keys(exoFavs),...Object.keys(exoFloors),...Object.keys(exoStars)]))
+    p[n]={favs:(exoFavs[n]||[]).slice(0,3),floor:(exoFloors[n]??null),fav:!!exoStars[n]};
+  return p;
+};
+async function saveFavs(){
+  saveStore('vv-exofavs',exoFavs);           // local mirror kept as a backup / pre-REBOOT fallback
+  saveStore('vv-exofloors',exoFloors);       // …floors too, so the migration payload is complete
+  saveStore('vv-exostars',exoStars);
+  if(!EXO_SERVER) return;
+  try{ await fetch('/api/exotics',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({exotics:exoPayload()})}); }catch(e){}
+}
+function applyExoticsFromServer(ex){
+  exoFavs={}; exoFloors={}; exoStars={};
+  for(const [n,v] of Object.entries(ex||{})){
+    if(v&&v.favs&&v.favs.length) exoFavs[n]=v.favs.slice(0,3);
+    if(v&&v.floor!=null) exoFloors[n]=v.floor;
+    if(v&&v.fav) exoStars[n]=true;
+  }
+}
 const rateOf = sb => sb ? (ratings[sb]||'und') : 'ignore';
 const favOf = n => exoFavs[n]||[];   // [primary, secondary?, tertiary?] — max 3, order matters (Diego 2026-07-12)
 // Copies of a tuned exotic rank by the WEIGHTED SUM of the favorite stats (3×primary +
@@ -384,16 +468,18 @@ let exoCls='';
 function renderExos(){
   $('exoClsTabs').innerHTML=['','Warlock','Hunter','Titan'].map(x=>
     `<button class="tab disp ${exoCls===x?'on':''}" data-exocls="${x}">${x||'All classes'}</button>`).join('');
+  $('exoStarCount').innerHTML=`★ favorite exotics: <b>${starCount()} / ${MAXFAV}</b>`;
   const byName={};
   ITEMS.forEach(i=>{ if(i.x&&(!exoCls||i.cls===exoCls)){ (byName[i.n]=byName[i.n]||{cls:i.cls,slot:i.slot,c:0}).c++; } });
   const names=Object.keys(byName).sort((a,b)=>{
+    const sa=exoStars[a]?0:1, sb=exoStars[b]?0:1;                    // ★ favorites pinned to the top
     const ta=favOf(a).length?1:0, tb=favOf(b).length?1:0;
-    return ta-tb || byName[b].c-byName[a].c || a.localeCompare(b);   // untuned first, then most copies
+    return sa-sb || ta-tb || byName[b].c-byName[a].c || a.localeCompare(b);   // then untuned, then most copies
   });
   $('exoList').innerHTML=names.map(nm=>{
-    const e=byName[nm], fav=favOf(nm);
+    const e=byName[nm], fav=favOf(nm), st=!!exoStars[nm];
     return `<div class="srow">
-      <div class="sh"><span class="snm" style="color:var(--gold)">${nm} <span style="color:var(--dim);font-weight:400">· ${e.cls} ${e.slot} · ${e.c} cop${e.c>1?'ies':'y'}</span></span>
+      <div class="sh"><span class="snm" style="color:var(--gold)"><button class="star ${st?'on':''}" data-exostar="${nm.replace(/"/g,'&quot;')}" title="Favorite exotic — solved first (max ${MAXFAV})">${st?'★':'☆'}</button> ${nm} <span style="color:var(--dim);font-weight:400">· ${e.cls} ${e.slot} · ${e.c} cop${e.c>1?'ies':'y'}</span></span>
       <span class="ssrc">${fav.length?fav.map(k=>STATN[k]).join(' › '):'⚠ no favorite set'}</span></div>
       <div class="xseg" data-exo="${nm.replace(/"/g,'&quot;')}">
         ${['w','h','c','g','s','m'].map(k=>{
@@ -401,8 +487,79 @@ function renderExos(){
           return `<button class="${ix>=0?'on':''}" data-k="${k}">${STATN[k]}${ix===0?' ¹':ix===1?' ²':ix===2?' ³':''}</button>`;
         }).join('')}
       </div>
+      <label class="flr">Stat floor <input type="number" min="0" max="400" placeholder="${GFLOOR}"
+        value="${exoFloors[nm]??''}" data-exofloor="${nm.replace(/"/g,'&quot;')}">
+        <span>blank = use the global ${GFLOOR} from <a href="/settings">Settings</a></span></label>
     </div>`;
   }).join('');
+}
+
+// ---------- declutter preview (read-only) ----------
+let DC=null, dcJunkShown=60, dcKeepShown=60;
+const SLOTIX={Helmet:0,Gauntlets:1,Chest:2,Leg:3,'Class Item':4};
+const esc=s=>String(s??'').replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+async function runDeclutter(){
+  $('dcStatus').textContent='Solving…'; $('dcRun').disabled=true;
+  try{
+    const d=await getJSON('/api/armor/declutter',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({ratings})});
+    if(!d) throw new Error('the server does not have this endpoint yet — double-click REBOOT.cmd');
+    if(d.error) throw new Error(d.error);
+    DC=d; dcJunkShown=60; dcKeepShown=60; renderDeclutter();
+    $('dcStatus').textContent=`solved ${new Date(d.at).toLocaleTimeString()} · floor ${d.floorDefault}`;
+  }catch(err){ $('dcOut').innerHTML=''; $('dcStatus').textContent='Failed: '+err.message; }
+  $('dcRun').disabled=false;
+}
+function renderDeclutter(){
+  if(!DC) return;
+  const byId={}; ITEMS.forEach(i=>byId[i.id]=i);
+  const V=DC.verdicts||{};
+  const cls=Object.keys(DC.perClass||{}).sort();
+  const tot=cls.reduce((a,c)=>{const p=DC.perClass[c];['keep','junk','review','oos','total'].forEach(k=>a[k]+=p[k]);return a;},{keep:0,junk:0,review:0,oos:0,total:0});
+  const sumRow=(n,p,b)=>`<tr class="${b?'tt':''}"><th>${n}</th><td>${p.total}</td><td class="k">${p.keep}</td>
+    <td class="j">${p.junk}</td><td class="r">${p.review}</td><td class="u">${p.oos}</td></tr>`;
+  const clsRows=`<table class="dctab"><tr><th></th><th>pieces</th><th>keep</th><th>junk</th><th>review</th><th>out of scope</th></tr>
+    ${cls.map(c=>sumRow(c,DC.perClass[c])).join('')}${sumRow('All',tot,true)}</table>`;
+
+  // 1/2 — flat piece lists. Diego 2026-08-15: "no need to show per exotic armor combinations,
+  // this is long in the page an unnecessary" — so NO exotic → set → slot tree (that was
+  // 26 exotics × 17 sets × 5 rows). Just the pieces, with a one-line reason each.
+  const untuned=DC.exotics.filter(x=>x.untuned);
+  const keep=ITEMS.filter(i=>V[i.id]&&V[i.id].v==='keep');
+  const junk=ITEMS.filter(i=>V[i.id]&&V[i.id].v==='junk');
+  const review=ITEMS.filter(i=>V[i.id]&&V[i.id].v==='review');
+  const bySlot=(a,b)=>a.cls.localeCompare(b.cls)||(SLOTIX[a.slot]??9)-(SLOTIX[b.slot]??9)||(b.x?1:0)-(a.x?1:0)||b.tot-a.tot;
+  keep.sort(bySlot); junk.sort(bySlot); review.sort(bySlot);
+  const jrow=i=>`<div class="dcj"><b>${i.x?'<span style="color:var(--gold)">✦ </span>':''}${esc(i.n)}</b> <span style="color:var(--dim)">· ${i.cls} ${i.slot} · T${i.t} · ${i.tot} base${i.sb?` · ${esc(i.sb)}`:''}${i.tag?` · ★ ${i.tag}`:''}</span><br>${V[i.id].why}</div>`;
+  const paged=(list,n,id)=>list.slice(0,n).map(jrow).join('')
+    +(list.length>n?`<button class="btn more sm" id="${id}">Show 60 more (${list.length-n} left)</button>`:'');
+  const keepsHtml=paged(keep,dcKeepShown,'dcMoreK');
+  const junkHtml=paged(junk,dcJunkShown,'dcMore');
+
+  // 3 — floor status (partial farming report — the full §4 report is a later step)
+  const floorHtml=DC.exotics.filter(x=>!x.untuned).map(x=>{
+    const best=x.bestDeficit;
+    const st=best===0?'<span class="ok">✓ reaches its goals</span>':best==null?'<span class="warn">not solved</span>':`<span class="bad">short by ${best}</span>`;
+    const gaps=[...new Set(x.variants.flatMap(v=>v.setGaps||[]))];
+    return `<div class="dcj"><b>${x.fav?'<span style="color:var(--gold)">★ </span>':''}${esc(x.name)}</b> <span style="color:var(--dim)">· ${x.cls} · ${x.usingWatchedBuild?'watched build':`floor ${x.floor}${x.floorSource==='exotic'?' (per-exotic)':' (global)'}`}</span> — ${st}
+      <br><span style="color:var(--dim)">best copy: ${x.favs.map(k=>`${STATN[k]} ${x.favStats[k]}`).join(' › ')} (fav score ${x.favScore})${x.copies>1?` · ${x.copies-1} weaker cop${x.copies-1>1?'ies':'y'} junked`:''}${gaps.length?` · gaps: ${gaps.map(esc).join(', ')}`:''}</span></div>`;
+  }).join('');
+
+  $('dcOut').innerHTML=`
+    <div class="dcsum">${clsRows}</div>
+    <p class="savenote"><b>${DC.usingWatched} of ${DC.tunedCount} tuned exotics</b> are using a real watched
+    Build Crafter build; the rest run on the favorite-stats + stat-floor fallback. Mark your real builds
+    <b>watch</b> in <a href="/builds">Build Crafter</a> to give them their own priorities.
+    ${untuned.length?`<br><b class="warn">${untuned.length} owned exotics have no favorite stats set and were skipped</b> — and a class with no tuned exotic at all is left entirely out of scope, so nothing of it is ever junked.`:''}</p>
+    <div class="dcsec"><h3>Keep (${keep.length})</h3>${keepsHtml||'<p class="savenote">Nothing solved — no exotic has favorite stats set.</p>'}
+      ${untuned.length?`<details style="margin-top:8px"><summary class="savenote" style="cursor:pointer">${untuned.length} untuned exotics skipped — tap to list</summary>
+        <p class="savenote">${untuned.map(x=>`${esc(x.name)} <span style="color:var(--dim)">(${x.cls})</span>`).join(' · ')}</p></details>`:''}</div>
+    <div class="dcsec"><h3>Junk candidates (${junk.length})</h3>${junkHtml||'<p class="savenote">No junk candidates.</p>'}</div>
+    <div class="dcsec"><h3>Held back for review (${review.length})</h3>${review.length?review.slice(0,40).map(jrow).join(''):'<p class="savenote">None.</p>'}</div>
+    <div class="dcsec"><h3>Floor status — which exotics reach their goal</h3>
+      <p class="savenote">A shortfall here is a farming target, not a reason to keep more pieces — the solve
+      still keeps exactly one piece per slot. The full farming report is the next step in the spec.</p>
+      ${floorHtml}</div>`;
 }
 
 function card(i){
@@ -426,6 +583,14 @@ function card(i){
 document.body.addEventListener('click',e=>{
   const seg=e.target.closest('.seg button');
   if(seg){ ratings[seg.parentElement.dataset.set]=seg.dataset.r; saveRatings(); const keep=$('setPanel').open; render(); $('setPanel').open=keep; return; }
+  const sb2=e.target.closest('[data-exostar]');
+  if(sb2){
+    const nm=sb2.dataset.exostar;
+    if(exoStars[nm]) delete exoStars[nm];
+    else if(starCount()>=MAXFAV){ $('exoStarCount').innerHTML=`★ favorite exotics: <b class="bad">${starCount()} / ${MAXFAV}</b> — un-star one first.`; return; }
+    else exoStars[nm]=true;
+    saveFavs(); const keep=$('exoPanel').open; render(); $('exoPanel').open=keep; return;
+  }
   const xb=e.target.closest('.xseg button');
   if(xb){
     const nm=xb.parentElement.dataset.exo, k=xb.dataset.k, cur=favOf(nm);
@@ -436,6 +601,9 @@ document.body.addEventListener('click',e=>{
     if(next.length) exoFavs[nm]=next; else delete exoFavs[nm];
     saveFavs(); const keep=$('exoPanel').open; render(); $('exoPanel').open=keep; return;
   }
+  if(e.target.id==='dcRun'){ runDeclutter(); return; }
+  if(e.target.id==='dcMore'){ dcJunkShown+=60; renderDeclutter(); return; }
+  if(e.target.id==='dcMoreK'){ dcKeepShown+=60; renderDeclutter(); return; }
   const xc=e.target.closest('[data-exocls]');
   if(xc){ exoCls=xc.dataset.exocls; const keep=$('exoPanel').open; renderExos(); $('exoPanel').open=keep; return; }
   const t=e.target.closest('[data-cls],[data-v],[data-a],[data-pend],.btn[data-x]');
@@ -446,15 +614,24 @@ document.body.addEventListener('click',e=>{
   else if(t.dataset.x){ exportQ(t.dataset.x,t); }
   else if(t.dataset.v!==undefined){F.v=t.dataset.v;F.pend=false;shown=60;render();}
 });
+// per-exotic stat-floor override (blank = inherit the global thr.statFloor)
+document.body.addEventListener('change',e=>{
+  const fl=e.target.closest('[data-exofloor]');
+  if(!fl) return;
+  const nm=fl.dataset.exofloor, raw=fl.value.trim();
+  if(raw==='') delete exoFloors[nm];
+  else exoFloors[nm]=Math.max(0,Math.min(400,Math.round(+raw)||0));
+  saveFavs();
+});
 $('slotSel').onchange=e=>{F.slot=e.target.value;shown=60;render();};
 $('setSel').onchange=e=>{F.set=e.target.value;shown=60;render();};
 $('q').oninput=e=>{F.q=e.target.value;shown=60;render();};
 ['oSyn','oHp','oFav','oLo'].forEach(id=>$(id).onchange=()=>{shown=60;render();});
 $('more').onclick=()=>{shown+=60;render();};
-$('expBtn').onclick=()=>{ copyText(JSON.stringify({ratings,exoFavs}), $('expBtn'), 'Ratings copied ✓'); };
+$('expBtn').onclick=()=>{ copyText(JSON.stringify({ratings,exoFavs,exoFloors}), $('expBtn'), 'Ratings copied ✓'); };
 $('impBtn').onclick=()=>{ const s=prompt('Paste exported ratings JSON:'); if(!s)return;
   try{ const d=JSON.parse(s);
-    if(d.ratings||d.exoFavs){ ratings=d.ratings||ratings; exoFavs=d.exoFavs||exoFavs; }
+    if(d.ratings||d.exoFavs){ ratings=d.ratings||ratings; exoFavs=d.exoFavs||exoFavs; exoFloors=d.exoFloors||exoFloors; }
     else ratings=d;   // legacy export: plain set-ratings map
     saveRatings(); saveFavs(); render();
   }catch(e){ alert('Invalid JSON'); } };
@@ -493,7 +670,21 @@ $('refreshBtn').onclick=()=>loadData(true);
 (async function init(){
   ratings = (await loadStore('vv-ratings')) || {};
   exoFavs = (await loadStore('vv-exofavs')) || {};
+  exoFloors = (await loadStore('vv-exofloors')) || {};
+  exoStars = (await loadStore('vv-exostars')) || {};
   for(const k of Object.keys(exoFavs)) exoFavs[k]=exoFavs[k].slice(0,3);  // migrate: max 3, order kept
+  // One-time move of the exotic tuning from this browser into exotics.json on the server.
+  // Runs only when the server has NO exotics.json yet and this browser does have tuning saved.
+  const srv = await getJSON('/api/exotics').catch(()=>null);
+  if(srv){
+    EXO_SERVER = true;
+    if(!srv.exists && Object.keys(exoFavs).length){
+      const d = await getJSON('/api/exotics',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({migrate:true,exotics:exoPayload()})}).catch(()=>null);
+      if(d&&d.exotics) applyExoticsFromServer(d.exotics);
+    } else applyExoticsFromServer(srv.exotics);
+  }
+  try{ const a=await getJSON('/api/auto'); if(a&&a.cfg&&a.cfg.thr&&a.cfg.thr.statFloor!=null) GFLOOR=a.cfg.thr.statFloor; }catch(e){}
   loadData(false);
   window.GRELOAD=()=>loadData(false);   // banner "Updated" chip / auto-refresh hook
 })();

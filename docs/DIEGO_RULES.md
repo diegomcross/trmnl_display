@@ -139,6 +139,41 @@
   build-driven declutter engine must be shown to Diego and confirmed before any real
   junk-tagging goes live.
 
+### 4b. Armor declutter engine — the five 2026-08-15 rulings (`docs/ARMOR_DECLUTTER_SPEC.md`)
+
+Diego wrote `docs/ARMOR_DECLUTTER_SPEC.md` himself on 2026-08-15. **That spec supersedes
+NEXT_PHASE's FINAL MODEL wherever they disagree.** The five rulings it adds:
+
+1. **Stat floor — builds stop at "good enough", not "maximum"** (verbatim): *"150 is a good
+   start, but add an option to adjust that."* A duplicate piece must move a build toward its
+   floor to earn a vault slot; once a build's `minDeficit` hits 0, stop adding pieces for it.
+2. **Not a global optimization** (verbatim): *"the app should look in the vault and make
+   decisions based on what exists in the vault and user choices, not a global decision."*
+   The solve runs **per class, per exotic**, incrementally — never one global solve.
+3. **Exotics are triage targets too** (verbatim): *"if we don't have an exotic piece with the
+   best stats, I'll keep farming for a better one. App should guide for that."* The engine
+   owes him a farming report, and chasing an unreachable floor must never keep extra pieces.
+4. **Suggestions, never auto-applied.** When solving a new exotic reveals a better arrangement
+   for an already-solved one, it surfaces as a dismissible `rearrange` alert in the existing
+   builds-alerts feed — the app never rewrites his keeps by itself.
+5. **Floor storage** (verbatim): *"Global default in Settings + per-exotic override on the
+   exotic's card."* → `thr.statFloor` (default 150) in `auto-manage.json`, plus a per-exotic
+   `floor` in `exotics.json` (null = inherit the global).
+
+Also standing and unchanged from 2026-07-25/26: sets never compete · every set selected on a
+build is solved independently · `watch:true` builds only · a 4pc bonus must be filled by 4 real
+same-set pieces · the niche engine is **replaced**, not layered.
+
+Two more the same day, while the preview was being built:
+
+6. **Favorite exotics, max 7** (verbatim): *"there should actually be an option to tag certain
+   exotics as favorites, so they are prioritized. Up to 7 exotics."* Stored as `fav:true` in
+   `exotics.json`, hard-capped at 7. Today it drives **solve order** (favorites solve first, which
+   is the hook the spec's step-5 reuse bias needs) and pins them to the top of the preview.
+7. **Don't print the per-exotic armor combinations** (verbatim): *"also no need to show per exotic
+   armor combinations, this is long in the page an unnecessary"* — the preview's Keeps section is a
+   flat list of the pieces to keep, NOT an exotic → set → slot tree. The tree was thousands of rows.
+
 ## 5. Perk lists & Perk Finder
 
 - **No exotic perks / frames / non-trait plugs in perk lists** (2026-07-04 commit

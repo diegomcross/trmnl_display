@@ -1623,6 +1623,273 @@ function buildAlertEntry(build, champ, cand, r, sb) {
   };
 }
 
+// ---------- armor declutter engine (build-driven keep/junk) — docs/ARMOR_DECLUTTER_SPEC.md ----------
+// READ-ONLY PREVIEW. This never writes a DIM tag and never touches the Auto-Manager. The live
+// verdict engine is still compute()'s niche key in vault-verdict.html; it stays untouched until
+// Diego confirms this preview (spec §9 step 8). Steps 1-4 of §9 only — no reuse bias, no
+// armor-keeps.json stickiness, no farming report, no `rearrange` alerts yet.
+//
+// Per class, per exotic (Diego 2026-08-15: "not a global decision"):
+//   1. every owned exotic with tuned favs. Best copy by the 3/2/1 fav weighting is the WORKING
+//      copy; the other copies are junk candidates (unchanged from the exotics panel's rule).
+//   2. stat target = that exotic's watch:true Build Crafter build (real prio/min/max), else a
+//      SYNTHETIC build off its favs with min[fav1]=min[fav2]=floor (floor = per-exotic override
+//      ?? thr.statFloor). This is what makes the floor meaningful for exotics with no build.
+//   3. candidate sets = the sets picked on that watched build, else the sets Diego rated 4pc/2pc.
+//      Sets NEVER compete — each is solved independently and all their picks survive.
+//   4. solve with championSet() UNCHANGED — it already anchors the exotic, fills the open slots
+//      and enforces the 2pc/4pc rule.
+//   6. union of every set's picks across every exotic = KEEP; everything else in a selected or
+//      rated set = junk candidate, with the existing safety nets (manual favorite / in a DIM
+//      loadout / last copy of its slot → review). Pieces in unrated sets are left out of scope.
+//   7. floor stop rule: championSet already returns exactly one piece per slot, so the champion
+//      IS the minimum — an unreachable floor can never make it keep extra pieces.
+// VV_EXOTICS_FILE lets an isolated test instance point at a throwaway copy so a test run can
+// never overwrite Diego's real tuning (same escape hatch as VV_CACHE_DIR).
+const EXOTICS_FILE = process.env.VV_EXOTICS_FILE || path.join(__dirname, 'exotics.json');
+const FAVW3 = [3, 2, 1];                                        // primary ×3 + secondary ×2 + tertiary ×1
+const favScoreOf = (it, favs) => favs.reduce((sum, k, ix) => sum + FAVW3[ix] * (it.s[k] || 0), 0);
+const exoticsFileExists = () => { try { return fs.existsSync(EXOTICS_FILE); } catch { return false; } };
+// exotics.json {v:1, exotics:{ "<name>": {favs:[statKeys<=3], floor:number|null, fav:bool} }}
+//   favs  = the ordered favorite STATS (3/2/1 weighting) — unchanged meaning
+//   floor = per-exotic stat-floor override; null = inherit the global thr.statFloor
+//   fav   = this is one of Diego's FAVORITE EXOTICS, capped at 7 (2026-08-15: "there should
+//           actually be an option to tag certain exotics as favorites, so they are prioritized.
+//           Up to 7 exotics."). Favorites solve FIRST and lead the preview.
+// Tolerates the old browser shape (a bare array of stat keys).
+const MAX_FAV_EXOTICS = 7;
+const readExoEntry = (v) => {
+  const favs = (Array.isArray(v) ? v : (v.favs || [])).filter((k) => STATKEYS.includes(k)).slice(0, 3);
+  const fl = (!Array.isArray(v) && v.floor != null && isFinite(+v.floor)) ? Math.max(0, Math.min(400, Math.round(+v.floor))) : null;
+  return { favs, floor: fl, fav: !Array.isArray(v) && !!v.fav };
+};
+function loadExotics() {
+  const f = loadJson(EXOTICS_FILE);
+  const raw = (f && f.exotics && typeof f.exotics === 'object') ? f.exotics : {};
+  const out = {};
+  for (const [n, v] of Object.entries(raw)) if (v) out[n] = readExoEntry(v);
+  return out;
+}
+function saveExotics(ex) {
+  const clean = {};
+  let favCount = 0;
+  for (const [n, v] of Object.entries(ex || {})) {
+    if (!v) continue;
+    const e = readExoEntry(v);
+    if (e.fav && favCount >= MAX_FAV_EXOTICS) e.fav = false;   // hard cap at 7, whatever the client sends
+    if (e.fav) favCount++;
+    if (!e.favs.length && e.floor == null && !e.fav) continue;
+    clean[n] = e;
+  }
+  saveJsonSafe(EXOTICS_FILE, { v: 1, at: Date.now(), exotics: clean });
+  return clean;
+}
+
+// A stand-in Build Crafter build for an exotic Diego never marked watch:true. prio = his
+// favorite stats first (order kept), then the rest; min = the floor on the top TWO favs
+// (Diego 2026-08-15: "150 is a good start, but add an option to adjust that").
+function synthBuildFor(name, cls, favs, floor, sample) {
+  const prio = [...favs, ...STATKEYS.filter((k) => !favs.includes(k))];
+  const min = {}, max = {};
+  for (const k of STATKEYS) { min[k] = 0; max[k] = 200; }
+  for (const k of favs.slice(0, 2)) min[k] = floor;
+  return {
+    id: `synth:${cls}:${name}`, name: `${name} — favorite stats`, synthetic: true, cls,
+    exotic: { hash: sample.hash, n: name, slot: sample.slot },
+    prio, min, max, setBonus: [], watch: true,
+  };
+}
+
+const ARMOR_SLOT_IX = { Helmet: 0, Gauntlets: 1, Chest: 2, Leg: 3, 'Class Item': 4 };
+// ratings: {setName: '4pc'|'2pc'|'ignore'|'und'} — Diego's set ratings still live in the
+// browser (localStorage 'vv-ratings'), so the client posts them in with the preview request.
+function armorDeclutter(items, ratings) {
+  const cfg = loadAuto();
+  const floorDefault = Math.max(0, Math.min(400, Math.round(+cfg.thr.statFloor || AUTO_DEFAULTS.thr.statFloor)));
+  const exotics = loadExotics();
+  const watched = loadBuilds().filter((b) => b.watch && !b.draft && b.exotic && (b.exotic.hash || b.exotic.n));
+  const ratedSets = Object.entries(ratings || {})
+    .filter(([, r]) => r === '4pc' || r === '2pc')
+    .map(([name, r]) => ({ name, want: r === '4pc' ? 4 : 2 }));
+
+  const verdicts = {};   // instanceId -> {v, why}
+  const say = (id, v, why) => { verdicts[id] = { v, why }; };
+
+  // Armor 2.0 legacy and pieces Diego junked himself are settled before anything else
+  // (DIEGO_RULES §4 — never regress these two).
+  const live = [];
+  for (const it of items) {
+    if (it.tag === 'junk') { say(it.id, 'junk', 'You tagged it junk.'); continue; }
+    if (it.t === 0) { say(it.id, 'junk', 'Armor 2.0 legacy — trash (Diego 2026-07-12: junk always).'); continue; }
+    live.push(it);
+  }
+
+  // ---- step 1: exotic scope (per class, per exotic name) ----
+  const byExotic = new Map();   // "cls|name" -> copies[]
+  for (const it of live) {
+    if (!it.x || !ARMOR_SLOTS.includes(it.slot)) continue;
+    const k = `${it.cls}|${it.n}`;
+    if (!byExotic.has(k)) byExotic.set(k, []);
+    byExotic.get(k).push(it);
+  }
+
+  const keeps = new Map();      // instanceId -> [{exotic, set, slot}]
+  const winners = new Map();    // "cls|slot|setName" -> {piece, W, label}
+  const report = [];
+  let usingWatched = 0;
+
+  // Diego's FAVORITE exotics solve first (2026-08-15, max 7). Solve order is what "prioritized"
+  // means to the engine: the first solve gets first pick of the vault, and it is the hook the
+  // spec's step-5 reuse bias will hang off.
+  const exoticKeys = [...byExotic.keys()].sort((a, b) => {
+    const fa = exotics[byExotic.get(a)[0].n]?.fav ? 0 : 1, fb = exotics[byExotic.get(b)[0].n]?.fav ? 0 : 1;
+    return fa - fb || a.localeCompare(b);
+  });
+  for (const key of exoticKeys) {
+    const copies = byExotic.get(key);
+    const [cls, name] = [copies[0].cls, copies[0].n];
+    const ex = exotics[name] || { favs: [], floor: null, fav: false };
+    const favs = ex.favs || [];
+    if (!favs.length) {                                    // untuned — the engine has no target
+      for (const c of copies) say(c.id, 'oos', 'Exotic has no favorite stats set — tune it in the exotics panel.');
+      report.push({ name, cls, slot: copies[0].slot, copies: copies.length, favs: [], fav: !!ex.fav, untuned: true, variants: [] });
+      continue;
+    }
+    const floor = ex.floor != null ? ex.floor : floorDefault;
+    const ranked = copies.slice().sort((a, b) => favScoreOf(b, favs) - favScoreOf(a, favs) || b.t - a.t || b.tot - a.tot);
+    const working = ranked[0];
+    const favMath = favs.map((k, ix) => `${STATN_B[k]} ${working.s[k] || 0}×${FAVW3[ix]}`).join(' + ');
+    say(working.id, 'keep', `${copies.length > 1 ? `Best of ${copies.length} copies` : 'Only copy'} — ${favMath} = ${favScoreOf(working, favs)}.`);
+    for (const c of ranked.slice(1)) {
+      say(c.id, 'junk', `Outclassed copy — ${favScoreOf(c, favs)} vs ${favScoreOf(working, favs)} on the keeper.`);
+    }
+
+    // ---- step 2: stat target ----
+    const myBuilds = watched.filter((b) => b.cls === cls && (b.exotic.n === name || b.exotic.hash === working.hash));
+    const targets = myBuilds.length
+      ? myBuilds.map((b) => ({ build: b, watched: true }))
+      : [{ build: synthBuildFor(name, cls, favs, floor, working), watched: false }];
+    if (myBuilds.length) usingWatched++;
+
+    // Step 1 again: only the WORKING copy of this exotic may anchor the solve, so championSet's
+    // own prio-weighted pick can never override the fav-weighted working copy.
+    const losers = new Set(ranked.slice(1).map((c) => c.id));
+    const pool = live.filter((i) => !losers.has(i.id));
+
+    const variants = [];
+    for (const { build, watched: isW } of targets) {
+      // ---- step 3: candidate sets (never competing) ----
+      const sets = setBonusList(build);
+      const cands = sets.length ? sets : (ratedSets.length ? ratedSets : [null]);
+      for (const sb of cands) {
+        // ---- step 4: solve, championSet unchanged ----
+        const champ = championSet(build, pool, sb);
+        const picks = [];
+        for (const slot of ARMOR_SLOTS) {
+          const p = champ.slots[slot];
+          if (!p) { picks.push({ slot, piece: null }); continue; }
+          picks.push({ slot, piece: { id: p.id, n: p.n, s: p.s, t: p.t, sb: p.sb, x: p.x, tot: p.tot, a: p.a, ter: p.ter } });
+          if (!keeps.has(p.id)) keeps.set(p.id, []);
+          // gap = championSet had to reach OUTSIDE the target set to fill this slot (it owns no
+          // piece there). Tracked so the keep reason doesn't claim a Wildwood helmet is the
+          // "best CODA helmet" — it's the stand-in for CODA's missing one.
+          keeps.get(p.id).push({ exotic: name, set: sb ? sb.name : '', slot, gap: !!(sb && !p.x && p.sb !== sb.name) });
+          if (!p.x && p.sb) {
+            const wk = `${cls}|${slot}|${p.sb}`;
+            if (!winners.has(wk)) winners.set(wk, { piece: p, W: champ.W, label: `${name}${sb ? ' · ' + sb.name : ''}` });
+          }
+        }
+        variants.push({
+          setName: sb ? sb.name : '', want: sb ? sb.want : 0, buildName: build.name, watched: isW,
+          totals: champ.T, deficit: champ.deficit, reachedFloor: champ.deficit === 0,
+          min: build.min, prio: build.prio,
+          exoticMissing: champ.exoticMissing, setGaps: champ.setGaps || [], picks,
+        });
+      }
+    }
+    report.push({
+      name, cls, slot: working.slot, copies: copies.length, favs, floor, fav: !!ex.fav,
+      floorSource: ex.floor != null ? 'exotic' : 'global',
+      workingId: working.id, favScore: favScoreOf(working, favs),
+      favStats: Object.fromEntries(favs.map((k) => [k, working.s[k] || 0])),
+      usingWatchedBuild: myBuilds.length > 0, buildNames: myBuilds.map((b) => b.name),
+      bestDeficit: variants.length ? Math.min(...variants.map((v) => v.deficit)) : null,
+      variants,
+    });
+  }
+
+  // ---- step 6: verdicts for the legendaries ----
+  // SAFETY NET (found by running this against Diego's real vault, 2026-08-15): a class with no
+  // TUNED exotic produces no solve at all, so every legendary it owns would fall straight to
+  // "junk candidate" — his whole Hunter/Titan vault, judged by nothing. Diego's own rule is that
+  // the engine decides "based on what exists in the vault and user choices"; with no choices made
+  // for a class there is no decision to make, so that class is left out of scope entirely.
+  const solvedClasses = new Set(report.filter((r) => !r.untuned && r.variants.length).map((r) => r.cls));
+  const inScope = new Set([...ratedSets.map((s) => s.name), ...watched.flatMap((b) => setBonusList(b).map((s) => s.name))]);
+  const lastOfSlot = {};   // cls|slot -> count, for the never-junk-your-last-copy net
+  for (const it of live) if (!it.x) lastOfSlot[`${it.cls}|${it.slot}`] = (lastOfSlot[`${it.cls}|${it.slot}`] || 0) + 1;
+
+  for (const it of live) {
+    if (verdicts[it.id]) continue;                            // exotics already decided above
+    if (it.x) { say(it.id, 'oos', 'Exotic outside the solved set (no owned copy reached the solver).'); continue; }
+    const forList = keeps.get(it.id);
+    if (forList) {
+      // group by set so the reason reads "best Techsec Helmet for A, B, C" instead of
+      // repeating "· Techsec (Helmet)" once per exotic
+      const bySet = new Map();
+      for (const f of forList) {
+        const k = `${f.gap ? 'gap' : 'best'}|${f.set || ''}`;
+        if (!bySet.has(k)) bySet.set(k, []);
+        bySet.get(k).push(f.exotic);
+      }
+      const parts = [...bySet.entries()].map(([k, exs]) => {
+        const [kind, set] = k.split('|');
+        const who = `${exs.slice(0, 4).join(', ')}${exs.length > 4 ? ` +${exs.length - 4} more` : ''}`;
+        return kind === 'gap'
+          ? `stands in for ${set}'s missing ${it.slot} on ${who}`
+          : `best ${set ? set + ' ' : ''}${it.slot} for ${who}`;
+      });
+      say(it.id, 'keep', `Needed by ${forList.length} build target${forList.length > 1 ? 's' : ''} — ${parts.join(' · ')}.`);
+      continue;
+    }
+    if (!solvedClasses.has(it.cls)) {
+      say(it.id, 'oos', `No ${it.cls} exotic has favorite stats set — nothing to judge this piece against. Tune a ${it.cls} exotic above to bring this class into the engine.`);
+      continue;
+    }
+    if (!it.sb || !inScope.has(it.sb)) {
+      say(it.id, 'oos', it.sb ? `${it.sb} isn't rated 4pc/2pc and no watched build targets it — out of this engine's scope.` : 'No set bonus — out of this engine\'s scope.');
+      continue;
+    }
+    const w = winners.get(`${it.cls}|${it.slot}|${it.sb}`);
+    let why;
+    if (w) {
+      const mine = Math.round(pieceScoreB(it, w.W)), theirs = Math.round(pieceScoreB(w.piece, w.W));
+      why = `Beaten in ${it.sb} ${it.slot} by ${w.piece.n} (T${w.piece.t}, ${w.piece.tot} base) — ${mine} vs ${theirs} on ${w.label}'s priorities.`;
+    } else {
+      why = `No build target picked a ${it.sb} ${it.slot} — nothing in your watched builds or rated sets needs this piece.`;
+    }
+    if (it.tag === 'favorite') say(it.id, 'review', why + ' Kept from junk: you tagged it favorite.');
+    else if (it.lo > 0) say(it.id, 'review', why + ` Kept from junk: in ${it.lo} DIM loadout${it.lo > 1 ? 's' : ''}.`);
+    else if ((lastOfSlot[`${it.cls}|${it.slot}`] || 0) <= 1) say(it.id, 'review', why + ' Kept from junk: your last legendary in this slot.');
+    else say(it.id, 'junk', why);
+  }
+
+  const perClass = {};
+  for (const it of items) {
+    const v = verdicts[it.id]?.v || 'oos';
+    const c = (perClass[it.cls] = perClass[it.cls] || { keep: 0, junk: 0, review: 0, oos: 0, total: 0 });
+    c[v]++; c.total++;
+  }
+  report.sort((a, b) => (a.fav ? 0 : 1) - (b.fav ? 0 : 1) || a.cls.localeCompare(b.cls)
+    || (ARMOR_SLOT_IX[a.slot] ?? 9) - (ARMOR_SLOT_IX[b.slot] ?? 9) || a.name.localeCompare(b.name));
+  return {
+    at: Date.now(), floorDefault, preview: true, maxFavExotics: MAX_FAV_EXOTICS,
+    favExotics: report.filter((r) => r.fav).map((r) => r.name),
+    exoticCount: report.length, tunedCount: report.filter((r) => !r.untuned).length, usingWatched,
+    ratedSets: ratedSets.map((s) => s.name), verdicts, exotics: report, perClass,
+  };
+}
+
 // build alerts feed + seen-set (persistent — born from the 07-12 lost-log lesson)
 const BUILDS_SEEN_FILE = path.join(__dirname, 'builds-seen.json');
 const BUILDS_ALERTS_FILE = path.join(__dirname, 'builds-alerts.json');
@@ -1693,7 +1960,10 @@ const AUTO_DEFAULTS = {
   orbitSeconds: 60,        // check cadence while SAFE (orbit/social) — Diego 2026-07-12: save API calls
   activitySeconds: 15,     // check cadence while IN an activity (cheap check; catch the activity ENDING fast)
   idleSeconds: 120,        // cadence of the cheap no-op check while the game is CLOSED
-  thr: { unwatchedJunk: 60, keep: 80, fav: 90, watchedJunk: 75, comboFloor: 80 },
+  // statFloor = the ARMOR build stat floor (Diego 2026-08-15: "150 is a good start, but add an
+  // option to adjust that"). Builds aim for "good enough", not "maximum"; a per-exotic override
+  // lives on the exotic's card (exotics.json .floor). Nothing else in thr touches armor.
+  thr: { unwatchedJunk: 60, keep: 80, fav: 90, watchedJunk: 75, comboFloor: 80, statFloor: 150 },
 };
 function loadAuto() {
   const f = loadJson(AUTO_FILE); const o = (f && typeof f === 'object' && !Array.isArray(f)) ? f : {};
@@ -1914,10 +2184,31 @@ async function main() {
           builds: { unread: loadBuildAlerts().filter((a) => !a.read).length },   // Builds-tab badge
         });
       }
+      // Build-driven declutter PREVIEW (docs/ARMOR_DECLUTTER_SPEC.md §9 steps 1-4). Read-only:
+      // computes verdicts and returns them — writes nothing, tags nothing, moves nothing. POST
+      // because the client hands us Diego's set ratings, which still live in his browser.
+      // MUST stay above /api/armor — that route is a startsWith prefix of this one.
+      if (req.url.startsWith('/api/armor/declutter')) {
+        const body = req.method === 'POST' ? JSON.parse(await readBody(req) || '{}') : {};
+        if (!cache || body.fresh || Date.now() - aFetchedAt > SNAPSHOT_TTL) { cache = await fetchArmor(e); aFetchedAt = Date.now(); }
+        return json(armorDeclutter(cache.items, body.ratings || {}));
+      }
       if (req.url.startsWith('/api/armor')) {
         const fresh = req.url.includes('fresh=1');
         if (!cache || fresh || Date.now() - aFetchedAt > SNAPSHOT_TTL) { cache = await fetchArmor(e); aFetchedAt = Date.now(); }
         return json(cache);
+      }
+      // Exotic favorite-stat tuning + per-exotic stat floor, server-side (spec §2.1). It used
+      // to live only in the browser (localStorage 'vv-exofavs') — the same trap that made
+      // 'vv-ratings' useless to the server. The declutter engine runs on the server, so it
+      // needs this data. GET reports `exists` so the client can migrate its local copy up once.
+      if (req.url.startsWith('/api/exotics')) {
+        if (req.method === 'POST') {
+          const body = JSON.parse(await readBody(req) || '{}');
+          if (body.migrate && exoticsFileExists()) return json({ ok: true, migrated: false, exotics: loadExotics() });
+          return json({ ok: true, migrated: !!body.migrate, exotics: saveExotics(body.exotics || {}) });
+        }
+        return json({ v: 1, exists: exoticsFileExists(), maxFav: MAX_FAV_EXOTICS, exotics: loadExotics() });
       }
       if (req.url.startsWith('/api/weapons')) {
         const fresh = req.url.includes('fresh=1');

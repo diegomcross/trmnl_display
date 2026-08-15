@@ -90,6 +90,21 @@ td b{color:var(--ink)}
   </div>
 
   <div class="card">
+    <h2>Armor declutter — build stat floor</h2>
+    <div class="row">
+      <label class="f">Stat floor (per build)<input id="thStatFloor" type="number" min="0" max="400"></label>
+    </div>
+    <p class="help">The armor declutter engine aims each build at <b>"good enough", not "maximum"</b>.
+      This is the number a build's top stats are trying to reach — a spare piece has to move a build
+      <i>toward</i> its floor to earn a vault slot. For exotics you've marked a <b>watched</b> build for in
+      <a href="/builds">Build Crafter</a>, that build's own min/max goals are used instead. For every other
+      tuned exotic the floor is applied to its <b>top two favorite stats</b>.
+      You can override this per exotic on its card in the
+      <a href="/">Vault Verdict</a> exotics panel (leave that box empty to inherit this number).
+      <b>This changes nothing on its own</b> — the declutter engine is a read-only preview and never tags armor.</p>
+  </div>
+
+  <div class="card">
     <h2>Auto-Manager — junk staging &amp; safety</h2>
     <div class="row">
       <label class="f">Junk staged per slot<input id="junkStage" type="number" min="0" max="9"></label>
@@ -170,6 +185,7 @@ function fillForm(){
   const t=CFG.thr||{};
   $('thFav').value=t.fav; $('thKeep').value=t.keep; $('thWatched').value=t.watchedJunk;
   $('thUnwatched').value=t.unwatchedJunk; $('thCombo').value=t.comboFloor??80;
+  $('thStatFloor').value=t.statFloor??150;
   $('junkStage').value=CFG.junkStage; $('armorStage').checked=CFG.armorStage!==false; $('maxJunk').value=CFG.maxJunkPerRun; $('maxMoves').value=CFG.maxMovesPerRun;
   $('orbitSeconds').value=CFG.orbitSeconds??60; $('activitySeconds').value=CFG.activitySeconds??15; $('idleSeconds').value=CFG.idleSeconds??120;
   if(CFG.stageCid!=null) $('stageCid').value=String(CFG.stageCid);
@@ -223,7 +239,8 @@ $('saveBtn').onclick=async()=>{
     orbitSeconds:+$('orbitSeconds').value, activitySeconds:+$('activitySeconds').value, idleSeconds:+$('idleSeconds').value,
     stageCid:$('stageCid').value||null,
     thr:{ unwatchedJunk:+$('thUnwatched').value, watchedJunk:+$('thWatched').value,
-          keep:+$('thKeep').value, fav:+$('thFav').value, comboFloor:+$('thCombo').value },
+          keep:+$('thKeep').value, fav:+$('thFav').value, comboFloor:+$('thCombo').value,
+          statFloor:+$('thStatFloor').value },
   });
   $('saveBtn').textContent='Saved ✓'; setTimeout(()=>$('saveBtn').textContent='Save all Auto-Manager settings',1400);
 };

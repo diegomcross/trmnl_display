@@ -3,6 +3,44 @@
 > Maintained per CLAUDE.md. When a feature ships, move it to HANDOFF.md
 > "What works now" and delete it here.
 
+## Where we are (2026-08-15 — declutter preview SHIPPED, steps 5-8 next, BLOCKED: awaiting Diego's review)
+
+Diego wrote **`docs/ARMOR_DECLUTTER_SPEC.md`** himself. **That spec is now the authority — it
+supersedes the 2026-07-25 FINAL MODEL below wherever they disagree.** Its §9 is an 8-step build
+order; he asked for **steps 1-4 only, then stop and show him**. Those four are shipped and verified
+against his live vault — full technical detail in HANDOFF's "Build-driven armor declutter" entry.
+Headline: exotic tuning moved server-side into `exotics.json`, a global `thr.statFloor` (150) with
+per-exotic overrides, favorite exotics (max 7) that solve first, the per-class/per-exotic solver
+reusing `championSet()` unchanged, and a read-only preview panel in Vault Verdict. **Nothing tags,
+moves or writes armor; the old niche engine still produces the live verdicts.**
+
+**⚠ Diego must double-click `REBOOT.cmd`** — all of this is server-side JS. Until he does, the
+`/api/exotics` and `/api/armor/declutter` routes don't exist. The page degrades gracefully (it
+falls back to localStorage and the preview button reports the missing endpoint), but the feature
+is not live.
+
+**NEXT — spec §9 steps 5-8, in order, and NOT before Diego confirms the preview:**
+5. Reuse bias inside `championSet`'s `bestIn()` + `armor-keeps.json` stickiness (§3 step 5, §2.3).
+   The favorite-exotic solve order shipped in step 3 is the hook this hangs off.
+6. The full farming report (§4) — `setGaps` / `exoticMissing` are already returned and the preview
+   shows a partial floor-status line; §4 wants the per-exotic archetype/tertiary shortfall too.
+7. The `rearrange` alert kind on the existing builds-alerts feed (§5) — suggestions, never applied.
+8. **Delete the niche key from `compute()`** — LAST, once the replacement is proven.
+
+**Open question for Diego, asked 2026-08-15 — BLOCKED: awaiting his answer.** He asked for favorite
+exotics "so they are prioritized". Today that means solve order. It could also mean *only* the 7
+favorites drive keeps, which is a much bigger cut: on a 17-rated-set run his Warlock keeps
+**280 of 623** pieces today (25 tuned exotics × 17 sets, sets never competing, is simply a lot of
+solves), versus roughly a third of that if only 7 exotics counted. Record his answer verbatim in
+`docs/ARMOR_ENGINE_VISION.md` and `DIEGO_RULES.md` §4b when he gives it.
+
+**Data caveat for whoever picks this up:** the real numbers depend on two things that still live in
+Diego's BROWSER, not on disk — his set ratings (`vv-ratings`) and, until he loads the page once
+after REBOOT, his exotic tuning. The test run used the app's own `DEFAULT_FAVS` seed table (29
+Warlock exotics, no Hunter/Titan) and a synthetic 15×4pc + 2×2pc rating set. **Diego pressing "Run
+preview" in his own browser is the only source of true numbers.** Also still true: only 1 of his 92
+builds is a usable `watch:true` build, so almost every exotic runs on the stat-floor fallback.
+
 ## Where we are (2026-07-26 — Build Crafter UI fixes shipped; declutter engine still a preview to build)
 
 Diego flagged four `/builds` usability problems (single-select set bonus, no tooltip on

@@ -89,3 +89,51 @@
 when a build has several sets selected (his pick, not a free-text quote):
 
 > "Show all as separate options, no auto-pick"
+
+---
+
+**2026-08-15** — on how high a build should aim (the stat floor):
+
+> "150 is a good start, but add an option to adjust that."
+
+---
+
+**2026-08-15** — on what the engine is deciding over:
+
+> "the app should look in the vault and make decisions based on what exists in
+> the vault and user choices, not a global decision."
+
+---
+
+**2026-08-15** — on exotics themselves being part of the triage:
+
+> "if we don't have an exotic piece with the best stats, I'll keep farming for a
+> better one. App should guide for that."
+
+---
+
+**2026-08-15** — on what happens when a newly-solved exotic reveals a better
+arrangement for an already-solved one (recorded from the spec he wrote; stated as
+a ruling, surfaced as a dismissible suggestion, never auto-applied):
+
+> "Suggestions, never auto-apply."
+
+---
+
+**2026-08-15** — on where the stat floor is stored:
+
+> "Global default in Settings + per-exotic override on the exotic's card."
+
+---
+
+**2026-08-15** — on favorite exotics:
+
+> "there should actually be an option to tag certain exotics as favorites, so they
+> are prioritized. Up to 7 exotics."
+
+---
+
+**2026-08-15** — on the declutter preview's layout:
+
+> "also no need to show per exotic armor combinations, this is long in the page an
+> unnecessary"

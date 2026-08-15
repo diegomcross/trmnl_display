@@ -63,6 +63,10 @@ builds-seen.json
 builds-seen.json.bak
 builds-alerts.json
 builds-alerts.json.bak
+exotics.json
+exotics.json.bak
+armor-keeps.json
+armor-keeps.json.bak
 audit-backup-*/
 vault.log.old
 
