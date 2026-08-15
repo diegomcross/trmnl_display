@@ -87,7 +87,10 @@
   the card.
 - **Armor 2.0 legacy = junk always.**
 - **Sub-T5 keepers stay keep** — info note only, never downgraded.
-- **Armor is NEVER auto-tagged** — verdicts and junk-staging only.
+- **Armor is never AUTO-tagged** — no timer, no Auto-Manager pass, nothing background ever writes
+  an armor tag or lock. (2026-08-15 Diego added a **manual** Apply button to the declutter preview
+  that does write tags + lock state on his explicit press — see §4b rule 8. "Never automatic"
+  survives; "never written at all" does not.)
 - Armor auto-tagging is the next wanted feature but **must be specced with Diego
   first** (NEXT_PHASE).
 
@@ -178,6 +181,19 @@ Two more the same day, while the preview was being built:
 7. **Don't print the per-exotic armor combinations** (verbatim): *"also no need to show per exotic
    armor combinations, this is long in the page an unnecessary"* — the preview's Keeps section is a
    flat list of the pieces to keep, NOT an exotic → set → slot tree. The tree was thousands of rows.
+8. **⚠ REVERSES A HARD RULE — the engine should ACT on its verdicts** (2026-08-15, verbatim):
+   *"keep should be locked in-game, junk should get item unlocked for dismantelling in-game"* and
+   *"it should also sync with DIM"*. This directly contradicts §4's standing **"Armor is NEVER
+   auto-tagged — verdicts and junk-staging only"** and his OWN spec's §7 ("This ships as a
+   read-only preview and does not touch DIM tags until Diego explicitly says so"). Read: he is now
+   explicitly saying so. **BUT** — this must never become automatic. The 2026-07-12 mass-retag
+   incident is why armor writes were banned in the first place, and *unlocking* armor is the one
+   action that makes accidental in-game dismantling possible. **Asked directly, Diego chose
+   "Full apply: lock keeps + unlock junk" behind one confirm, and "Full undo, like the weapons
+   Auto-Manager."** Shipped that way (see HANDOFF). Standing constraints that did NOT change:
+   it is **never automatic** (only the Apply button, after a dry-run diff and a confirm), the
+   **Auto-Manager stays `enabled:false`**, and equipped pieces / his own `favorite` tags /
+   `review` / out-of-scope pieces are never touched.
 
 ## 5. Perk lists & Perk Finder
 

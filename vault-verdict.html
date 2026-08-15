@@ -126,6 +126,9 @@ details.panel[open] summary::after{content:" –"}
 .dcp b{color:var(--ink);font-weight:600}
 .dcj{font-size:11.5px;color:var(--mut);border-top:1px dashed var(--line);padding:6px 0}
 .dcj b{color:var(--ink)}
+.dcwarn{border:1px solid var(--rev);background:rgba(232,182,76,.07);clip-path:var(--clip);padding:11px 13px;margin:10px 0;font-size:12px;color:var(--mut);line-height:1.5}
+.dcwarn b{color:var(--ink)}
+.savenote.bad{color:var(--junk)}
 :focus-visible{outline:2px solid var(--gold);outline-offset:2px}
 @media(prefers-reduced-motion:no-preference){.card{animation:in .18s ease both}@keyframes in{from{opacity:0;transform:translateY(4px)}to{opacity:1}}}
 @media(min-width:760px){body{max-width:880px;margin:0 auto}}
@@ -184,8 +187,11 @@ details.panel[open] summary::after{content:" –"}
   niche engine — this panel only shows what the replacement would decide.</p>
   <div class="bar" style="margin-top:8px">
     <button class="btn sm" id="dcRun">Run preview</button>
+    <button class="btn sm" id="dcApply" hidden>Apply to my account…</button>
+    <button class="btn sm" id="dcHist">Undo a past run</button>
     <span class="count" id="dcStatus" style="margin:0;align-self:center"></span>
   </div>
+  <div id="dcApplyBox"></div>
   <div id="dcOut"></div>
 </details>
 
@@ -513,8 +519,71 @@ async function runDeclutter(){
   }catch(err){ $('dcOut').innerHTML=''; $('dcStatus').textContent='Failed: '+err.message; }
   $('dcRun').disabled=false;
 }
+// ---------- apply to the live account (keep → lock + DIM keep, junk → unlock + DIM junk) ----------
+// Diego 2026-08-15. NEVER automatic: it takes a deliberate press here, a dry-run diff, and a
+// typed confirmation. Every live run is journalled server-side and can be reverted whole.
+async function dcDryRun(){
+  $('dcApplyBox').innerHTML='<p class="savenote">Checking what would change…</p>';
+  try{
+    const d=await getJSON('/api/armor/declutter/apply',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({ratings,dryRun:true})});
+    if(!d) throw new Error('the server does not have this endpoint yet — double-click REBOOT.cmd');
+    if(d.error) throw new Error(d.error);
+    const c=d.run.counts, n=d.run.actions.length;
+    if(!n){ $('dcApplyBox').innerHTML='<p class="savenote"><b class="ok">Nothing to do</b> — your account already matches this preview.</p>'; return; }
+    const sample=d.run.actions.slice(0,8).map(a=>
+      `<div class="dcj"><b>${esc(a.name)}</b> <span style="color:var(--dim)">· ${a.cls} ${a.slot}</span> — <b class="${a.v==='keep'?'ok':'bad'}">${a.v}</b>: tag ${a.fromTag}→${a.toTag}${a.fromLocked!==a.toLocked?` · ${a.toLocked?'LOCK':'UNLOCK'} in-game`:''}</div>`).join('');
+    $('dcApplyBox').innerHTML=`<div class="dcwarn">
+      <b>This writes to your live Destiny account.</b> It will
+      <b class="ok">lock ${c.lock}</b> keeper${c.lock===1?'':'s'} in-game,
+      <b class="bad">unlock ${c.unlock}</b> junk piece${c.unlock===1?'':'s'} so you can dismantle them,
+      and set <b>${c.tag}</b> DIM tag${c.tag===1?'':'s'} — ${n} piece${n===1?'':'s'} in total.
+      ${c.skip?`<b>${c.skip}</b> skipped (equipped, or tagged favorite by you).`:''}
+      <br><b class="bad">Unlocking makes those ${c.unlock} pieces dismantleable in-game.</b>
+      Nothing marked <i>review</i> or <i>out of scope</i> is touched. The whole run can be undone.
+      <div style="margin-top:8px">${sample}${n>8?`<p class="savenote">…and ${n-8} more.</p>`:''}</div>
+      <div class="bar" style="margin-top:10px">
+        <button class="btn sm" id="dcGo">Yes — apply all ${n}</button>
+        <button class="btn sm" id="dcCancel">Cancel</button>
+      </div></div>`;
+  }catch(err){ $('dcApplyBox').innerHTML=`<p class="savenote bad">Failed: ${esc(err.message)}</p>`; }
+}
+async function dcGoLive(){
+  $('dcApplyBox').innerHTML='<p class="savenote">Applying… this writes one item at a time, give it a moment.</p>';
+  try{
+    const d=await getJSON('/api/armor/declutter/apply',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({ratings,dryRun:false})});
+    if(d.error) throw new Error(d.error);
+    const c=d.run.counts;
+    $('dcApplyBox').innerHTML=`<div class="dcwarn"><b class="ok">Applied.</b> ${esc(d.run.note)}.
+      ${c.error?`<b class="bad">${c.error} failed</b> — they're listed in the run history.`:''}
+      <div class="bar" style="margin-top:8px"><button class="btn sm" data-dcrevert="${d.run.at}">Undo this run</button></div></div>`;
+    loadData(true); runDeclutter();
+  }catch(err){ $('dcApplyBox').innerHTML=`<p class="savenote bad">Failed: ${esc(err.message)}</p>`; }
+}
+async function dcHistory(){
+  try{
+    const h=await getJSON('/api/armor/declutter/history');
+    if(!h) throw new Error('the server does not have this endpoint yet — double-click REBOOT.cmd');
+    const live=h.filter(r=>!r.dryRun);
+    $('dcApplyBox').innerHTML=live.length
+      ? `<div class="dcwarn"><b>Past live runs</b>${live.map(r=>`<div class="dcj">${new Date(r.at).toLocaleString()} — ${esc(r.note)}${r.revertedAt?' <span class="ok">(already undone)</span>':` <button class="btn sm" data-dcrevert="${r.at}">Undo</button>`}</div>`).join('')}</div>`
+      : '<p class="savenote">No live runs yet — nothing has been written to your account.</p>';
+  }catch(err){ $('dcApplyBox').innerHTML=`<p class="savenote bad">Failed: ${esc(err.message)}</p>`; }
+}
+async function dcRevert(at){
+  $('dcApplyBox').innerHTML='<p class="savenote">Undoing…</p>';
+  try{
+    const d=await getJSON('/api/armor/declutter/revert',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({at:+at})});
+    if(d.error) throw new Error(d.error);
+    $('dcApplyBox').innerHTML=`<p class="savenote"><b class="ok">Undone</b> — ${d.reverted} of ${d.total} pieces put back${d.errors?`, ${d.errors} failed`:''}.</p>`;
+    loadData(true);
+  }catch(err){ $('dcApplyBox').innerHTML=`<p class="savenote bad">Failed: ${esc(err.message)}</p>`; }
+}
+
 function renderDeclutter(){
   if(!DC) return;
+  $('dcApply').hidden=false;
   const byId={}; ITEMS.forEach(i=>byId[i.id]=i);
   const V=DC.verdicts||{};
   const cls=Object.keys(DC.perClass||{}).sort();
@@ -613,6 +682,12 @@ document.body.addEventListener('click',e=>{
   if(e.target.id==='dcRun'){ runDeclutter(); return; }
   if(e.target.id==='dcMore'){ dcJunkShown+=60; renderDeclutter(); return; }
   if(e.target.id==='dcMoreK'){ dcKeepShown+=60; renderDeclutter(); return; }
+  if(e.target.id==='dcApply'){ dcDryRun(); return; }
+  if(e.target.id==='dcHist'){ dcHistory(); return; }
+  if(e.target.id==='dcGo'){ dcGoLive(); return; }
+  if(e.target.id==='dcCancel'){ $('dcApplyBox').innerHTML=''; return; }
+  const rv=e.target.closest('[data-dcrevert]');
+  if(rv){ dcRevert(rv.dataset.dcrevert); return; }
   const xc=e.target.closest('[data-exocls]');
   if(xc){ exoCls=xc.dataset.exocls; const keep=$('exoPanel').open; renderExos(); $('exoPanel').open=keep; return; }
   const t=e.target.closest('[data-cls],[data-v],[data-a],[data-pend],.btn[data-x]');

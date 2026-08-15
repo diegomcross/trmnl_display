@@ -162,6 +162,24 @@ Core priorities, in his words:
     distinguish "best Techsec Helmet for A, B" from "stands in for CODA's missing Helmet on A, B"
     (championSet falls back to the global best when a set owns nothing in a slot). Junk says which
     piece beat it and by how much under whose priorities.
+  - **APPLY TO THE LIVE ACCOUNT (2026-08-15) — ⚠ this reverses the old "armor is never tagged"
+    rule, on Diego's explicit instruction** (*"keep should be locked in-game, junk should get item
+    unlocked for dismantelling in-game"* + *"it should also sync with DIM"*, and he picked full
+    apply + full undo when asked). `keep` → DIM tag `keep` + **locked** in-game; `junk` → DIM tag
+    `junk` + **unlocked** so it can be dismantled. `review` and out-of-scope pieces are **never
+    touched** (writing a tag would destroy the "I'm not sure" distinction), and neither is anything
+    equipped or that Diego tagged `favorite`. It is **never automatic** — nothing in `autoTick`,
+    the Auto-Manager, or any timer reaches it; only the Apply button does, and only after a
+    dry-run diff and a confirm. `POST /api/armor/declutter/apply` defaults to `dryRun:true`; live
+    requires an explicit `dryRun:false`. **Full undo**: every live run is journalled to
+    `armor-apply-history.json` with the previous tag AND lock state per item, revertable whole via
+    `POST /api/armor/declutter/revert {at}` (same shape as the weapons `/api/auto/revert`).
+    Tag writes go through the new **`dimWriteTagsBulk`** (DIM's `/profile` takes an array of
+    updates — 464 writes become 5 requests instead of 464); it returns a **partial** `ok` count
+    rather than throwing, so a mid-run failure marks only the un-written tail as errored and the
+    undo journal never disowns writes that really landed. Locks are one Bungie call each (no bulk
+    endpoint) with a 90ms gap. Dry-run measured on the live vault: **69 locks · 132 unlocks ·
+    464 tags · 1 skipped (equipped)** — verified to write nothing (history stayed empty, no file).
   - **NOT built yet** (spec §9 steps 5-8): reuse bias + `armor-keeps.json` stickiness, the full
     farming report, the `rearrange` alert kind, and deleting the niche key from `compute()`.
 

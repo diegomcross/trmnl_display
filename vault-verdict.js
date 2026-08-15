@@ -380,6 +380,33 @@ async function dimWriteTag(e, id, tag, notes) {
   return payload.tag || 'none';
 }
 
+// Bulk tag write — the DIM /profile endpoint takes an ARRAY of updates, so the armor-declutter
+// Apply (hundreds of pieces) sends them in chunks instead of one HTTP round-trip per item.
+// dimWriteTag above is left untouched for every other caller.
+// Returns {ok:<how many entries actually landed>, error}. It reports a PARTIAL count rather
+// than throwing so the caller can mark exactly the un-written tail as failed — otherwise a
+// failure on chunk 3 would make the undo journal disown chunks 1 and 2, which really did write.
+async function dimWriteTagsBulk(e, entries, chunk = 100) {
+  const { key, token, pid } = await dimAuth(e);
+  let ok = 0;
+  for (let i = 0; i < entries.length; i += chunk) {
+    const slice = entries.slice(i, i + chunk);
+    const updates = slice.map(({ id, tag }) => ({ action: 'tag', payload: { id, tag: (tag && tag !== 'none') ? tag : null } }));
+    try {
+      const res = await fetch(`${DIM_API}/profile`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'X-API-Key': key, Authorization: `Bearer ${token}`, Origin: DIM_ORIGIN },
+        body: JSON.stringify({ platformMembershipId: pid, destinyVersion: 2, updates }),
+      });
+      const j = await res.json().catch(() => ({}));
+      if (res.status !== 200) throw new Error(`DIM bulk write ${res.status}: ${JSON.stringify(j).slice(0, 140)}`);
+      for (const { id, tag } of slice) { if (tag && tag !== 'none') DIM_TAGS[id] = tag; else delete DIM_TAGS[id]; }
+      ok += slice.length;
+    } catch (err) { saveJsonSafe(TAGS_FILE, DIM_TAGS); return { ok, error: err.message }; }
+  }
+  saveJsonSafe(TAGS_FILE, DIM_TAGS);
+  return { ok, error: null };
+}
+
 // DIM cloud LOADOUTS (Build Crafter import). Separate from dimReadTags so the tag flows
 // stay untouched. The Sync API returns a flat loadouts[] array; the dim-data.json export
 // wraps each as {loadout:{...}} — parse both defensively.
@@ -738,7 +765,7 @@ async function fetchArmor(e) {
   const sockets = prof.itemComponents?.sockets?.data || {};
 
   const out = [];
-  for (const { it, own } of raw) {
+  for (const { it, own, loc, cid } of raw) {
     const def = man.items[it.itemHash];
     if (!def || def.it !== 2 || !it.itemInstanceId) continue;
     const slot = BUCKET[def.b];
@@ -788,6 +815,9 @@ async function fetchArmor(e) {
       slot, cls: CLASS[def.c] || '—', src: def.src || '',
       a: archetype, ter, mw: 0, tune, tuneKind,
       pwr: inst.primaryStat?.value || 0, own,
+      // lock/equip state — needed by the declutter Apply (keep → lock, junk → unlock) so it
+      // can skip no-ops and never touch an equipped piece. ItemState bit 1 = Locked.
+      locked: !!(it.state & 1), loc, ownCid: cid || null,
       lo: loadoutCount[id] || 0,
       s: base, tot: Object.values(base).reduce((a, b) => a + b, 0),
       set: setDef?.n || def.n, sb: setDef?.n || '',
@@ -1918,6 +1948,102 @@ function armorDeclutter(items, ratings) {
   };
 }
 
+// ---------- declutter APPLY (live account writes) ----------
+// Diego 2026-08-15: *"keep should be locked in-game, junk should get item unlocked for
+// dismantelling in-game"* + *"it should also sync with DIM"*. This REVERSES the standing
+// "armor is never auto-tagged" rule — see DIEGO_RULES §4b rule 8. Guard rails, non-negotiable:
+//   - It is NEVER automatic. Only a deliberate press of Apply in the preview calls this. No
+//     timer, no Auto-Manager path, nothing in autoTick reaches it. The Auto-Manager stays off.
+//   - Equipped pieces are never touched, and neither is anything Diego tagged `favorite`.
+//   - Out-of-scope pieces (unrated sets, unsolved classes) are never touched.
+//   - No-ops are skipped, so a second run costs nothing and reports honestly.
+//   - Every change is journalled to armor-apply-history.json with the PREVIOUS lock state and
+//     DIM tag, so a run can be reverted whole (Diego picked full undo, same shape as
+//     POST /api/auto/revert for weapons).
+const ARMOR_APPLY_FILE = path.join(__dirname, 'armor-apply-history.json');
+const loadArmorApplyHist = () => { const a = loadJson(ARMOR_APPLY_FILE); return Array.isArray(a) ? a : []; };
+const saveArmorApplyHist = (h) => saveJsonSafe(ARMOR_APPLY_FILE, h.slice(-40));
+
+// which DIM tag each verdict maps to. 'review' is deliberately left alone — it means "I'm not
+// sure", and writing a tag would destroy the distinction. 'oos' is untouched by definition.
+const APPLY_TAG = { keep: 'keep', junk: 'junk' };
+
+async function applyArmorDeclutter(e, items, ratings, opts = {}) {
+  const dryRun = opts.dryRun !== false;                    // PREVIEW BY DEFAULT — live must be explicit
+  const res = armorDeclutter(items, ratings);
+  const byId = new Map(items.map((i) => [i.id, i]));
+  const run = { at: Date.now(), dryRun, actions: [], skipped: [], counts: { lock: 0, unlock: 0, tag: 0, skip: 0, error: 0 } };
+
+  for (const [id, v] of Object.entries(res.verdicts)) {
+    const it = byId.get(id);
+    if (!it) continue;
+    const wantTag = APPLY_TAG[v.v];
+    if (!wantTag) continue;                                // review / oos → never touched
+    if (it.loc === 'equipped') { run.counts.skip++; run.skipped.push({ id, name: it.n, why: 'equipped' }); continue; }
+    if (it.tag === 'favorite') { run.counts.skip++; run.skipped.push({ id, name: it.n, why: 'you tagged it favorite' }); continue; }
+    const wantLock = v.v === 'keep';                       // keep → locked, junk → unlocked
+    const tagChange = (it.tag || '') !== wantTag;
+    const lockChange = !!it.locked !== wantLock;
+    if (!tagChange && !lockChange) continue;               // already correct — a re-run is free
+    const a = {
+      id, name: it.n, cls: it.cls, slot: it.slot, v: v.v,
+      fromTag: it.tag || 'none', toTag: tagChange ? wantTag : (it.tag || 'none'),
+      fromLocked: !!it.locked, toLocked: lockChange ? wantLock : !!it.locked,
+    };
+    a.tagChange = tagChange; a.lockChange = lockChange;
+    run.actions.push(a);
+  }
+
+  if (!dryRun) {
+    // DIM tags go up in bulk (one request per 100), locks one at a time — Bungie has no bulk
+    // lock endpoint. A tag failure marks the whole chunk's items errored rather than pretending.
+    const tagged = run.actions.filter((a) => a.tagChange);
+    const bulk = await dimWriteTagsBulk(e, tagged.map((a) => ({ id: a.id, tag: a.toTag })));
+    tagged.forEach((a, ix) => {
+      if (ix < bulk.ok) { const it = byId.get(a.id); if (it) it.tag = a.toTag; }
+      else { a.error = bulk.error || 'DIM write did not run'; a.tagChange = false; }
+    });
+    for (const a of run.actions) {
+      if (!a.lockChange || a.error) continue;
+      try { await setLock(e, a.id, a.toLocked); const it = byId.get(a.id); if (it) it.locked = a.toLocked; }
+      catch (err) { a.error = err.message; a.lockChange = false; }
+      await new Promise((r) => setTimeout(r, 90));   // be polite to Bungie on a 200-item run
+    }
+  }
+  for (const a of run.actions) {
+    if (a.error) { run.counts.error++; continue; }
+    if (a.tagChange) run.counts.tag++;
+    if (a.lockChange) { if (a.toLocked) run.counts.lock++; else run.counts.unlock++; }
+  }
+  run.note = `${run.counts.lock} locked · ${run.counts.unlock} unlocked · ${run.counts.tag} tagged · ${run.counts.skip} skipped${run.counts.error ? ` · ${run.counts.error} errors` : ''}`;
+  if (!dryRun && run.actions.length) {
+    const h = loadArmorApplyHist(); h.push(run); saveArmorApplyHist(h);
+    logTagHistory(run.actions.filter((a) => !a.error && a.fromTag !== a.toTag)
+      .map((a) => ({ id: a.id, name: a.name, from: a.fromTag, to: a.toTag, src: 'armor-declutter' })));
+  }
+  console.log(`[armor-apply] ${dryRun ? 'DRY ' : ''}${run.note}`);
+  return { run, summary: { keep: res.perClass, floorDefault: res.floorDefault } };
+}
+
+// Undo one recorded live run: put every item back to the tag AND lock state it had before.
+async function revertArmorApply(e, at) {
+  const run = loadArmorApplyHist().find((r) => r.at === at && !r.dryRun);
+  if (!run) return { error: 'run not found' };
+  let reverted = 0, errors = 0; const hist = [];
+  for (const a of run.actions) {
+    if (a.error) continue;
+    try {
+      if (a.fromTag !== a.toTag) { await dimWriteTag(e, a.id, a.fromTag === 'none' ? 'none' : a.fromTag); hist.push({ id: a.id, name: a.name, from: a.toTag, to: a.fromTag, src: 'revert' }); }
+      if (a.fromLocked !== a.toLocked) await setLock(e, a.id, a.fromLocked);
+      reverted++;
+    } catch { errors++; }
+  }
+  logTagHistory(hist);
+  run.revertedAt = Date.now();
+  const h = loadArmorApplyHist(); const ix = h.findIndex((r) => r.at === at); if (ix >= 0) { h[ix] = run; saveArmorApplyHist(h); }
+  return { ok: true, reverted, errors, total: run.actions.length };
+}
+
 // build alerts feed + seen-set (persistent — born from the 07-12 lost-log lesson)
 const BUILDS_SEEN_FILE = path.join(__dirname, 'builds-seen.json');
 const BUILDS_ALERTS_FILE = path.join(__dirname, 'builds-alerts.json');
@@ -2216,6 +2342,25 @@ async function main() {
       // computes verdicts and returns them — writes nothing, tags nothing, moves nothing. POST
       // because the client hands us Diego's set ratings, which still live in his browser.
       // MUST stay above /api/armor — that route is a startsWith prefix of this one.
+      // Apply the verdicts to the live account: keep → DIM 'keep' + LOCKED in-game,
+      // junk → DIM 'junk' + UNLOCKED so it can be dismantled (Diego 2026-08-15). Live writes
+      // only when the caller sends dryRun:false — the UI sends that only from a confirm dialog.
+      if (req.url.startsWith('/api/armor/declutter/apply') && req.method === 'POST') {
+        const body = JSON.parse(await readBody(req) || '{}');
+        cache = await fetchArmor(e); aFetchedAt = Date.now();      // always act on FRESH state
+        const out = await applyArmorDeclutter(e, cache.items, body.ratings || {}, { dryRun: body.dryRun !== false });
+        if (body.dryRun === false) { cache = null; aFetchedAt = 0; }   // tags/locks changed under it
+        return json({ ok: true, ...out });
+      }
+      if (req.url.startsWith('/api/armor/declutter/history')) {
+        return json(loadArmorApplyHist().slice().reverse());        // newest first
+      }
+      if (req.url.startsWith('/api/armor/declutter/revert') && req.method === 'POST') {
+        const { at } = JSON.parse(await readBody(req) || '{}');
+        const r = await revertArmorApply(e, at);
+        cache = null; aFetchedAt = 0;
+        return json(r);
+      }
       if (req.url.startsWith('/api/armor/declutter')) {
         const body = req.method === 'POST' ? JSON.parse(await readBody(req) || '{}') : {};
         if (!cache || body.fresh || Date.now() - aFetchedAt > SNAPSHOT_TTL) { cache = await fetchArmor(e); aFetchedAt = Date.now(); }

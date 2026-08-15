@@ -145,3 +145,16 @@ only the 7 favorites driving keeps, or a middle option:
 
 > "favorites are set at the floor, the other exotics just help decision with uneeded
 > dupes"
+
+---
+
+**2026-08-15** — on the engine acting on its verdicts:
+
+> "keep should be locked in-game, junk should get item unlocked for dismantelling
+> in-game"
+
+---
+
+**2026-08-15**, immediately after:
+
+> "it should also sync with DIM"

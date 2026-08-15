@@ -19,6 +19,12 @@ moves or writes armor; the old niche engine still produces the live verdicts.**
 falls back to localStorage and the preview button reports the missing endpoint), but the feature
 is not live.
 
+**Also shipped 2026-08-15, added mid-session and NOT in the spec's build order:** the **Apply**
+button — keep → DIM `keep` + locked in-game, junk → DIM `junk` + unlocked for dismantling, with a
+dry-run diff, a confirm, and full undo. This reverses the old "armor is never tagged" rule on
+Diego's explicit instruction; details + the surviving constraints are in HANDOFF and DIEGO_RULES
+§4b rule 8. **Diego has NOT pressed it yet** — the dry run says 69 locks / 132 unlocks / 464 tags.
+
 **NEXT — spec §9 steps 5-8, in order, and NOT before Diego confirms the preview:**
 5. Reuse bias inside `championSet`'s `bestIn()` + `armor-keeps.json` stickiness (§3 step 5, §2.3).
    The favorite-exotic solve order shipped in step 3 is the hook this hangs off.
