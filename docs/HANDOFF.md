@@ -110,6 +110,21 @@ Core priorities, in his words:
 ## What works now (current state)
 
 - **Build-driven armor declutter — READ-ONLY PREVIEW (2026-08-15, spec §9 steps 1-4 of 8).**
+  **What may be called junk (corrected 2026-08-25 after Diego reported it junking gear he needed):**
+  - A **legendary** with `t === 0` (no Armor 3.0 gear tier) is junk, per Diego 2026-07-12. He
+    currently owns **zero** of these, so in practice this branch never fires.
+  - An **exotic** with `t === 0` is junk **only if** a `t > 0` copy of the same `cls|name` is
+    already owned (`modernExotic` set, built once at the top of `armorDeclutter()`). With no 3.0
+    copy it stays in scope and the normal exotic pass judges it. Before this fix the blanket
+    `t === 0` rule condemned 54 exotics including 5 of his 7 favourites and 13 sole copies.
+  - A **junk verdict on an equipped piece** is downgraded to `review` by a final sweep.
+  - Safety nets on legendaries, unchanged: favourite tag, in a DIM loadout, last of its slot.
+
+  **Verified 2026-08-25 against the live vault with Diego’s own ratings (21 sets 4pc):**
+  Warlock 320 keep / 240 junk / 2 review / 103 out of scope; Hunter 0/5/0/137; Titan 0/0/0/75.
+  Audit: 0 exotics he would stop owning, 0 equipped in junk, 0 DIM-loadout pieces in junk,
+  0 favourite-tagged in junk, 0 slots left with no legendary. Apply dry-run: 127 locked ·
+  64 unlocked · 562 tagged · 3 skipped. `tests/guardrails.js`: 122 passed, 0 failed.
   Implements `docs/ARMOR_DECLUTTER_SPEC.md`. **It never tags, moves, or writes anything**, and the
   old niche engine (`compute()` in `vault-verdict.html`) still produces the live verdicts — spec
   step 8 (deleting the niche key) is deliberately LAST, after Diego confirms this preview.

@@ -215,6 +215,12 @@ Two more the same day, while the preview was being built:
    junked only when `modernExotic` holds a `cls|name` match with `t > 0`. With no 3.0 copy it
    stays in scope and the normal exotic pass judges it — so a second 2.0 copy can still be
    junked as a duplicate, which is fine: he keeps one.
+10. **Gear you are wearing is never presented as junk (2026-08-25).** `applyArmorDeclutter()`
+    already skipped equipped pieces, but the PREVIEW still listed 2 of them under Junk, which
+    is exactly the kind of thing that makes Diego distrust the list. A final sweep at the end of
+    `armorDeclutter()` turns any `junk` verdict on an equipped piece into `review` ("Kept from
+    junk: you have it equipped."). Done as a sweep, not per-branch, so it catches every path
+    into a junk verdict including exotic duplicates.
 ## 5. Perk lists & Perk Finder
 
 - **No exotic perks / frames / non-trait plugs in perk lists** (2026-07-04 commit

@@ -1946,6 +1946,17 @@ function armorDeclutter(items, ratings) {
     else say(it.id, 'junk', why);
   }
 
+  // Anything on a character is never presented as junk. applyArmorDeclutter() already refuses to
+  // touch an equipped piece, but the preview said "junk" about gear Diego was wearing (found in
+  // the 2026-08-25 live run: 2 pieces). One final sweep so the list and the Apply agree, and so
+  // it catches every path into a junk verdict, exotic duplicates included.
+  for (const it of items) {
+    const v = verdicts[it.id];
+    if (v && v.v === 'junk' && it.loc === 'equipped') {
+      verdicts[it.id] = { v: 'review', why: v.why + ' Kept from junk: you have it equipped.' };
+    }
+  }
+
   const perClass = {};
   for (const it of items) {
     const v = verdicts[it.id]?.v || 'oos';

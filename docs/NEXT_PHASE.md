@@ -3,6 +3,41 @@
 > Maintained per CLAUDE.md. When a feature ships, move it to HANDOFF.md
 > "What works now" and delete it here.
 
+## Where we are (2026-08-25 — declutter junk rule CORRECTED, rebooted and verified live)
+
+Diego: *"the declutter function tag pieces of armor to be junked that I needed. What is going on?"*
+
+**Nothing had been written to his account** — no `armor-apply-history.json`, no
+`armor-declutter` rows in `tag-history.json`, and all 882 armor pieces carried no DIM tag. What he
+saw was the preview list, and the preview list was wrong.
+
+**Root cause.** `armorDeclutter()` ran his 2026-07-12 rule *"Armor 2.0 legacy — junk always"* as a
+blanket pre-pass over every item, before any exotic logic. He owns **zero** Armor 2.0 legendaries,
+so today that rule fired on nothing but exotics: 54 of them, including 5 of his 7 ★ favourites and
+13 pieces that were his only copy of that exotic. His spec never asked for that — §3 step 6 defines
+junk as *"everything else in a rated/selected set"* (legendaries) plus duplicate exotic copies.
+
+**Fixed and shipped** (see DIEGO_RULES §4c rules 9-10 and HANDOFF):
+- a 2.0 **exotic** is junked only when a 3.0 copy of that same exotic is already owned;
+- a 2.0 **legendary** is still junked verbatim by the 2026-07-12 rule;
+- an equipped piece is never presented as junk (downgraded to `review`).
+
+**Servers were rebooted and the fix verified live in his browser with his own ratings.** Audit on
+the real vault: 0 exotics he would stop owning, 0 equipped / DIM-loadout / favourite-tagged pieces
+in the junk list, 0 slots emptied. `tests/guardrails.js` now 122 passed / 0 failed, including six
+new checks that lock this behaviour in.
+
+**Still open, both for Diego, neither touched by the agent:**
+1. `auto-manage.json` has `enabled: true` and the **weapons** Auto-Manager is ticking every minute.
+   His standing rule (DIEGO_RULES §3) is that it stays off until he confirms. **BLOCKED: awaiting Diego.**
+2. On **2026-08-23 19:49** something junk-tagged 105 armor pieces in DIM (58 exotics). Not the
+   declutter — it does not match the engine output, left no journal entry, and junked a piece tagged
+   `favorite`, which Apply refuses to touch. Those tags are gone and nothing was lost; cause unknown.
+
+**Steps 5-8 of the spec §9 build order are still NOT started**, per his *"STOP after step 4"*.
+He has not pressed Apply; no armor writes have ever been made.
+
+---
 ## Where we are (2026-08-15 — declutter preview SHIPPED, steps 5-8 next, BLOCKED: awaiting Diego's review)
 
 Diego wrote **`docs/ARMOR_DECLUTTER_SPEC.md`** himself. **That spec is now the authority — it
