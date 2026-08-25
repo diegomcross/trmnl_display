@@ -195,6 +195,26 @@ Two more the same day, while the preview was being built:
    **Auto-Manager stays `enabled:false`**, and equipped pieces / his own `favorite` tags /
    `review` / out-of-scope pieces are never touched.
 
+
+### 4c. The Armor 2.0 rule does NOT junk irreplaceable exotics (2026-08-25)
+
+9. **"Armor 2.0 legacy — junk always" (2026-07-12) applies to LEGENDARIES.** Diego reported the
+   declutter junking armor he needed. Cause: that rule ran as a blanket pre-pass on every item.
+   He owns **zero** Armor 2.0 legendaries, so it fired on nothing but exotics — 54 of them,
+   including 5 of his 7 ★ favourites and 13 pieces that were his ONLY copy of that exotic
+   (Speaker’s Sight, Cenotaph Mask, Eye of Another World, Karnstein Armlets, Aeon Swift,
+   Gwisin Vest, Mask of Bakris, Oathkeeper, Radiant Dance Machines, The Dragon’s Shadow).
+   That is the exact opposite of ruling 3 (exotics are farming targets).
+
+   **Asked how the rule should apply to exotics, Diego chose:** *"Junk a 2.0 exotic only if you
+   own a 3.0 copy — the rule keeps working, but a 2.0 exotic survives until a 3.0 version of
+   that same exotic exists in your vault."*
+
+   Implemented in `armorDeclutter()`’s pre-pass (`vault-verdict.js` ~1750): a legendary with
+   `t === 0` is still junked verbatim by the 2026-07-12 rule; an **exotic** with `t === 0` is
+   junked only when `modernExotic` holds a `cls|name` match with `t > 0`. With no 3.0 copy it
+   stays in scope and the normal exotic pass judges it — so a second 2.0 copy can still be
+   junked as a duplicate, which is fine: he keeps one.
 ## 5. Perk lists & Perk Finder
 
 - **No exotic perks / frames / non-trait plugs in perk lists** (2026-07-04 commit

@@ -158,3 +158,17 @@ only the 7 favorites driving keeps, or a middle option:
 **2026-08-15**, immediately after:
 
 > "it should also sync with DIM"
+
+---
+
+**2026-08-25** — reported that the declutter was junking armor he needed. Investigation showed
+the 2026-07-12 "Armor 2.0 legacy — junk always" rule now fires on nothing but exotics (he owns
+zero Armor 2.0 legendaries), condemning 54 exotics including 5 of his 7 ★ favourites and 13
+pieces that were his only copy of that exotic. Asked how the rule should apply to exotics, he
+chose:
+
+> "Junk a 2.0 exotic only if you own a 3.0 copy"
+
+> "The rule keeps working, but a 2.0 exotic survives until a 3.0 version of that same exotic
+> exists in your vault. Would junk 41 of the 54 and protect the 13 you'd otherwise stop owning,
+> Speaker's Sight included."

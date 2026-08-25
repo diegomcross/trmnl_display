@@ -1747,10 +1747,25 @@ function armorDeclutter(items, ratings) {
 
   // Armor 2.0 legacy and pieces Diego junked himself are settled before anything else
   // (DIEGO_RULES §4 — never regress these two).
+  //
+  // Diego 2026-08-25: his 2026-07-12 "Armor 2.0 legacy — junk always" was written when
+  // 2.0 LEGENDARIES were dead weight. He now owns zero of those, so as written the rule fired on
+  // nothing but exotics — and junking an exotic he holds no 3.0 copy of means he stops owning
+  // that exotic, the opposite of his 2026-08-15 "exotics are farming targets". So a 2.0
+  // exotic is junked ONLY when a 3.0 copy of the SAME exotic is already in the vault; with no 3.0
+  // copy it stays in scope and the exotic pass judges it like any other farming target.
+  const modernExotic = new Set(items.filter((i) => i.x && i.t > 0).map((i) => `${i.cls}|${i.n}`));
   const live = [];
   for (const it of items) {
     if (it.tag === 'junk') { say(it.id, 'junk', 'You tagged it junk.'); continue; }
-    if (it.t === 0) { say(it.id, 'junk', 'Armor 2.0 legacy — trash (Diego 2026-07-12: junk always).'); continue; }
+    if (it.t === 0) {
+      if (!it.x) { say(it.id, 'junk', 'Armor 2.0 legacy — trash (Diego 2026-07-12: junk always).'); continue; }
+      if (modernExotic.has(`${it.cls}|${it.n}`)) {
+        say(it.id, 'junk', 'Armor 2.0 exotic — you already own a 3.0 copy of this exotic (Diego 2026-08-25).');
+        continue;
+      }
+      // no 3.0 copy exists: this IS his only copy of that exotic — never junked for being 2.0.
+    }
     live.push(it);
   }
 
