@@ -172,3 +172,27 @@ chose:
 > "The rule keeps working, but a 2.0 exotic survives until a 3.0 version of that same exotic
 > exists in your vault. Would junk 41 of the 54 and protect the 13 you'd otherwise stop owning,
 > Speaker's Sight included."
+
+---
+
+**2026-08-27** — describing the whole model, after being asked whether the engine matched it:
+
+> "all armor set bonuses that I picked have to exist as a whole set along with the exotic (not
+> only the 7 starred ones, but mainly them)"
+
+> "the app will simulate the highest stats (according to what I selected) and make a build if Dawn
+> Chorus (helmet) using 4 pieces of the Bushido set (gaunlets, chest, boots, class item), it then
+> selected 4 pieces."
+
+> "it will try to use the pieces that are already used in other builds, but higher stats overrides
+> that."
+
+> "for the exotics that have not been starred, it’ll try to maximize using the armor pieces that
+> are already kept based on the starred ones, and if there’s another legendary piece that can make
+> a better build it may select, but that’s not priority, only if it’s much better benefit."
+
+> "this way we will be able to declutter the vault without sacrificing build varieties."
+
+**2026-08-27**, asked how much better a new piece must be for a non-starred exotic:
+
+> "for non starred exotics the floor is between 100-120 for the desired stats"

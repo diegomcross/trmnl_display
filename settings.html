@@ -92,7 +92,8 @@ td b{color:var(--ink)}
   <div class="card">
     <h2>Armor declutter — build stat floor</h2>
     <div class="row">
-      <label class="f">Stat floor (per build)<input id="thStatFloor" type="number" min="0" max="400"></label>
+      <label class="f">Stat floor — ★ favorite exotics<input id="thStatFloor" type="number" min="0" max="400"></label>
+      <label class="f">Stat floor — other exotics<input id="thStatFloorUn" type="number" min="0" max="400"></label>
     </div>
     <p class="help">The armor declutter engine aims each build at <b>"good enough", not "maximum"</b>.
       This is the number a build's top stats are trying to reach — a spare piece has to move a build
@@ -186,6 +187,7 @@ function fillForm(){
   $('thFav').value=t.fav; $('thKeep').value=t.keep; $('thWatched').value=t.watchedJunk;
   $('thUnwatched').value=t.unwatchedJunk; $('thCombo').value=t.comboFloor??80;
   $('thStatFloor').value=t.statFloor??150;
+  $('thStatFloorUn').value=t.statFloorUnstarred??110;
   $('junkStage').value=CFG.junkStage; $('armorStage').checked=CFG.armorStage!==false; $('maxJunk').value=CFG.maxJunkPerRun; $('maxMoves').value=CFG.maxMovesPerRun;
   $('orbitSeconds').value=CFG.orbitSeconds??60; $('activitySeconds').value=CFG.activitySeconds??15; $('idleSeconds').value=CFG.idleSeconds??120;
   if(CFG.stageCid!=null) $('stageCid').value=String(CFG.stageCid);
@@ -240,7 +242,7 @@ $('saveBtn').onclick=async()=>{
     stageCid:$('stageCid').value||null,
     thr:{ unwatchedJunk:+$('thUnwatched').value, watchedJunk:+$('thWatched').value,
           keep:+$('thKeep').value, fav:+$('thFav').value, comboFloor:+$('thCombo').value,
-          statFloor:+$('thStatFloor').value },
+          statFloor:+$('thStatFloor').value, statFloorUnstarred:+$('thStatFloorUn').value },
   });
   $('saveBtn').textContent='Saved ✓'; setTimeout(()=>$('saveBtn').textContent='Save all Auto-Manager settings',1400);
 };

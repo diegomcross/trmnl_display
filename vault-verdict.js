@@ -1597,6 +1597,43 @@ function championSet(build, items, sb) {
   return { slots, T, W, score: cappedScore(T, build, W), deficit: minDeficit(T, build), exoticMissing, setGaps, lockedSetSlots, sb };
 }
 
+// Spec §9 step 5 — REUSE BIAS. Diego 2026-08-27: *"it will try to use the pieces that are
+// already used in other builds, but higher stats overrides that."* After a build is solved, swap in
+// a piece an earlier exotic already kept wherever the swap leaves the floor still met. Reuse is a
+// tiebreak, never a reason to fall short: if the build has not reached its floor we change nothing.
+//
+// Done after the solve rather than inside championSet's bestIn() because only the assembled build
+// knows whether the floor is still reached — bestIn() sees one slot at a time. championSet itself
+// stays untouched, so every other caller behaves exactly as before.
+function applyReuseBias(champ, build, pool, sb, keptIds) {
+  if (!keptIds || !keptIds.size) return champ;
+  const exSlot = build.exotic && build.exotic.slot ? build.exotic.slot : '';
+  let changed = false;
+  for (const slot of ARMOR_SLOTS) {
+    if (slot === exSlot) continue;
+    const cur = champ.slots[slot];
+    if (cur && keptIds.has(cur.id)) continue;                       // already reusing a kept piece
+    // a slot locked to the target set must stay in that set, or the 4pc bonus breaks
+    const locked = champ.lockedSetSlots && champ.lockedSetSlots.has(slot) && sb && sb.name;
+    const cands = pool.filter((i) => i.slot === slot && !i.x && keptIds.has(i.id)
+      && (!locked || i.sb === sb.name));
+    if (!cands.length) continue;
+    const best = cands.slice().sort((a, b) => pieceScoreB(b, champ.W) - pieceScoreB(a, champ.W))[0];
+    const trial = Object.assign({}, champ.slots, { [slot]: best });
+    // reuse whenever it does not cost the build any ground against its floor. Gating on
+    // "deficit === 0" made this dead code on a vault that cannot reach 150 — the point of
+    // "higher stats overrides that" is that reuse never LOSES stats, not that the floor is met.
+    if (minDeficit(setTotals(Object.values(trial)), build) <= champ.deficit) { champ.slots[slot] = best; changed = true; }
+  }
+  if (changed) {
+    champ.T = setTotals(Object.values(champ.slots));
+    champ.score = cappedScore(champ.T, build, champ.W);
+    champ.deficit = minDeficit(champ.T, build);
+    champ.reused = true;
+  }
+  return champ;
+}
+
 function isUpgrade(build, champ, cand) {
   const slot = cand.slot;
   if (!ARMOR_SLOTS.includes(slot) || cand.cls !== build.cls) return null;
@@ -1736,6 +1773,7 @@ const ARMOR_SLOT_IX = { Helmet: 0, Gauntlets: 1, Chest: 2, Leg: 3, 'Class Item':
 function armorDeclutter(items, ratings) {
   const cfg = loadAuto();
   const floorDefault = Math.max(0, Math.min(400, Math.round(+cfg.thr.statFloor || AUTO_DEFAULTS.thr.statFloor)));
+  const floorUnstarred = Math.max(0, Math.min(400, Math.round(+cfg.thr.statFloorUnstarred || AUTO_DEFAULTS.thr.statFloorUnstarred)));
   const exotics = loadExotics();
   const watched = loadBuilds().filter((b) => b.watch && !b.draft && b.exotic && (b.exotic.hash || b.exotic.n));
   const ratedSets = Object.entries(ratings || {})
@@ -1779,6 +1817,7 @@ function armorDeclutter(items, ratings) {
   }
 
   const keeps = new Map();      // instanceId -> [{exotic, set, slot}]
+  const keptIds = new Set();    // every piece already claimed by an earlier exotic (reuse bias, step 5)
   const winners = new Map();    // "cls|slot|setName" -> {piece, W, label}
   const report = [];
   let usingWatched = 0;
@@ -1790,7 +1829,15 @@ function armorDeclutter(items, ratings) {
   // protects no legendaries. SAFETY: with nothing starred yet, every tuned exotic drives keeps
   // (the old behaviour), otherwise a fresh install would junk the whole vault.
   const anyStarred = Object.values(exotics).some((v) => v.fav && v.favs.length);
-  const drivesKeeps = (name) => !anyStarred || !!exotics[name]?.fav;
+  const isStarred = (name) => !anyStarred || !!exotics[name]?.fav;
+
+  // Diego 2026-08-27, describing the model in full: a non-★ exotic is NOT ignored. It still builds,
+  // but to a lower floor, and it builds out of what the ★ exotics already kept — *"it'll try to
+  // maximize using the armor pieces that are already kept based on the starred ones, and if there's
+  // another legendary piece that can make a better build it may select, but that's not priority."*
+  // So: solve it against the kept pieces only; reach for the wider vault ONLY if that falls short of
+  // the non-starred floor. This supersedes the 2026-08-15 reading in which non-favourites built
+  // nothing at all and protected no legendaries.
 
   // Diego's FAVORITE exotics solve first (2026-08-15, max 7). Solve order is what "prioritized"
   // means to the engine: the first solve gets first pick of the vault, and it is the hook the
@@ -1809,7 +1856,8 @@ function armorDeclutter(items, ratings) {
       report.push({ name, cls, slot: copies[0].slot, copies: copies.length, favs: [], fav: !!ex.fav, untuned: true, variants: [] });
       continue;
     }
-    const floor = ex.floor != null ? ex.floor : floorDefault;
+    const starred = isStarred(name);
+    const floor = ex.floor != null ? ex.floor : (starred ? floorDefault : floorUnstarred);
     const ranked = copies.slice().sort((a, b) => favScoreOf(b, favs) - favScoreOf(a, favs) || b.t - a.t || b.tot - a.tot);
     const working = ranked[0];
     const favMath = favs.map((k, ix) => `${STATN_B[k]} ${working.s[k] || 0}×${FAVW3[ix]}`).join(' + ');
@@ -1818,18 +1866,6 @@ function armorDeclutter(items, ratings) {
       say(c.id, 'junk', `Outclassed copy — ${favScoreOf(c, favs)} vs ${favScoreOf(working, favs)} on the keeper.`);
     }
 
-    // A non-favorite exotic stops here: its own duplicate copies are decided above (that's the
-    // "help decision with unneeded dupes" job) but it runs no solve and protects no legendaries.
-    if (!drivesKeeps(name)) {
-      report.push({
-        name, cls, slot: working.slot, copies: copies.length, favs, floor, fav: false, dupesOnly: true,
-        floorSource: ex.floor != null ? 'exotic' : 'global',
-        workingId: working.id, favScore: favScoreOf(working, favs),
-        favStats: Object.fromEntries(favs.map((k) => [k, working.s[k] || 0])),
-        usingWatchedBuild: false, buildNames: [], bestDeficit: null, variants: [],
-      });
-      continue;
-    }
 
     // ---- step 2: stat target ----
     const myBuilds = watched.filter((b) => b.cls === cls && (b.exotic.n === name || b.exotic.hash === working.hash));
@@ -1850,13 +1886,28 @@ function armorDeclutter(items, ratings) {
       const cands = sets.length ? sets : (ratedSets.length ? ratedSets : [null]);
       for (const sb of cands) {
         // ---- step 4: solve, championSet unchanged ----
-        const champ = championSet(build, pool, sb);
+        // A ★ favourite is offered the whole vault, then applyReuseBias() nudges it toward pieces an
+        // earlier exotic already kept wherever that costs nothing. A non-★ exotic is offered ONLY the
+        // already-kept pieces, and reaches for the wider vault just when that cannot meet its floor.
+        let champ;
+        if (starred) {
+          champ = applyReuseBias(championSet(build, pool, sb), build, pool, sb, keptIds);
+        } else {
+          const keptPool = pool.filter((p) => p.x || keptIds.has(p.id));
+          champ = championSet(build, keptPool, sb);
+          if (champ.deficit > 0) {
+            const wide = championSet(build, pool, sb);
+            // only claim vault space for a new piece if reaching wider actually closes the gap
+            if (wide.deficit < champ.deficit) { champ = wide; champ.wentWide = true; } else champ.reused = true;
+          } else champ.reused = true;
+        }
         const picks = [];
         for (const slot of ARMOR_SLOTS) {
           const p = champ.slots[slot];
           if (!p) { picks.push({ slot, piece: null }); continue; }
           picks.push({ slot, piece: { id: p.id, n: p.n, s: p.s, t: p.t, sb: p.sb, x: p.x, tot: p.tot, a: p.a, ter: p.ter } });
           if (!keeps.has(p.id)) keeps.set(p.id, []);
+          if (!p.x) keptIds.add(p.id);          // later exotics prefer this piece over a fresh one
           // gap = championSet had to reach OUTSIDE the target set to fill this slot (it owns no
           // piece there). Tracked so the keep reason doesn't claim a Wildwood helmet is the
           // "best CODA helmet" — it's the stand-in for CODA's missing one.
@@ -1871,12 +1922,16 @@ function armorDeclutter(items, ratings) {
           totals: champ.T, deficit: champ.deficit, reachedFloor: champ.deficit === 0,
           min: build.min, prio: build.prio,
           exoticMissing: champ.exoticMissing, setGaps: champ.setGaps || [], picks,
+          reused: !!champ.reused, wentWide: !!champ.wentWide,
         });
       }
     }
     report.push({
       name, cls, slot: working.slot, copies: copies.length, favs, floor, fav: !!ex.fav,
       floorSource: ex.floor != null ? 'exotic' : 'global',
+      starred, floorKind: starred ? 'starred' : 'unstarred',
+      reusedOnly: variants.length > 0 && variants.every((v) => v.reused),
+      wentWide: variants.some((v) => v.wentWide),
       workingId: working.id, favScore: favScoreOf(working, favs),
       favStats: Object.fromEntries(favs.map((k) => [k, working.s[k] || 0])),
       usingWatchedBuild: myBuilds.length > 0, buildNames: myBuilds.map((b) => b.name),
@@ -1937,7 +1992,7 @@ function armorDeclutter(items, ratings) {
       why = `Beaten in ${it.sb} ${it.slot} by ${w.piece.n} (T${w.piece.t}, ${w.piece.tot} base) — ${mine} vs ${theirs} on ${w.label}'s priorities.`;
     } else {
       why = anyStarred
-        ? `Unneeded duplicate — no ★ favorite exotic's build wants a ${it.sb} ${it.slot}.`
+        ? `Unneeded duplicate — no exotic's build wants a ${it.sb} ${it.slot}, starred or not.`
         : `No build target picked a ${it.sb} ${it.slot} — nothing in your watched builds or rated sets needs this piece.`;
     }
     if (it.tag === 'favorite') say(it.id, 'review', why + ' Kept from junk: you tagged it favorite.');
@@ -1968,7 +2023,9 @@ function armorDeclutter(items, ratings) {
   return {
     at: Date.now(), floorDefault, preview: true, maxFavExotics: MAX_FAV_EXOTICS, anyStarred,
     favExotics: report.filter((r) => r.fav).map((r) => r.name),
-    dupesOnlyCount: report.filter((r) => r.dupesOnly).length,
+    floorUnstarred,
+    unstarredCount: report.filter((r) => !r.untuned && r.starred === false).length,
+    unstarredReusedOnly: report.filter((r) => r.reusedOnly && r.starred === false).length,
     exoticCount: report.length, tunedCount: report.filter((r) => !r.untuned).length, usingWatched,
     ratedSets: ratedSets.map((s) => s.name), verdicts, exotics: report, perClass,
   };
@@ -2143,7 +2200,10 @@ const AUTO_DEFAULTS = {
   // statFloor = the ARMOR build stat floor (Diego 2026-08-15: "150 is a good start, but add an
   // option to adjust that"). Builds aim for "good enough", not "maximum"; a per-exotic override
   // lives on the exotic's card (exotics.json .floor). Nothing else in thr touches armor.
-  thr: { unwatchedJunk: 60, keep: 80, fav: 90, watchedJunk: 75, comboFloor: 80, statFloor: 150 },
+  // statFloorUnstarred = the floor a NON-starred exotic builds to (Diego 2026-08-27: "for non
+  // starred exotics the floor is between 100-120 for the desired stats"). Starred exotics aim at
+  // statFloor; everything else aims lower and reuses what the starred builds already kept.
+  thr: { unwatchedJunk: 60, keep: 80, fav: 90, watchedJunk: 75, comboFloor: 80, statFloor: 150, statFloorUnstarred: 110 },
 };
 function loadAuto() {
   const f = loadJson(AUTO_FILE); const o = (f && typeof f === 'object' && !Array.isArray(f)) ? f : {};

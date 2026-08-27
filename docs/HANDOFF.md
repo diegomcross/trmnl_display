@@ -110,6 +110,27 @@ Core priorities, in his words:
 ## What works now (current state)
 
 - **Build-driven armor declutter — READ-ONLY PREVIEW (2026-08-15, spec §9 steps 1-4 of 8).**
+  **How keeps are decided (2026-08-27, matching Diego’s own description of the model):**
+  1. ★ favourite exotics (max 7) solve first, aiming at `thr.statFloor` (150). For each rated set,
+     `championSet()` anchors the exotic and fills the other four slots FROM THAT SET (the 4pc).
+  2. `applyReuseBias()` then swaps in pieces an earlier exotic already kept, wherever the swap does
+     not increase the floor deficit. `keptIds` carries across the whole pass.
+  3. Non-★ tuned exotics solve next, aiming at `thr.statFloorUnstarred` (110), and are offered ONLY
+     the already-kept pieces. They re-solve against the wider vault only if that closes the gap.
+  4. Everything picked = keep. A legendary in a rated set that nothing picked, and that lost to a
+     named better piece in the same class+slot+set, = junk. Unrated sets are left out of scope.
+
+  **Verified live 2026-08-27 with Diego’s ratings (34 sets at 4pc, 7 ★, 30 non-★):**
+  Warlock 387 keep / 175 junk / 0 review / 109 oos; Hunter 0/5/0/137; Titan 0/0/0/75.
+  Reuse working: 76 of 252 ★ builds reused a piece; 1058 of 1116 non-★ builds needed no new piece
+  at all (17 of the 30 non-★ exotics claimed nothing extra). Apply dry-run: 168 locked · 35 unlocked
+  · 562 tagged · 5 skipped. Audit all zero: exotics he would stop owning, equipped in junk,
+  DIM-loadout in junk, favourite-tagged in junk, set slots broken by the engine, slots emptied.
+  `tests/guardrails.js`: 127 passed, 0 failed.
+
+  **Known data fact, not a bug:** 0 of 252 ★ builds reach the 150 floor. Best is 25 short (Dawn
+  Chorus, Getaway Artist, Mataiodoxía), worst 80 short (Geomag Stabilizers). That is a farming
+  target list, and it is why the reuse bias must not be gated on `deficit === 0`.
   **What may be called junk (corrected 2026-08-25 after Diego reported it junking gear he needed):**
   - A **legendary** with `t === 0` (no Armor 3.0 gear tier) is junk, per Diego 2026-07-12. He
     currently owns **zero** of these, so in practice this branch never fires.

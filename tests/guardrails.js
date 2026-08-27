@@ -109,6 +109,16 @@ async function fetchOk(url, ms) {
     'gear you are wearing is never presented as junk');
   has('vault-verdict.js', "if (it.loc === 'equipped') { run.counts.skip++",
     'Apply never touches an equipped piece');
+  has('vault-verdict.js', 'statFloorUnstarred',
+    'non-★ exotics have their own lower stat floor (Diego 2026-08-27: 100-120)');
+  has('vault-verdict.js', 'function applyReuseBias',
+    'reuse bias exists — later builds prefer pieces an earlier exotic already kept');
+  has('vault-verdict.js', /minDeficit\(setTotals\(Object\.values\(trial\)\), build\) <= champ\.deficit/,
+    'reuse never costs the build ground against its floor');
+  has('vault-verdict.js', /const keptPool = pool\.filter\(\(p\) => p\.x \|\| keptIds\.has\(p\.id\)\)/,
+    'a non-★ exotic is offered the already-kept pieces first');
+  has('vault-verdict.js', /if \(wide\.deficit < champ\.deficit\)/,
+    'a non-★ exotic claims a new piece only when widening closes the gap');
   has('vault-verdict.js', "if (it.tag === 'favorite') { run.counts.skip++",
     'Apply never touches a piece you tagged favorite');
   has('vault-verdict.js', /const dryRun = opts\.dryRun !== false;/,

@@ -616,10 +616,11 @@ function renderDeclutter(){
   const floorHtml=DC.exotics.filter(x=>!x.untuned).map(x=>{
     const best=x.bestDeficit;
     const st=best===0?'<span class="ok">✓ reaches its goals</span>'
-      :x.dupesOnly?'<span style="color:var(--dim)">dupes only — not a ★ favorite, so no floor and no keeps</span>'
       :best==null?'<span class="warn">not solved</span>':`<span class="bad">short by ${best}</span>`;
     const gaps=[...new Set(x.variants.flatMap(v=>v.setGaps||[]))];
-    return `<div class="dcj"><b>${x.fav?'<span style="color:var(--gold)">★ </span>':''}${esc(x.name)}</b> <span style="color:var(--dim)">· ${x.cls}${x.dupesOnly?'':` · ${x.usingWatchedBuild?'watched build':`floor ${x.floor}${x.floorSource==='exotic'?' (per-exotic)':' (global)'}`}`}</span> — ${st}
+    const kind=x.starred===false?` · floor ${x.floor} (non-★)${x.reusedOnly?', built only from pieces already kept':x.wentWide?', needed a piece of its own':''}`
+      :` · ${x.usingWatchedBuild?'watched build':`floor ${x.floor}${x.floorSource==='exotic'?' (per-exotic)':' (global)'}`}`;
+    return `<div class="dcj"><b>${x.fav?'<span style="color:var(--gold)">★ </span>':''}${esc(x.name)}</b> <span style="color:var(--dim)">· ${x.cls}${kind}</span> — ${st}
       <br><span style="color:var(--dim)">best copy: ${x.favs.map(k=>`${STATN[k]} ${x.favStats[k]}`).join(' › ')} (fav score ${x.favScore})${x.copies>1?` · ${x.copies-1} weaker cop${x.copies-1>1?'ies':'y'} junked`:''}${gaps.length?` · gaps: ${gaps.map(esc).join(', ')}`:''}</span></div>`;
   }).join('');
 
@@ -627,7 +628,8 @@ function renderDeclutter(){
     <div class="dcsum">${clsRows}</div>
     <p class="savenote">${DC.anyStarred
       ? `<b>${DC.favExotics.length} ★ favorite exotic${DC.favExotics.length>1?'s':''}</b> are aimed at the stat floor and decide what's kept: ${DC.favExotics.map(esc).join(' · ')}.
-         The other <b>${DC.dupesOnlyCount}</b> tuned exotics only settle their own duplicate copies — they protect no legendaries.`
+         The other <b>${DC.unstarredCount}</b> tuned exotics build to the lower floor of <b>${DC.floorUnstarred}</b> out of
+         the pieces those favorites already kept${DC.unstarredReusedOnly?` — ${DC.unstarredReusedOnly} of them needed nothing extra`:''}.`
       : `<b class="warn">No exotic is starred yet</b>, so every tuned exotic is driving keeps. Star up to 7 favorites in the exotics panel to aim the floor at the builds you actually run.`}
     <br><b>${DC.usingWatched} of ${DC.tunedCount} tuned exotics</b> are using a real watched Build Crafter
     build; the rest run on the favorite-stats + stat-floor fallback. Mark your real builds <b>watch</b> in

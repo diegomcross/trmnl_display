@@ -221,6 +221,31 @@ Two more the same day, while the preview was being built:
     `armorDeclutter()` turns any `junk` verdict on an equipped piece into `review` ("Kept from
     junk: you have it equipped."). Done as a sweep, not per-branch, so it catches every path
     into a junk verdict including exotic duplicates.
+
+### 4d. Reuse bias and the non-★ floor (2026-08-27)
+
+11. **A non-★ exotic still builds — it is not ignored.** This CORRECTS the 2026-08-15 reading of
+    *"the other exotics just help decision with uneeded dupes"*, which had been implemented as "no
+    solve, protects no legendaries". Diego’s full description on 2026-08-27: a non-starred exotic
+    *"will try to maximize using the armor pieces that are already kept based on the starred ones,
+    and if there’s another legendary piece that can make a better build it may select, but that’s
+    not priority."* Implemented as: solve it against the ALREADY-KEPT pieces only, and re-solve
+    against the wider vault only when that closes the floor gap (`wide.deficit < champ.deficit`).
+
+12. **Non-★ exotics aim at a lower floor.** *"for non starred exotics the floor is between
+    100-120 for the desired stats."* New setting `thr.statFloorUnstarred`, default **110**,
+    editable in /settings next to the ★ floor. ★ favourites still aim at `thr.statFloor` (150).
+
+13. **Reuse bias (spec §9 step 5).** *"it will try to use the pieces that are already used in other
+    builds, but higher stats overrides that."* `applyReuseBias()` runs AFTER each solve and swaps in
+    an already-kept piece wherever the swap does not increase the build’s floor deficit.
+    **Do not re-gate this on `deficit === 0`** — measured on Diego’s vault 2026-08-27, 0 of 252
+    starred builds reach 150, so that gate made the whole feature dead code.
+
+14. **Every rated set must still be able to field a full 4pc with the exotic.** Verified after each
+    change: for all rated sets × all ★ exotics, the count of set slots where Diego OWNS a piece but
+    the engine kept none must be **0**. Sets he cannot complete are a farming problem, not a
+    declutter one.
 ## 5. Perk lists & Perk Finder
 
 - **No exotic perks / frames / non-trait plugs in perk lists** (2026-07-04 commit

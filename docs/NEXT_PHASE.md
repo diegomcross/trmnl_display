@@ -3,6 +3,31 @@
 > Maintained per CLAUDE.md. When a feature ships, move it to HANDOFF.md
 > "What works now" and delete it here.
 
+## Where we are (2026-08-27 — reuse bias + non-★ floor SHIPPED, spec §9 step 5 done)
+
+Diego described the model in full and it exposed two gaps between his intent and the build:
+
+1. **Reuse bias was never implemented** (spec §9 step 5, deliberately deferred on 2026-08-15).
+2. **Non-★ exotics were built to do nothing.** The 2026-08-15 reading of *"the other exotics just
+   help decision with uneeded dupes"* became "no solve, protects no legendaries". Wrong — he wants
+   them building from already-kept pieces at a lower floor.
+
+Both are now shipped, rebooted and verified live — see DIEGO_RULES §4d rules 11-14 and HANDOFF.
+Effect on his vault: Warlock keeps 320 → 387, junk 242 → 175. Build variety preserved, and 0 rated
+set slots were broken by the engine.
+
+**Still NOT started — spec §9 steps 6-8:** (6) the full farming report, (7) the `rearrange` alert
+kind, (8) deleting the niche key from `compute()`. Step 5 was pulled forward because Diego asked
+for it directly; 6-8 still await his go-ahead.
+
+**Still open, neither touched by the agent:**
+1. `auto-manage.json` has `enabled: true` and the **weapons** Auto-Manager ticks every minute.
+   His standing rule (DIEGO_RULES §3) is that it stays off. **BLOCKED: awaiting Diego.**
+2. The 2026-08-23 19:49 DIM junk-tag of 105 armor pieces, cause unknown, tags already gone.
+
+He has still not pressed Apply; no armor writes have ever been made.
+
+---
 ## Where we are (2026-08-25 — declutter junk rule CORRECTED, rebooted and verified live)
 
 Diego: *"the declutter function tag pieces of armor to be junked that I needed. What is going on?"*
