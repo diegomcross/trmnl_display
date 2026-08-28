@@ -6,7 +6,6 @@
 <title>Artifacts — Perk Mods</title>
 <style>
   *{box-sizing:border-box;margin:0;padding:0}
-  body{padding:12px;padding-bottom:60px}
   .pagehead{padding:18px 0 6px}
   .filters{border:1px solid var(--line);background:var(--panel);padding:12px;margin-bottom:14px}
   .frow{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:8px}
@@ -48,6 +47,7 @@
 </head>
 <body>
 <div id="gbanner"></div>
+<main class="page">
 <h1 class="disp">Artifact <span>Mods</span></h1>
 <p class="sub">All 7 Monument of Triumph artifacts. Filter mods by subclass verb or keyword to find build synergies.</p>
 
@@ -174,5 +174,6 @@ document.body.addEventListener('click',e=>{
 renderFilters(); render();
 </script>
 <script src="/banner.js"></script>
+</main>
 </body>
 </html>

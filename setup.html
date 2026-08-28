@@ -4,24 +4,22 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Vault Verdict — Setup</title>
-<link rel="stylesheet" href="/theme.css">
 <style>
-body{max-width:760px;margin:0 auto;padding:26px 16px 60px}
-h1{margin:0 0 6px}
-.sub{color:var(--mut);margin:0 0 22px;line-height:1.5}
-.step{background:var(--panel,#15171b);border:1px solid var(--line,#2a2d33);border-radius:8px;padding:16px 18px;margin:0 0 14px}
+*{box-sizing:border-box;margin:0;padding:0}
+.setup{max-width:820px}   /* reading column, left-aligned with the banner */
+.step{background:var(--panel,#15171b);border:1px solid var(--line,#2a2d33);padding:16px 18px;margin:0 0 14px}
 .step h2{display:flex;align-items:center;gap:10px;font-size:15px;margin:0 0 8px}
-.pill{display:inline-block;min-width:74px;text-align:center;font-size:11px;letter-spacing:.06em;text-transform:uppercase;border-radius:20px;padding:3px 10px;border:1px solid var(--line)}
+.pill{display:inline-block;min-width:74px;text-align:center;font-size:11px;letter-spacing:.06em;text-transform:uppercase;padding:3px 10px;border:1px solid var(--line)}
 .pill.ok{color:#35e366;border-color:#35e36655;background:#35e3660f}
 .pill.no{color:#ff6b6b;border-color:#ff6b6b55;background:#ff6b6b0f}
 .pill.wait{color:var(--mut)}
 .hint{color:var(--mut);font-size:13px;line-height:1.55;margin:6px 0}
 ol.hint{padding-left:20px}
 ol.hint li{margin:4px 0}
-code{background:#0009;border:1px solid var(--line);border-radius:4px;padding:1px 6px;font-size:12.5px;user-select:all}
+code{background:#0009;border:1px solid var(--line);padding:1px 6px;font-size:12.5px;user-select:all}
 label{display:block;font-size:12px;color:var(--mut);margin:10px 0 3px;letter-spacing:.04em;text-transform:uppercase}
-input[type=text]{width:100%;box-sizing:border-box;background:#0007;border:1px solid var(--line);border-radius:6px;color:inherit;padding:9px 11px;font-size:14px;font-family:inherit}
-.btn{display:inline-block;background:transparent;border:1px solid var(--line);border-radius:6px;color:inherit;padding:9px 16px;font-size:13.5px;cursor:pointer;margin:10px 8px 0 0;text-decoration:none}
+input[type=text]{width:100%;box-sizing:border-box;background:#0007;border:1px solid var(--line);color:inherit;padding:9px 11px;font-size:14px;font-family:inherit}
+.btn{display:inline-block;background:transparent;border:1px solid var(--line);color:inherit;padding:9px 16px;font-size:13.5px;cursor:pointer;margin:10px 8px 0 0;text-decoration:none}
 .btn.gold{border-color:var(--gold,#cfae42);color:var(--gold,#cfae42)}
 .btn:disabled{opacity:.45;cursor:default}
 .msg{font-size:13px;margin:8px 0 0;line-height:1.5}
@@ -32,9 +30,17 @@ input[type=text]{width:100%;box-sizing:border-box;background:#0007;border:1px so
 .fold{display:none}
 .step.open .fold{display:block}
 </style>
+<link rel="stylesheet" href="/theme.css">
 </head>
 <body>
-<h1 class="disp">Vault Verdict — <span>Setup</span></h1>
+<div id="gbanner">
+  <div class="gb"><div class="gb-in"><div class="gb-l"><div class="gb-id">
+    <div class="gb-name">Vault Verdict</div>
+    <div class="gb-sub"><span class="gb-cls">First-run setup</span></div>
+  </div></div></div></div>
+</div>
+<main class="page"><div class="setup">
+<h1 class="disp">First-run <span>Setup</span></h1>
 <p class="sub">Three steps, once per PC. Your Bungie <b>password is never typed here</b> — you log in on Bungie's own website and this page just saves the resulting connection. Re-running any step later is safe (use step&nbsp;2 to log in again if your login ever expires).</p>
 
 <div class="step" id="s1">
@@ -133,5 +139,6 @@ $('connectDim').onclick=async()=>{
 };
 refresh();
 </script>
+</div></main>
 </body>
 </html>

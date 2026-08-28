@@ -11,12 +11,9 @@
   --clip:polygon(10px 0,100% 0,100% calc(100% - 10px),calc(100% - 10px) 100%,0 100%,0 10px);
 }
 *{box-sizing:border-box;margin:0;padding:0}
-body{background:var(--bg);color:var(--ink);font:15px/1.45 "Segoe UI",Roboto,system-ui,sans-serif;padding:12px;padding-bottom:40px}
-.disp{font-family:Bahnschrift,"Roboto Condensed","Arial Narrow",sans-serif;text-transform:uppercase;letter-spacing:.09em}
-h1{font-size:22px;font-weight:600}
+body{background:var(--bg);color:var(--ink);font:15px/1.45 "Segoe UI",Roboto,system-ui,sans-serif}
 h1 span{color:var(--gold)}
 h2{font-size:15px}
-.sub{color:var(--mut);font-size:12px;margin:2px 0 10px}
 .nav{display:flex;gap:6px;margin:6px 0 4px;flex-wrap:wrap}
 .nav a{font-family:Bahnschrift,"Roboto Condensed","Arial Narrow",sans-serif;text-transform:uppercase;letter-spacing:.06em;font-size:12px;text-decoration:none;color:var(--mut);border:1px solid var(--line);padding:5px 12px;clip-path:polygon(8px 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%,0 8px)}
 .nav a.on{color:var(--gold);border-color:var(--gold);background:rgba(207,174,66,.12)}
@@ -46,12 +43,12 @@ h2{font-size:15px}
 .note{color:var(--dim);font-size:12px}
 .big{text-align:center;color:var(--mut);padding:30px 12px}
 :focus-visible{outline:2px solid var(--gold);outline-offset:2px}
-@media(min-width:760px){body{max-width:1000px;margin:0 auto}}
 </style>
 <link rel="stylesheet" href="/theme.css">
 </head>
 <body>
 <div id="gbanner"></div>
+<main class="page">
 <h1 class="disp">Fashion <span>Loadouts</span></h1>
 <p class="sub">Save your equipped ornament + shader looks and re-apply them in one click. <b>Apply works only while your character is in orbit.</b></p>
 <div class="bar"><button class="btn" id="refreshBtn">Refresh</button><span class="count" id="status"></span></div>
@@ -151,5 +148,6 @@ load();
 window.GRELOAD=()=>load();   // banner "Updated" chip / auto-refresh hook
 </script>
 <script src="/banner.js"></script>
+</main>
 </body>
 </html>

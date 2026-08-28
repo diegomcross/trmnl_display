@@ -186,6 +186,25 @@ async function fetchOk(url, ms) {
   has('weapon-watch.html', 'MW_STAT_NAME', 'MW badge rides with its actual stat');
   has('banner.js', 'gb-upd', '"Updated Xs ago" freshness chip on every page');
 
+  // ---- one page shell for every page (RULES sect 6, Diego 2026-08-28) ----------------
+  // "make them all consistent, banner size, positioning ... every page behaves like an
+  // independent style". Page width + gutters live ONLY in theme.css; a page that sets its
+  // own body max-width/padding again would drift the banner right back out of alignment.
+  has('theme.css', '--page-max', 'one shared page width token');
+  has('theme.css', '--page-pad', 'one shared page gutter token');
+  has('theme.css', /\.page\{[^}]*max-width:var\(--page-max\)/, 'the .page column uses the shared width');
+  has('banner.js', 'gb-in', 'banner centres on the same column as page content');
+  has('banner.js', 'gb-nav', 'section tabs render as their own strip');
+  for (const f of [...ALL_PAGES, 'setup.html']) {
+    check(f + ' wraps content in <main class="page">', count(f, '<main class="page">') === 1);
+    const src = read(f) || '';
+    // (?<![\w.#-]) so `.wbody{padding}` / `.body{padding}` class rules don't false-positive
+    check(f + ' sets no page width of its own', !/(?<![\w.#-])body\s*\{[^}]*max-width/.test(src),
+      'a body{max-width} rule is back — width belongs in theme.css');
+    check(f + ' sets no body padding of its own', !/(?<![\w.#-])body\s*\{[^}]*padding/.test(src),
+      'a body{padding} rule is back — spacing belongs in theme.css');
+  }
+
   // ------------------------------------------------------------------ sharing (RULES sect 7)
   sect('Setup wizard & sharing');
   hasNot('setup.html', /type=["']password["']/, 'passwords are NEVER typed into the app (bungie.net OAuth only)');

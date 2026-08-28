@@ -14,11 +14,8 @@
 }
 *{box-sizing:border-box;margin:0;padding:0}
 html{-webkit-text-size-adjust:100%}
-body{background:var(--bg);color:var(--ink);font:15px/1.45 "Segoe UI",Roboto,system-ui,sans-serif;padding:12px;padding-bottom:80px}
-.disp{font-family:Bahnschrift,"Roboto Condensed","Arial Narrow",sans-serif;text-transform:uppercase;letter-spacing:.09em}
-h1{font-size:22px;font-weight:600}
+body{background:var(--bg);color:var(--ink);font:15px/1.45 "Segoe UI",Roboto,system-ui,sans-serif}
 h1 span{color:var(--gold)}
-.sub{color:var(--mut);font-size:12px;margin:2px 0 12px}
 .nav{display:flex;gap:6px;margin:6px 0 4px}
 .nav a{font-family:Bahnschrift,"Roboto Condensed","Arial Narrow",sans-serif;text-transform:uppercase;letter-spacing:.06em;font-size:12px;text-decoration:none;color:var(--mut);border:1px solid var(--line);padding:5px 12px;clip-path:polygon(8px 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%,0 8px)}
 .nav a.on{color:var(--gold);border-color:var(--gold);background:rgba(207,174,66,.12)}
@@ -47,7 +44,11 @@ details.panel[open] summary::after{content:" –"}
 .mtx th.rowh{text-align:left;font-size:10px;color:var(--mut);width:86px}
 .mtx th.rowh i{font-style:normal;color:var(--dim)}
 .new::before{content:"◆ ";color:var(--gold);font-size:8px}
-.card{background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--dim);clip-path:var(--clip);padding:10px 12px;margin-bottom:8px}
+/* The armor list flows into as many columns as the shared page width allows, instead of
+   one very wide column (the page used to cap itself at 880px; it now uses the suite width). */
+#list{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,420px),1fr));gap:8px;align-items:start}
+.card{background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--dim);clip-path:var(--clip);padding:10px 12px}
+#list>.card{margin-bottom:0}
 .card.vkeep{border-left-color:var(--keep)}
 .card.vreview{border-left-color:var(--rev)}
 .card.vjunk{border-left-color:var(--junk)}
@@ -131,12 +132,12 @@ details.panel[open] summary::after{content:" –"}
 .savenote.bad{color:var(--junk)}
 :focus-visible{outline:2px solid var(--gold);outline-offset:2px}
 @media(prefers-reduced-motion:no-preference){.card{animation:in .18s ease both}@keyframes in{from{opacity:0;transform:translateY(4px)}to{opacity:1}}}
-@media(min-width:760px){body{max-width:880px;margin:0 auto}}
 </style>
 <link rel="stylesheet" href="/theme.css">
 </head>
 <body>
 <div id="gbanner"></div>
+<main class="page">
 <h1 class="disp">Vault <span>Verdict</span></h1>
 <p class="sub">Armor 3.0 triage · live from Bungie · set ratings + exotic favorites drive the verdicts</p>
 <div class="bar"><button class="btn" id="refreshBtn">Refresh from Bungie</button><span class="count" id="status" style="margin:0;align-self:center"></span></div>
@@ -780,5 +781,6 @@ $('refreshBtn').onclick=()=>loadData(true);
 })();
 </script>
 <script src="/banner.js"></script>
+</main>
 </body>
 </html>

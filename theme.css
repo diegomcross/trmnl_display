@@ -56,7 +56,10 @@ body{
 }
 h1,h2,h3,.disp{ font-family:var(--disp); font-weight:500; color:var(--white); }
 h1{ letter-spacing:.04em; }
-.disp{ letter-spacing:.06em; }
+/* .disp = the in-game display face. Six pages used to declare this themselves (uppercase)
+   and five did not, so the same class rendered differently per page — it lives here now. */
+.disp{ letter-spacing:.06em; text-transform:uppercase; }
+input.disp,textarea.disp{ text-transform:none; letter-spacing:.02em; }
 h1 span,.disp span{ color:var(--gold); }
 .sub{ color:var(--mut); }
 .sub a,a{ color:var(--keep); }
@@ -73,10 +76,40 @@ h1 span,.disp span{ color:var(--gold); }
 .nav a:last-child{ border-right:0; }
 .nav a.on{ color:var(--white); background:rgba(255,255,255,.06); box-shadow:inset 0 -2px 0 var(--gold); }
 
-/* ---------- account nameplate banner (rendered by banner.js) ---------- */
-.gb{ position:relative; display:flex; justify-content:space-between; align-items:center; gap:16px;
-  min-height:92px; padding:10px 20px; margin:0 0 16px; background-size:cover; background-position:center right;
-  border:1px solid var(--line-strong); }
+/* ---------- page shell — ONE layout for every page (2026-08-28) ----------
+   Before this, every page set its own `body{padding}` + `body{max-width}` at its own
+   breakpoint (880 / 900 / 1000 / 1080 / 1100 / 1160 / 1180 / 1280 …), so the banner was a
+   different width, in a different screen position, and a different height (the nav wrapped
+   differently) on every single page. Now the body owns no width at all: the banner is a
+   full-bleed bar and every page's content lives in <main class="page">, which is the same
+   max-width with the same gutters everywhere. Change these two tokens to re-space the
+   whole suite at once. */
+:root{
+  --page-max:1240px;     /* one content width for every page */
+  --page-pad:16px;       /* one left/right gutter for every page */
+  --page-bottom:84px;    /* clearance under content for the fixed "Updated" chip / export bar */
+}
+html{ -webkit-text-size-adjust:100%; }
+body{ margin:0; padding:0 0 var(--page-bottom); max-width:none;
+      font-size:15px; line-height:1.45; }
+.page{ width:100%; max-width:var(--page-max); margin:0 auto; padding:0 var(--page-pad); }
+
+/* page heading — same size, same rhythm, on every page */
+h1{ font-size:24px; font-weight:600; margin:0; }
+.sub{ color:var(--mut); font-size:12.5px; line-height:1.5; margin:5px 0 14px; max-width:110ch; }
+
+/* ---------- account nameplate banner (rendered by banner.js) ----------
+   Two full-bleed strips that are identical on every page:
+     .gb      nameplate — your emblem art, name, power, class, character dots
+     .gb-nav  section tabs — ONE row, never wrapping (it scrolls sideways on a phone)
+   Both centre their contents in .gb-in, which uses the same --page-max/--page-pad as
+   .page, so the banner, the <h1> and the page content all share one left edge. */
+#gbanner{ display:block; margin:0 0 20px; }
+.gb-in{ width:100%; max-width:var(--page-max); margin:0 auto; padding:0 var(--page-pad); }
+.gb{ position:relative; background-size:cover; background-position:center right;
+  border-bottom:1px solid var(--line-strong); }
+.gb > .gb-in{ display:flex; justify-content:space-between; align-items:center; gap:16px;
+  min-height:92px; padding-top:12px; padding-bottom:12px; }
 .gb-l{ display:flex; align-items:center; gap:14px; min-width:0; }
 .gb-emb{ width:56px; height:56px; flex:0 0 auto; border:1px solid var(--line-strong); }
 .gb-id{ min-width:0; }
@@ -104,16 +137,24 @@ h1 span,.disp span{ color:var(--gold); }
 .gb-upd.warn::before{ background:var(--gold); box-shadow:0 0 6px rgba(205,174,50,.7); }
 .gb-upd.bad::before{ background:var(--junk); box-shadow:0 0 6px rgba(224,82,58,.7); }
 .gb-upd:hover{ border-color:var(--gold); color:var(--white); }
-.gb-nav{ display:flex; gap:2px; flex-wrap:wrap; justify-content:flex-end; }
+/* section tabs — their own strip, one row, same height on every page and every screen */
+.gb-nav{ display:block; position:relative; background:rgba(9,11,12,.72); border-bottom:1px solid var(--line); }
+.gb-nav > .gb-in{ display:flex; gap:0; flex-wrap:nowrap; overflow-x:auto;
+  scrollbar-width:none; -ms-overflow-style:none; }
+.gb-nav > .gb-in::-webkit-scrollbar{ display:none; }
 .gnav-a{ font-family:var(--disp); text-transform:uppercase; letter-spacing:.1em; font-size:11px;
-  text-decoration:none; color:rgba(255,255,255,.70); padding:7px 12px; border:1px solid transparent;
-  text-shadow:0 1px 3px rgba(0,0,0,.85); }
-.gnav-a:hover{ color:var(--white); }
-.gnav-a.on{ color:var(--gold); border-color:var(--gold); background:rgba(205,174,50,.16); }
+  text-decoration:none; color:rgba(255,255,255,.70); padding:11px 13px; flex:0 0 auto;
+  white-space:nowrap; border-bottom:2px solid transparent; }
+.gnav-a:hover{ color:var(--white); background:rgba(255,255,255,.05); }
+.gnav-a.on{ color:var(--gold); border-bottom-color:var(--gold); background:rgba(205,174,50,.12); }
 @media(max-width:820px){
-  .gb{ flex-direction:column; align-items:flex-start; }
-  .gb-nav{ justify-content:flex-start; }
+  .gb > .gb-in{ min-height:0; }
   .gb-name{ font-size:24px; }
+  .gb-emb{ width:46px; height:46px; }
+  /* on a phone the tab strip scrolls sideways — fade the right edge so it's obvious
+     there are more sections past the last visible one */
+  .gb-nav::after{ content:''; position:absolute; top:0; right:0; bottom:0; width:34px;
+    pointer-events:none; background:linear-gradient(90deg,rgba(9,11,12,0),rgba(9,11,12,.92)); }
 }
 
 /* ---------- buttons ---------- */

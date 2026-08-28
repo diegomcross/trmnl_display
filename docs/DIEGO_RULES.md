@@ -273,6 +273,14 @@ Two more the same day, while the preview was being built:
 - Cards must not move mid-tap (2026-07-05: hover-delay fix after "the card moved").
 - Tag colors: Diego's manual favorites pink, app favorites green.
 - Build Crafter: "take your time making this look good" (2026-07-13).
+- **One page shell for the whole suite** (2026-08-28, verbatim): *"I need you to
+  access the webpages and make them all consistent, banner size, positioning,
+  right now every page behaves like an independent style and this is ugly."*
+  Locked consequences: no page may set its own `body{max-width}` / `body{padding}`
+  again — page width and gutters live ONLY in `theme.css` (`--page-max`,
+  `--page-pad`), every page's content sits in `<main class="page">`, the banner is
+  a full-bleed bar with the tabs on their own single-row strip, and `h1` / `.sub` /
+  `.disp` are sized in `theme.css` only. A new page starts by copying that shell.
 
 ## 7. Sharing the app (2026-07-17)
 

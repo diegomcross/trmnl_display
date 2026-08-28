@@ -13,11 +13,8 @@
 }
 *{box-sizing:border-box;margin:0;padding:0}
 html{-webkit-text-size-adjust:100%}
-body{background:var(--bg);color:var(--ink);font:15px/1.45 "Segoe UI",Roboto,system-ui,sans-serif;padding:12px;padding-bottom:40px}
-.disp{font-family:Bahnschrift,"Roboto Condensed","Arial Narrow",sans-serif;text-transform:uppercase;letter-spacing:.09em}
-h1{font-size:22px;font-weight:600}
+body{background:var(--bg);color:var(--ink);font:15px/1.45 "Segoe UI",Roboto,system-ui,sans-serif}
 h1 span{color:var(--gold)}
-.sub{color:var(--mut);font-size:12px;margin:2px 0 12px}
 .sub a{color:var(--keep);text-decoration:none}
 .nav{display:flex;gap:6px;margin:6px 0 4px}
 .nav a{font-family:Bahnschrift,"Roboto Condensed","Arial Narrow",sans-serif;text-transform:uppercase;letter-spacing:.06em;font-size:12px;text-decoration:none;color:var(--mut);border:1px solid var(--line);padding:5px 12px;clip-path:polygon(8px 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%,0 8px)}
@@ -110,7 +107,6 @@ input[type=checkbox]{accent-color:var(--gold);width:15px;height:15px;flex-shrink
 .hperks .hp2{color:var(--gold)}
 .hperks{overflow:hidden;text-overflow:ellipsis}
 :focus-visible{outline:2px solid var(--gold);outline-offset:2px}
-@media(min-width:760px){body{max-width:1080px;margin:0 auto}}   /* widened for the copy table (2026-07-06) */
 @media(max-width:520px){
   .tools{gap:4px}
   .pk,.chip{padding:7px 11px}   /* bigger tap targets on phone */
@@ -120,6 +116,7 @@ input[type=checkbox]{accent-color:var(--gold);width:15px;height:15px;flex-shrink
 </head>
 <body>
 <div id="gbanner"></div>
+<main class="page">
 <h1 class="disp">Weapon <span>Watch</span></h1>
 <p class="sub">God-roll tracker · tap a card to expand</p>
 <div class="bar"><input type="search" id="q" placeholder="Search name / type / source — crucible, raid, iron banner, trials…"></div>
@@ -504,5 +501,6 @@ window.GRELOAD=()=>load(false);   // banner "Updated" chip / auto-refresh hook
 </script>
 <script src="/perktip.js"></script>
 <script src="/banner.js"></script>
+</main>
 </body>
 </html>
