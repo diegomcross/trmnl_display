@@ -5,47 +5,29 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Weapon Watch — God-Roll Tracker</title>
 <style>
-:root{
-  --bg:#0c0e12; --panel:#151821; --panel2:#1b1f2b; --line:#2a2f3d;
-  --ink:#e9ebf2; --mut:#8b93a7; --dim:#5c6375;
-  --gold:#cfae42; --purp:#a97fd6; --keep:#5fd0dd; --rev:#e8b64c; --junk:#ff6a52;
-  --clip:polygon(10px 0,100% 0,100% calc(100% - 10px),calc(100% - 10px) 100%,0 100%,0 10px);
-}
+/* design tokens live in theme.css — this page had its own dead copy (2026-08-28) */
 *{box-sizing:border-box;margin:0;padding:0}
-html{-webkit-text-size-adjust:100%}
-body{background:var(--bg);color:var(--ink);font:15px/1.45 "Segoe UI",Roboto,system-ui,sans-serif}
-h1 span{color:var(--gold)}
-.sub a{color:var(--keep);text-decoration:none}
-.nav{display:flex;gap:6px;margin:6px 0 4px}
-.nav a{font-family:Bahnschrift,"Roboto Condensed","Arial Narrow",sans-serif;text-transform:uppercase;letter-spacing:.06em;font-size:12px;text-decoration:none;color:var(--mut);border:1px solid var(--line);padding:5px 12px;clip-path:polygon(8px 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%,0 8px)}
-.nav a.on{color:var(--gold);border-color:var(--gold);background:rgba(207,174,66,.12)}
+.sub a{text-decoration:none}
 .bar{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;align-items:center}
-.btn{background:var(--panel2);border:1px solid var(--gold);color:var(--gold);padding:8px 13px;font-size:12px;cursor:pointer;clip-path:var(--clip);font-family:inherit}
-.btn:active{background:var(--gold);color:#000}
-.btn.sm{padding:4px 9px;font-size:10.5px}
-.btn.red{border-color:var(--junk);color:var(--junk)}
-.btn.mut{border-color:var(--line);color:var(--mut)}
+.btn{cursor:pointer}
 input[type=search],select{background:var(--panel);border:1px solid var(--line);color:var(--ink);padding:8px 10px;font-size:13px;clip-path:var(--clip);appearance:none}
 select.sm{padding:3px 6px;font-size:11px}
 input[type=search]{flex:1;min-width:160px}
-input[type=checkbox]{accent-color:var(--gold);width:15px;height:15px;flex-shrink:0;cursor:pointer}
-.panel{background:var(--panel);border:1px solid var(--line);clip-path:var(--clip);padding:12px;margin-bottom:14px}
+input[type=checkbox]{width:15px;height:15px;flex-shrink:0;cursor:pointer}
+.panel{padding:12px;margin-bottom:14px}
 .panel h2{font-size:13px;color:var(--mut);margin-bottom:8px}
-.card{background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--gold);clip-path:var(--clip);margin-bottom:8px}
+.card{margin-bottom:8px}
 .whead{display:flex;justify-content:space-between;gap:8px;align-items:center;cursor:pointer;padding:10px 12px}
-.whead .nm{font-weight:600;font-size:15px;color:var(--gold)}
-.whead .sum{color:var(--mut);font-size:11.5px}
+.whead .nm{font-weight:600;font-size:15px}
+.whead .sum{font-size:11.5px}
 .wbody{padding:0 12px 10px;border-top:1px dashed var(--line)}
-.meta{color:var(--mut);font-size:11.5px;margin:6px 0}
-.meta b{color:var(--ink)}
-.trk{margin:6px 0;padding:8px 10px;background:var(--panel2);clip-path:var(--clip)}
+.meta{font-size:11.5px;margin:6px 0}
+.trk{margin:6px 0;padding:8px 10px}
 .trk .thd{font-size:11px;color:var(--gold);text-transform:uppercase;letter-spacing:.08em;font-family:Bahnschrift,"Roboto Condensed",sans-serif;margin-bottom:2px}
-.colh{font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.08em;margin:8px 0 4px;font-family:Bahnschrift,"Roboto Condensed",sans-serif}
+.colh{font-size:10px;text-transform:uppercase;letter-spacing:.08em;margin:8px 0 4px}
 .pool{display:flex;gap:4px;flex-wrap:wrap}
-.pk{background:var(--panel2);border:1px solid var(--line);color:var(--mut);padding:5px 9px;font-size:11px;cursor:pointer;clip-path:polygon(6px 0,100% 0,100% calc(100% - 6px),calc(100% - 6px) 100%,0 100%,0 6px);font-family:inherit}
-.pk.t1{background:rgba(95,208,221,.15);color:var(--keep);border-color:var(--keep)}
-.pk.t2{background:rgba(207,174,66,.22);color:var(--gold);border-color:var(--gold);font-weight:600}
-.pk.t2::before{content:"★ "}
+.pk{padding:5px 9px;font-size:11px;cursor:pointer}
+.pk.t2{font-weight:600}
 .tools{display:flex;gap:5px;flex-wrap:wrap;align-items:center;border-top:1px solid var(--line);padding:7px 0;font-size:11px;color:var(--dim)}
 /* organized copy table (2026-07-06 redesign — Diego's approved "Mockup B") */
 .ctable{border:1px solid var(--line);margin-top:8px}
@@ -59,15 +41,11 @@ input[type=checkbox]{accent-color:var(--gold);width:15px;height:15px;flex-shrink
 .rperk.cp{color:var(--mut)}
 .rperk.hit{color:var(--keep)}
 .rperk.hi{color:var(--gold);font-weight:600}
-.rperk.act{text-decoration:underline}
-.frac{font-size:10px;color:var(--dim);font-variant-numeric:tabular-nums}
+.frac{font-size:10px;font-variant-numeric:tabular-nums}
 .rowtags{display:flex;gap:4px;flex-wrap:wrap;margin-top:2px}
 .chips{display:flex;gap:4px;flex-wrap:wrap}
-.chip{background:var(--panel2);border:1px solid var(--line);color:var(--mut);padding:5px 9px;font-size:10.5px;cursor:pointer;clip-path:polygon(5px 0,100% 0,100% calc(100% - 5px),calc(100% - 5px) 100%,0 100%,0 5px);font-family:inherit;text-transform:uppercase;letter-spacing:.04em}
-.chip.on.keep{border-color:var(--keep);color:var(--keep);background:rgba(95,208,221,.14)}
-.chip.on.favorite{border-color:var(--fav-man);color:var(--fav-man);background:rgba(255,134,200,.14)}
+.chip{padding:5px 9px;font-size:10.5px;cursor:pointer}
 .chip.on.favorite.af{border-color:var(--fav-auto);color:var(--fav-auto);background:rgba(110,222,155,.14)}
-.chip.on.junk{border-color:var(--junk);color:var(--junk);background:rgba(255,106,82,.14)}
 /* stats: full names (never abbreviated), MW badge sits inline with its own stat,
    current -> best-achievable (barrel/mag swap) shown when it differs */
 .statcell{display:flex;flex-direction:column;gap:4px}
@@ -86,27 +64,24 @@ input[type=checkbox]{accent-color:var(--gold);width:15px;height:15px;flex-shrink
 .killrow .kn{color:var(--ink);font-variant-numeric:tabular-nums;font-weight:700}
 .actcell{display:flex;flex-direction:column;gap:6px;align-items:flex-end}
 .lockb.mv{font-size:11px;padding:4px 10px}
-.score{font-size:14px;font-weight:700;padding:3px 9px;clip-path:var(--clip);background:var(--panel2);color:var(--mut);font-variant-numeric:tabular-nums;white-space:nowrap;display:inline-block}
-.score.hot{background:rgba(207,174,66,.2);color:var(--gold);font-weight:700}
-.lockb{background:none;border:1px solid var(--line);color:var(--mut);cursor:pointer;font-size:13px;padding:2px 7px;clip-path:var(--clip)}
-.lockb.on{border-color:var(--gold);color:var(--gold)}
+.score{font-size:14px;font-weight:700;padding:3px 9px;white-space:nowrap;display:inline-block}
+.score.hot{font-weight:700}
+.lockb{cursor:pointer;font-size:13px;padding:2px 7px}
 .tagv{font-size:10.5px;color:var(--purp)}
 @media(max-width:760px){.trow{grid-template-columns:1fr}.trow.thead{display:none}.actcell{align-items:flex-start}}
 .row{display:flex;justify-content:space-between;gap:8px;align-items:center;border-top:1px solid var(--line);padding:8px 0}
 .row .rn{font-weight:600;font-size:13px}
 .row .ri{color:var(--mut);font-size:11px}
-.count{color:var(--mut);font-size:12px;margin:8px 0}
-.note{font-size:10.5px;color:var(--dim);margin-top:6px}
-.tab{background:var(--panel2);border:1px solid var(--line);color:var(--mut);padding:6px 11px;cursor:pointer;font-size:11px;clip-path:polygon(6px 0,100% 0,100% calc(100% - 6px),calc(100% - 6px) 100%,0 100%,0 6px);font-family:inherit;text-transform:uppercase;letter-spacing:.05em}
-.tab.on{color:var(--ink);border-color:var(--gold);background:rgba(207,174,66,.15)}
-.tgl{display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--mut);cursor:pointer;user-select:none}
+.count{font-size:12px;margin:8px 0}
+.note{font-size:10.5px;margin-top:6px}
+.tab{padding:6px 11px;cursor:pointer}
+.tgl{display:flex;align-items:center;gap:6px;font-size:11.5px;cursor:pointer;user-select:none}
 .tgl input{accent-color:var(--gold);width:14px;height:14px}
-.badge{background:rgba(207,174,66,.25);color:var(--gold);font-weight:700;font-size:10.5px;padding:2px 8px;clip-path:var(--clip);margin-left:4px;white-space:nowrap}
+.badge{font-size:10.5px;padding:2px 8px;margin-left:4px;white-space:nowrap}
 .hperks{color:var(--dim);font-size:11px;margin-top:2px}
 .hperks b{color:var(--keep);font-weight:400}
 .hperks .hp2{color:var(--gold)}
 .hperks{overflow:hidden;text-overflow:ellipsis}
-:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
 @media(max-width:520px){
   .tools{gap:4px}
   .pk,.chip{padding:7px 11px}   /* bigger tap targets on phone */

@@ -3,36 +3,51 @@
 > Maintained per CLAUDE.md. When a feature ships, move it to HANDOFF.md
 > "What works now" and delete it here.
 
-## Where we are (2026-08-28 — ONE page shell SHIPPED across all 11 pages)
+## Where we are (2026-08-28 — ONE page shell + the skin cleanup, all SHIPPED)
 
 Diego: *"I need you to access the webpages and make them all consistent, banner size, positioning,
-right now every page behaves like an independent style and this is ugly."*
+right now every page behaves like an independent style and this is ugly."* — then, on the
+optimization list that came out of it: *"approved, proceed."*
 
-**Shipped and verified** (details in HANDOFF "What works now" → *ONE page shell for every page*,
-rule locked in DIEGO_RULES §6): page width, gutters, bottom clearance, `h1`/`.sub`/`.disp` sizing
-and the banner now live **only** in `theme.css` + `banner.js`; every page wraps its content in
-`<main class="page">`; the banner is a full-bleed nameplate strip with the 10 section tabs on their
-own single, non-wrapping row underneath. Measured identical on all 11 pages at 1440×900 and 390×844.
-`tests/guardrails.js` now fails if a page re-declares `body{max-width}` / `body{padding}` or drops
-its `<main class="page">` wrapper.
+**Shipped and verified** (full detail in HANDOFF "What works now"; rules locked in DIEGO_RULES §6):
 
-**Next thing to look at, in Diego's priority order — nothing here is started:**
+1. **One page shell.** Page width, gutters, bottom clearance, `h1`/`.sub`/`.disp`/`h2` sizing and
+   the banner live only in `theme.css` + `banner.js`; every page wraps content in
+   `<main class="page">`; the banner is a full-bleed nameplate strip with the section tabs on one
+   non-wrapping row underneath. Identical on all 11 pages at 1440×900 and 390×844.
+2. **One source of truth for the skin.** All nine page-level `:root` palettes deleted (the 11
+   tokens they had that `theme.css` lacked moved up), and 430 dead declarations stripped from the
+   component rules. Proven inert by a computed-style fingerprint of 1535 elements plus a
+   hover/focus fingerprint — byte-identical. Fixed a latent bug on the way: `artifacts.html`
+   used `var(--void)` that nothing defined, so its Void filter chip had no fill.
+3. **Static assets cached + ETagged** in both servers; 34.6KB of shared CSS/JS no longer re-sent
+   on every tab switch, HTML no longer re-read off disk per hit. Editing HTML/CSS still needs no
+   restart — verified live.
+4. **The TRMNL display server's pages joined the suite.** `/` and `/settings` on port 3000 use the
+   same shell; `server.js` serves `theme.css` + fonts itself. Save flow tested end-to-end. The
+   e-ink render pipeline was not touched.
+5. `--rail` token (340px) replaces the 320/360px rails.
 
-1. **Diego to eyeball it on his PC.** HTML/CSS needs no restart — a hard refresh (Ctrl+F5) on
-   `http://127.0.0.1:8787/` is enough. If a page feels too wide or too narrow, the ONLY knob to
-   turn is `--page-max` in `theme.css` (currently 1240px); it re-spaces all 11 pages at once.
-2. **The TRMNL display server's own config page (`/settings` on port 3000, `settingsPage()` in
-   `server.js`) was deliberately left alone.** It is a separate app on a separate port with a
-   light theme, its own inline CSS and no `theme.css`/`banner.js`. Bringing it onto the same
-   shell is a real piece of work (it would need `theme.css` + a banner-less shell served by
-   `server.js`). **BLOCKED: awaiting Diego** — worth doing only if he wants that page to look
-   like the rest.
-3. Optional polish that fell out of this pass, none of it requested:
-   - Weapon Vault's right rail and Perk Finder's right rail are still page-specific widths
-     (320px / 360px). Making them one token (`--rail`) would be the next step of the same idea.
-   - `h2` sizes are still per-page (12-18px); `h1` and `.sub` are unified, `h2` is not.
-   - The fixed "Updated Xs ago" chip can sit over the bottom-right of Vault Verdict's export bar
-     on a phone. Harmless, but a `padding-right` on `.export` would clear it.
+`tests/guardrails.js`: **179 checks, 0 failing** — it now fails the build if a page re-declares
+`body{max-width}`/`body{padding}`, drops its `<main class="page">`, declares its own `:root`, uses
+a `var(--x)` nothing defines, re-reads HTML off disk per request, or reverts the display server's
+pages to their own styling.
+
+**Next — nothing here is started, and none of it is requested work:**
+
+1. **Diego to eyeball it on his PC.** The 8787 pages need only a hard refresh (Ctrl+F5).
+   **The two server changes do need a restart: double-click `REBOOT.cmd`** — `vault-verdict.js`
+   (asset caching) and `server.js` (shared skin + caching) both changed. Not restarted from the
+   agent shell, per DIEGO_RULES §1.
+2. If a page feels too wide or too narrow, the only knob is `--page-max` in `theme.css`
+   (currently 1240px); `--page-pad`, `--rail` and `--page-bottom` sit next to it. One edit
+   re-spaces all 13 pages.
+3. **The tab strip is near capacity** — ten tabs use ~960px of the 1240px width. An eleventh
+   section will start the strip scrolling on desktop, not just on a phone. Shortening one or two
+   labels buys the headroom; not worth doing until it's needed.
+4. Leftover polish, small: the fixed "Updated Xs ago" chip can sit over the bottom-right of Vault
+   Verdict's export bar on a phone (a `padding-right` on `.export` clears it); `builds.html`'s
+   modal `.mbox h2` is 16px against everything else's 14px.
 
 ---
 ## Where we are (2026-08-27 — reuse bias + non-★ floor SHIPPED, spec §9 step 5 done)

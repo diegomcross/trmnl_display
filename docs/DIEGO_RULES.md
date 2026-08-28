@@ -281,6 +281,20 @@ Two more the same day, while the preview was being built:
   `--page-pad`), every page's content sits in `<main class="page">`, the banner is
   a full-bleed bar with the tabs on their own single-row strip, and `h1` / `.sub` /
   `.disp` are sized in `theme.css` only. A new page starts by copying that shell.
+- **One source of truth for the skin** (2026-08-28, Diego: *"approved, proceed"* on the
+  follow-up cleanup). A page may NOT declare its own `:root` palette, and may not restate
+  anything `theme.css` already sets for a shared component (`.btn`, `.tab`, `.card`,
+  `.panel`, `.chip`, `.pk`, `select`, `h1`, `h2`, `.sub`, `.disp`). Nine pages used to
+  carry a dead copy of the palette; because `theme.css` loads last its values always won,
+  so editing a page's `:root` did nothing — and `artifacts.html` referenced `--void`, which
+  no file defined, so its Void filter chip rendered with no fill. One `:root`, in
+  `theme.css`. `tests/guardrails.js` fails the build on a page-level `:root`, and on any
+  `var(--x)` that nothing defines.
+- **The TRMNL display server's web pages are part of the suite** (2026-08-28). `/` and
+  `/settings` on port 3000 were a light-grey page with rounded cards — the one corner that
+  looked like a different product. They now serve `theme.css` themselves and use the same
+  nameplate strip, tab row and `.page` column as the 8787 pages. The e-ink render
+  (`render.js` → SVG → 1-bit BMP) is a separate pipeline and is NOT affected by any of this.
 
 ## 7. Sharing the app (2026-07-17)
 

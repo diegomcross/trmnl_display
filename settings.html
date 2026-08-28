@@ -5,21 +5,12 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Settings — Destiny Vault Tools</title>
 <style>
-:root{
-  --bg:#0c0e12; --panel:#151821; --panel2:#1b1f2b; --line:#2a2f3d;
-  --ink:#e9ebf2; --mut:#8b93a7; --dim:#5c6375;
-  --gold:#cfae42; --keep:#5fd0dd; --junk:#ff6a52;
-  --clip:polygon(10px 0,100% 0,100% calc(100% - 10px),calc(100% - 10px) 100%,0 100%,0 10px);
-}
+/* design tokens live in theme.css — this page had its own dead copy (2026-08-28) */
 *{box-sizing:border-box;margin:0;padding:0}
-body{background:var(--bg);color:var(--ink);font:15px/1.45 "Segoe UI",Roboto,system-ui,sans-serif}
-h1 span{color:var(--gold)}
 .wrap{max-width:900px}   /* comfortable form column, left-aligned with the banner */
-.card{background:var(--panel);border:1px solid var(--line);clip-path:var(--clip);padding:14px 16px;margin-bottom:14px}
+.card{padding:14px 16px;margin-bottom:14px}
 .card h2{font-size:13px;text-transform:uppercase;letter-spacing:.08em;color:var(--mut);font-weight:600;margin-bottom:10px}
-.btn{background:var(--panel2);border:1px solid var(--gold);color:var(--gold);padding:9px 15px;font-size:13px;cursor:pointer;clip-path:var(--clip);font-family:inherit}
-.btn:active{background:var(--gold);color:#000}
-.btn.mut{border-color:var(--line);color:var(--mut)}
+.btn{cursor:pointer}
 .btn:disabled{opacity:.5;cursor:default}
 .row{display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end}
 label.f{display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--mut);text-transform:uppercase;letter-spacing:.05em}

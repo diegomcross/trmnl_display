@@ -18,9 +18,13 @@ import http from 'node:http';
 import os from 'node:os';
 import fs from 'node:fs';
 import { exec } from 'node:child_process';
-import { URL } from 'node:url';
+import nodePath from 'node:path';
+import { URL, fileURLToPath } from 'node:url';
 import { Resvg } from '@resvg/resvg-js';
 import { buildModel, renderPage, renderDropAlert } from './render.js';
+
+// Resolve bundled assets (theme.css, fonts/) next to THIS file, not the launcher's cwd.
+const __dirname = nodePath.dirname(fileURLToPath(import.meta.url));
 
 const PORT = Number(process.env.PORT || 3000);
 const REFRESH_SECONDS = Number(process.env.REFRESH_SECONDS || 60);
@@ -385,39 +389,72 @@ function optionsPayload() {
   };
 }
 
+// The display server's two web pages share one nameplate strip + tab row with the Vault
+// Verdict suite (theme.css .gb / .gb-nav / .page). They live on a different port, so the
+// tabs here are this server's own pages, not the 8787 ones.
+function shell(title, active, body, extraCss) {
+  const tabs = [['/', 'Status'], ['/settings', 'Content'], ['/display', 'Phone display']]
+    .map(([h, t]) => `<a href="${h}" class="gnav-a${h === active ? ' on' : ''}">${t}</a>`).join('');
+  return `<!doctype html><html><head><meta charset="utf-8">`
+    + `<meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title>`
+    + `<style>*{box-sizing:border-box;margin:0;padding:0}`
+    + `.wrap{max-width:820px}   /* reading column, left-aligned with the banner */`
+    + (extraCss || '')
+    + `</style><link rel="stylesheet" href="/theme.css"></head><body>`
+    + `<div id="gbanner">`
+    + `<div class="gb"><div class="gb-in"><div class="gb-l"><div class="gb-id">`
+    + `<div class="gb-name">Destiny 2 TRMNL</div>`
+    + `<div class="gb-sub"><span class="gb-cls">E-ink dashboard</span></div>`
+    + `</div></div></div></div>`
+    + `<nav class="gb-nav"><div class="gb-in">${tabs}</div></nav>`
+    + `</div><main class="page"><div class="wrap">${body}</div></main></body></html>`;
+}
+
 function statusPage() {
   const upd = state.updated ? state.updated.toLocaleString() : 'never';
   const cfg = loadConfig();
   const ps = enabledPages(cfg);
   const rot = cfg.rotationSeconds && ps.length > 1 ? `rotating every ${cfg.rotationSeconds}s` : 'single page';
   const pagesTxt = ps.length ? ps.map((p, i) => { const lbl = PAGE_LABEL[p.type] || p.type; return p.type === 'orders' && ps.filter(x => x.type === 'orders').length > 1 ? `${lbl} ${i + 1}` : lbl; }).join(' → ') : 'none enabled';
-  return `<!doctype html><meta charset="utf-8"><title>Destiny 2 TRMNL</title><body style="font-family:Arial,Helvetica,sans-serif;margin:24px">`
-    + `<h2>Destiny 2 TRMNL dashboard</h2>`
-    + `<p>Last render: <b>${upd}</b> · file: <code>${state.filename}</code>${state.error ? ` · <span style="color:#b00">error: ${state.error}</span>` : ''}</p>`
-    + `<p>Pages: <b>${pagesTxt}</b> · ${rot}${DEMO ? ' · <b>DEMO mode</b>' : ''} · <a href="/settings">Settings</a> · <a href="/display">Phone display</a></p>`
-    + `<img src="/screen.bmp?t=${Date.now()}" width="800" height="480" style="border:1px solid #ccc">`
-    + `</body>`;
+  return shell('Destiny 2 TRMNL — Status', '/',
+    `<h1 class="disp">TRMNL <span>Dashboard</span></h1>`
+    + `<p class="sub">Last render <b>${upd}</b> · file <code>${state.filename}</code>`
+    + `${state.error ? ` · <span class="bad">error: ${state.error}</span>` : ''}</p>`
+    + `<div class="card"><div class="lbl">Rotation</div>`
+    + `<p class="note"><b>${pagesTxt}</b> · ${rot}${DEMO ? ' · <b>DEMO mode</b>' : ''}</p></div>`
+    + `<div class="card"><div class="lbl">What the panel is showing now</div>`
+    + `<img src="/screen.bmp?t=${Date.now()}" width="800" height="480" alt="current e-ink screen"></div>`,
+    `code{background:rgba(0,0,0,.45);border:1px solid var(--line);padding:1px 6px;font-size:12.5px}`
+    + `.card{padding:14px 16px;margin-bottom:14px}`
+    + `.lbl{display:block;font-family:var(--disp);text-transform:uppercase;letter-spacing:.09em;font-size:10.5px;color:var(--dim);margin-bottom:8px}`
+    + `.note{font-size:13px;color:var(--mut);line-height:1.5}`
+    + `.bad{color:var(--junk)}`
+    + `img{max-width:100%;height:auto;border:1px solid var(--line-strong);background:#fff}`);
 }
 
 function settingsPage() {
-  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Destiny 2 TRMNL — Content</title><style>`
-    + `body{font-family:Arial,Helvetica,sans-serif;margin:0;background:#f4f4f5;color:#111}`
-    + `.wrap{max-width:600px;margin:0 auto;padding:24px}`
-    + `h1{font-size:20px;margin:0 0 4px}.sub{color:#666;font-size:13px;margin:0 0 20px}`
-    + `.card{background:#fff;border:1px solid #e2e2e5;border-radius:10px;padding:16px 18px;margin-bottom:14px}`
-    + `.pg{display:flex;align-items:center;gap:10px;font-weight:700;font-size:16px}`
-    + `.pg .cnt{margin-left:auto;font-weight:400;font-size:12px;color:#888}`
-    + `.opts{margin:12px 0 0;padding:12px 0 0;border-top:1px solid #eee;display:none}`
+  const CSS =
+      `.card{padding:14px 16px;margin-bottom:14px}`
+    + `.pg{display:flex;align-items:center;gap:10px;font-family:var(--disp);text-transform:uppercase;`
+    + `letter-spacing:.08em;font-size:12px;color:var(--white)}`
+    + `.pg .cnt{margin-left:auto;text-transform:none;letter-spacing:0;font-size:11.5px;color:var(--mut)}`
+    + `.opts{margin:12px 0 0;padding:12px 0 0;border-top:1px solid var(--line);display:none}`
     + `.opts.show{display:block}`
-    + `label{font-size:14px}.lbl{display:block;font-weight:600;font-size:13px;margin:10px 0 5px}`
-    + `select,input[type=number]{width:100%;padding:9px;font-size:15px;border:1px solid #ccc;border-radius:7px;box-sizing:border-box}`
-    + `.chips{display:flex;gap:8px;flex-wrap:wrap}.chip{display:flex;align-items:center;gap:6px;border:1px solid #ccc;border-radius:20px;padding:6px 12px;font-size:14px}`
-    + `.row{display:flex;align-items:center;gap:10px;margin:10px 0}.row label{font-weight:600}`
-    + `button{width:100%;padding:13px;font-size:16px;font-weight:700;color:#fff;background:#111;border:0;border-radius:8px;cursor:pointer;margin-top:6px}`
-    + `button:disabled{opacity:.5}.msg{text-align:center;font-size:14px;color:#137333;height:18px;margin-top:10px}`
-    + `a{color:#111}.preview img{width:100%;border:1px solid #ddd;border-radius:8px;margin-top:8px}`
-    + `</style></head><body><div class="wrap">`
-    + `<h1>Destiny 2 TRMNL — Content</h1><p class="sub">Pick what shows and how pages rotate. Changes apply on the next refresh. <a href="/">Back</a></p>`
+    + `label{font-size:13.5px;cursor:pointer}`
+    + `.lbl{display:block;font-family:var(--disp);text-transform:uppercase;letter-spacing:.09em;`
+    + `font-size:10.5px;color:var(--dim);margin:12px 0 5px}`
+    + `select,input[type=number]{width:100%;padding:8px 10px;font-size:14px;font-family:inherit}`
+    + `.chips{display:flex;gap:8px;flex-wrap:wrap}`
+    + `.chip{display:flex;align-items:center;gap:6px;padding:6px 12px;font-size:13px}`
+    + `.row{display:flex;align-items:center;gap:10px;margin:10px 0}`
+    + `input[type=checkbox]{width:16px;height:16px;flex-shrink:0;accent-color:var(--gold);cursor:pointer}`
+    + `#save{width:100%;padding:12px;font-size:13px;margin-top:6px}`
+    + `#save:disabled{opacity:.5;cursor:default}`
+    + `.msg{text-align:center;font-size:13px;color:var(--fav-auto);height:18px;margin-top:10px}`
+    + `.preview img{width:100%;border:1px solid var(--line-strong);background:#fff;margin-top:8px}`;
+  return shell('Destiny 2 TRMNL — Content', '/settings',
+      `<h1 class="disp">TRMNL <span>Content</span></h1>`
+    + `<p class="sub">Pick what shows on the panel and how the pages rotate. Changes apply on the next refresh.</p>`
     + `<div class="card"><div class="lbl">Page rotation</div>`
     + `<select id="rotationSeconds"><option value="0">Off — single page</option><option value="15">Every 15s</option><option value="30">Every 30s</option><option value="60">Every 60s</option><option value="120">Every 2 min</option><option value="300">Every 5 min</option></select>`
     + `<div class="lbl">Data refresh (Bungie poll)</div>`
@@ -439,9 +476,9 @@ function settingsPage() {
     + `<div class="opts" id="op_triumphs"><div class="lbl">Triumphs on screen</div><select id="triumphsCount"><option>4</option><option>5</option><option>6</option><option>7</option><option>8</option></select></div></div>`
     + `<div class="card"><div class="pg"><input type="checkbox" id="en_title" data-opts="op_title"><label for="en_title">Title / Seal</label><span class="cnt" id="cnt_title"></span></div>`
     + `<div class="opts" id="op_title"><div class="lbl">Which seal</div><select id="sealHash"><option value="">Auto — closest to done</option></select></div></div>`
-    + `<button id="save">Save</button><div class="msg" id="msg"></div>`
+    + `<button id="save" class="btn">Save</button><div class="msg" id="msg"></div>`
     + `<div class="card preview"><div class="lbl">Live preview (current page)</div><img id="pv" src="/screen.bmp?t=0"></div>`
-    + `</div><script>`
+    + `<script>`
     + `var $=function(id){return document.getElementById(id)};var OPTS={};`
     + `function toggleOpts(){['orders','quests','triumphs','title'].forEach(function(t){$('op_'+t).className='opts'+($('en_'+t).checked?' show':'')})}`
     + `['orders','quests','triumphs','title'].forEach(function(t){$('en_'+t).addEventListener('change',toggleOpts)});`
@@ -477,7 +514,24 @@ function settingsPage() {
     + `var body={rotationSeconds:parseInt($('rotationSeconds').value,10),refreshSeconds:parseInt($('refreshSeconds').value,10),descSize:parseInt($('descSize').value,10),count:ordCnt,showNumbers:$('showNumbers').checked,invert:$('invert').checked,pages:pages};`
     + `fetch('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}).then(function(r){return r.json()}).then(function(){$('msg').textContent='Saved ✓';b.disabled=false;setTimeout(bump,500)}).catch(function(){$('msg').textContent='Save failed';b.disabled=false})};`
     + `load();setInterval(bump,15000);`
-    + `</script></body></html>`;
+    + `</script>`, CSS);
+}
+
+// ---- shared skin, served from the display server too (2026-08-28) ----------------------
+// /settings and / used to be a light-grey page of their own with rounded cards — the one
+// corner of the app that looked like a different product. They now use the same theme.css
+// and the same page shell as the Vault Verdict pages, so this server has to serve it.
+// Same mtime-keyed cache + ETag as vault-verdict.js: edit the CSS, hard-refresh, no restart.
+const SKIN = new Map();
+function sendSkin(req, res, file, type, cc) {
+  const p = nodePath.join(__dirname, file);
+  let st; try { st = fs.statSync(p); } catch { res.writeHead(404); return res.end('not found'); }
+  const tag = '"' + st.mtimeMs.toString(36) + '-' + st.size.toString(36) + '"';
+  let rec = SKIN.get(file);
+  if (!rec || rec.tag !== tag) { rec = { tag, buf: fs.readFileSync(p) }; SKIN.set(file, rec); }
+  const headers = { 'Content-Type': type, 'Cache-Control': cc || 'max-age=60, must-revalidate', ETag: rec.tag };
+  if (req.headers['if-none-match'] === tag) { res.writeHead(304, headers); return res.end(); }
+  res.writeHead(200, headers); res.end(rec.buf);
 }
 
 const server = http.createServer(async (req, res) => {
@@ -542,6 +596,12 @@ const server = http.createServer(async (req, res) => {
     }
     res.writeHead(200, { 'Content-Type': 'application/json' });
     return res.end(JSON.stringify(loadConfig()));
+  }
+  if (path === '/theme.css') return sendSkin(req, res, 'theme.css', 'text/css; charset=utf-8');
+  if (path.startsWith('/fonts/')) {
+    const f = nodePath.basename(path);                            // no path traversal
+    if (!/^arimo-\d+\.woff2$/.test(f)) { res.writeHead(404); return res.end('not found'); }
+    return sendSkin(req, res, nodePath.join('fonts', f), 'font/woff2', 'max-age=604800');
   }
   if (path === '/settings') { res.writeHead(200, { 'Content-Type': 'text/html' }); return res.end(settingsPage()); }
   if (path === '/') { res.writeHead(200, { 'Content-Type': 'text/html' }); return res.end(statusPage()); }

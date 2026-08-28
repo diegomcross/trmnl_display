@@ -5,23 +5,14 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Build Crafter — Destiny Vault</title>
 <style>
-:root{
-  --bg:#101312; --panel:#151821; --line:#2a2f3d; --ink:#e9ebf2; --mut:#8b93a7; --dim:#5c6375;
-  --gold:#cdae32; --keep:#6de8f1; --rev:#e8b64c; --junk:#e0523a; --el:#f1631d;
-}
+/* design tokens live in theme.css — this page had its own dead copy (2026-08-28) */
 *{box-sizing:border-box;margin:0;padding:0}
-body{background:var(--bg);color:var(--ink);font:15px/1.45 "Segoe UI",Roboto,system-ui,sans-serif}
-h1 span{color:var(--gold)}
 .bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
-.btn{background:rgba(0,0,0,.35);border:1px solid var(--gold);color:var(--gold);padding:8px 14px;font-size:12px;cursor:pointer;font-family:inherit;text-transform:uppercase;letter-spacing:.07em}
-.btn:hover{background:rgba(205,174,50,.14)}
-.btn.sm{padding:5px 10px;font-size:10.5px}
-.btn.red{border-color:var(--junk);color:var(--junk)} .btn.red:hover{background:rgba(224,82,58,.12)}
-.btn.mut{border-color:rgba(255,255,255,.22);color:var(--mut)} .btn.mut:hover{border-color:rgba(255,255,255,.45);color:var(--ink);background:rgba(255,255,255,.04)}
+.btn{cursor:pointer} .btn.red:hover{background:rgba(224,82,58,.12)} .btn.mut:hover{border-color:rgba(255,255,255,.45);color:var(--ink);background:rgba(255,255,255,.04)}
 input[type=text]{background:rgba(0,0,0,.35);border:1px solid rgba(255,255,255,.18);color:var(--ink);padding:9px 12px;font-size:15px}
 input[type=number]{background:rgba(0,0,0,.35);border:1px solid rgba(255,255,255,.18);color:var(--ink);padding:5px 7px;font-size:12.5px;width:60px;font-variant-numeric:tabular-nums}
-.count{color:var(--mut);font-size:12px}
-.note{font-size:11px;color:var(--dim);margin-top:6px;line-height:1.5}
+.count{font-size:12px}
+.note{font-size:11px;margin-top:6px;line-height:1.5}
 
 /* ---------- build cards (list) ---------- */
 .bcard{display:flex;gap:16px;align-items:center;background:rgba(255,255,255,.025);border:1px solid rgba(255,255,255,.10);
@@ -37,7 +28,7 @@ input[type=number]{background:rgba(0,0,0,.35);border:1px solid rgba(255,255,255,
 .bmeta{color:var(--mut);font-size:11.5px;margin-top:2px}
 .bmeta .elname{font-weight:600}
 .chiprow{display:flex;gap:5px;flex-wrap:wrap;margin-top:7px}
-.chip{border:1px solid rgba(255,255,255,.14);color:var(--mut);padding:2px 9px;font-size:9.5px;text-transform:uppercase;letter-spacing:.07em;background:rgba(0,0,0,.3)}
+.chip{padding:2px 9px;font-size:9.5px}
 .chip.on{border-color:var(--keep);color:var(--keep)}
 .chip.warn{border-color:var(--rev);color:var(--rev)}
 .chip.alert{border-color:var(--gold);color:var(--gold);background:rgba(205,174,50,.12)}
@@ -156,7 +147,7 @@ input[type=number]{background:rgba(0,0,0,.35);border:1px solid rgba(255,255,255,
 .xpick .sl{display:block;font-size:8.5px;color:var(--dim);text-align:center}
 .pk2 .statchip{display:block}
 /* set bonus */
-select{background:rgba(0,0,0,.35);border:1px solid rgba(255,255,255,.18);color:var(--ink);padding:7px 10px;font-size:13px;max-width:100%}
+select{padding:7px 10px;font-size:13px;max-width:100%}
 .wantchips{display:flex;gap:6px;margin-top:8px}
 .setdesc{font-size:11.5px;color:var(--mut);margin-top:8px;line-height:1.5}
 .setdesc b{color:var(--ink)}
@@ -176,7 +167,6 @@ select{background:rgba(0,0,0,.35);border:1px solid rgba(255,255,255,.18);color:v
 .sugg.fresh{border-left-color:var(--gold)}
 .sugg .tn{color:var(--rev);font-size:11px;margin-top:3px}
 .sugg .fb{color:var(--gold);font-weight:700;font-size:10px;letter-spacing:.08em}
-:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
 </style>
 <link rel="stylesheet" href="/theme.css">
 </head>

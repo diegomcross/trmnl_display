@@ -205,6 +205,44 @@ async function fetchOk(url, ms) {
       'a body{padding} rule is back — spacing belongs in theme.css');
   }
 
+  // ---- design tokens live in ONE place (2026-08-28 cleanup) --------------------------------
+  // Nine pages used to carry their own :root palette. theme.css loads last so its values always
+  // won — the copies were dead, and editing one did nothing (which is how artifacts.html ended
+  // up referencing an undefined --void). One :root, in theme.css.
+  for (const f of [...ALL_PAGES, 'setup.html']) {
+    hasNot(f, /:root\s*\{/, f + ' declares no :root palette of its own');
+  }
+  for (const t of ['--void', '--arc', '--kinetic', '--stasis', '--strand', '--exotic', '--fav',
+                   '--und', '--el', '--pve', '--pvp', '--rail']) {
+    has('theme.css', t + ':', 'theme.css defines ' + t);
+  }
+  // every var() a page uses must resolve — either from theme.css or an inline style="--x:..."
+  {
+    const themeVars = new Set((read('theme.css') || '').match(/--[\w-]+(?=\s*:)/g) || []);
+    for (const f of [...ALL_PAGES, 'setup.html']) {
+      const src = read(f) || '';
+      const style = (src.match(/<style>[\s\S]*?<\/style>/g) || []).join('\n');
+      const inline = new Set(src.match(/--[\w-]+(?=\s*:)/g) || []);   // style="--elc:..." etc.
+      const used = new Set(style.match(/var\(\s*(--[\w-]+)\s*\)/g) || []);
+      const missing = [...used].map((u) => u.replace(/var\(\s*|\s*\)/g, ''))
+        .filter((v) => !themeVars.has(v) && !inline.has(v));
+      check(f + ' has no unresolved CSS variables', missing.length === 0, missing.join(', '));
+    }
+  }
+
+  // ---- static assets are cached, not re-read and re-sent on every hit ----------------------
+  has('vault-verdict.js', 'const sendStatic', 'vault server caches static assets in memory');
+  has('vault-verdict.js', "ETag: rec.tag", 'vault server sends an ETag so repeats get a 304');
+  hasNot('vault-verdict.js', /return res\.end\(fs\.readFileSync\(path\.join\(__dirname, '[\w-]+\.html'\)\)\)/,
+    'no page route re-reads its HTML off disk per request');
+  has('server.js', 'function sendSkin', 'display server caches the shared skin too');
+
+  // ---- the display server (3000) is on the same shell as the rest (Diego 2026-08-28) -------
+  has('server.js', "path === '/theme.css'", 'display server serves the shared theme');
+  has('server.js', 'function shell(', 'display server pages use the shared page shell');
+  has('server.js', 'class="gb-in"', 'display server renders the same banner strip');
+  hasNot('server.js', /background:#f4f4f5/, 'the old light-grey settings page is gone');
+
   // ------------------------------------------------------------------ sharing (RULES sect 7)
   sect('Setup wizard & sharing');
   hasNot('setup.html', /type=["']password["']/, 'passwords are NEVER typed into the app (bungie.net OAuth only)');

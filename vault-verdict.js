@@ -2405,6 +2405,37 @@ async function main() {
       .finally(() => { wFetching = null; });
     return wFetching;
   };
+  // ---- static-asset cache (2026-08-28) --------------------------------------------------
+  // Every page hit used to fs.readFileSync its HTML off disk, and theme.css / banner.js /
+  // perktip.js went out with NO Cache-Control at all — so switching tabs on the phone
+  // re-downloaded ~25KB of unchanged CSS+JS every single time. Now: read once, keep it in
+  // memory, re-read only when the file's mtime changes (so editing HTML/CSS still needs no
+  // restart), and send an ETag. The browser revalidates and normally gets a 304 with no body.
+  const STATIC = new Map();
+  const staticFile = (file) => {
+    const p = path.join(__dirname, file);
+    const st = fs.statSync(p);
+    const tag = '"' + st.mtimeMs.toString(36) + '-' + st.size.toString(36) + '"';
+    const hit = STATIC.get(file);
+    if (hit && hit.tag === tag) return hit;
+    const rec = { tag, buf: fs.readFileSync(p) };
+    STATIC.set(file, rec);
+    return rec;
+  };
+  // sendStatic returns true once it has answered the request.
+  const sendStatic = (req, res, file, type, cc) => {
+    let rec;
+    try { rec = staticFile(file); }
+    catch { res.writeHead(404); res.end('not found'); return true; }
+    // Default is short on purpose: Diego edits HTML/CSS and just hard-refreshes, no restart.
+    // HTML passes 'no-cache' (always revalidate — a 304 still saves the whole body).
+    const headers = { 'Content-Type': type, 'Cache-Control': cc || 'max-age=60, must-revalidate', ETag: rec.tag };
+    if (req.headers['if-none-match'] === rec.tag) { res.writeHead(304, headers); res.end(); return true; }
+    res.writeHead(200, headers);
+    res.end(req.method === 'HEAD' ? undefined : rec.buf);
+    return true;
+  };
+
   const server = http.createServer(async (req, res) => {
     try {
       const json = (obj) => { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(obj)); };
@@ -2783,38 +2814,25 @@ async function main() {
         if (req.method === 'POST') { saveLooks(JSON.parse(await readBody(req) || '[]')); return json({ ok: true }); }
         return json(loadLooks());
       }
-      if (req.url.startsWith('/theme.css')) {
-        res.writeHead(200, { 'Content-Type': 'text/css; charset=utf-8' });
-        return res.end(fs.readFileSync(path.join(__dirname, 'theme.css')));
-      }
-      if (req.url.startsWith('/banner.js')) {
-        res.writeHead(200, { 'Content-Type': 'application/javascript; charset=utf-8' });
-        return res.end(fs.readFileSync(path.join(__dirname, 'banner.js')));
-      }
-      if (req.url.startsWith('/perktip.js')) {
-        res.writeHead(200, { 'Content-Type': 'application/javascript; charset=utf-8' });
-        return res.end(fs.readFileSync(path.join(__dirname, 'perktip.js')));
-      }
+      if (req.url.startsWith('/theme.css')) return sendStatic(req, res, 'theme.css', 'text/css; charset=utf-8');
+      if (req.url.startsWith('/banner.js')) return sendStatic(req, res, 'banner.js', 'application/javascript; charset=utf-8');
+      if (req.url.startsWith('/perktip.js')) return sendStatic(req, res, 'perktip.js', 'application/javascript; charset=utf-8');
       if (req.url.startsWith('/fonts/')) {
         const f = path.basename(req.url.split('?')[0]);              // no path traversal
         if (/^arimo-\d+\.woff2$/.test(f) && fs.existsSync(path.join(__dirname, 'fonts', f))) {
-          res.writeHead(200, { 'Content-Type': 'font/woff2', 'Cache-Control': 'max-age=604800' });
-          return res.end(fs.readFileSync(path.join(__dirname, 'fonts', f)));
+          return sendStatic(req, res, path.join('fonts', f), 'font/woff2', 'max-age=604800');
         }
         res.writeHead(404); return res.end('not found');
       }
-      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-      if (req.url.startsWith('/setup')) return res.end(fs.readFileSync(path.join(__dirname, 'setup.html')));
-      if (req.url.startsWith('/weapons')) return res.end(fs.readFileSync(path.join(__dirname, 'weapon-watch.html')));
-      if (req.url.startsWith('/vault')) return res.end(fs.readFileSync(path.join(__dirname, 'weapon-vault.html')));
-      if (req.url.startsWith('/perks')) return res.end(fs.readFileSync(path.join(__dirname, 'perk-finder.html')));
-      if (req.url.startsWith('/drops')) return res.end(fs.readFileSync(path.join(__dirname, 'weapon-drops.html')));
-      if (req.url.startsWith('/builds')) return res.end(fs.readFileSync(path.join(__dirname, 'builds.html')));
-      if (req.url.startsWith('/auto')) return res.end(fs.readFileSync(path.join(__dirname, 'auto-manager.html')));
-      if (req.url.startsWith('/settings')) return res.end(fs.readFileSync(path.join(__dirname, 'settings.html')));
-      if (req.url.startsWith('/fashion')) return res.end(fs.readFileSync(path.join(__dirname, 'fashion.html')));
-      if (req.url.startsWith('/artifacts')) return res.end(fs.readFileSync(path.join(__dirname, 'artifacts.html')));
-      return res.end(fs.readFileSync(HTML_FILE));
+      // Page routes. Order matters only in that the first prefix match wins; '/' is the fallback.
+      const PAGE_ROUTES = [
+        ['/setup', 'setup.html'], ['/weapons', 'weapon-watch.html'], ['/vault', 'weapon-vault.html'],
+        ['/perks', 'perk-finder.html'], ['/drops', 'weapon-drops.html'], ['/builds', 'builds.html'],
+        ['/auto', 'auto-manager.html'], ['/settings', 'settings.html'], ['/fashion', 'fashion.html'],
+        ['/artifacts', 'artifacts.html'],
+      ];
+      const page = (PAGE_ROUTES.find(([p]) => req.url.startsWith(p)) || [])[1] || path.basename(HTML_FILE);
+      return sendStatic(req, res, page, 'text/html; charset=utf-8', 'no-cache');
     } catch (err) {
       console.error(err);
       res.writeHead(500, { 'Content-Type': 'application/json' });

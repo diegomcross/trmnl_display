@@ -68,7 +68,7 @@ Core priorities, in his words:
 |---|---|
 | `auth-and-snapshot.js` | Interactive Bungie OAuth + writes `snapshot.json` (full profile dump). Run once / to re-auth. |
 | `render.js` | `buildModel(profile)` -> data model; page renderers (`renderSVG`=Orders, `renderQuestsSVG`, `renderTriumphsSVG`, `renderTitleSVG`, `renderDropAlert`=god-roll drop) + `renderPage()` dispatcher. CLI run writes `screen.png` + prints a report. |
-| `server.js` | Always-on TRMNL BYOS HTTP server. Pulls a fresh profile each cycle, picks the current rotation page, renders, converts to 1-bit BMP, serves it. Interrupts the rotation for `drop-alert.json` god-roll alerts (`activeAlert`). Hosts `/settings`, `/display`, `/screen.png`. |
+| `server.js` | Always-on TRMNL BYOS HTTP server. Pulls a fresh profile each cycle, picks the current rotation page, renders, converts to 1-bit BMP, serves it. Interrupts the rotation for `drop-alert.json` god-roll alerts (`activeAlert`). Hosts `/settings`, `/display`, `/screen.png`. **Since 2026-08-28 its two web pages (`/` status and `/settings` content picker) use the same `theme.css` page shell as the Vault Verdict suite** — it serves `/theme.css` and `/fonts/` itself (cached, ETag) and builds both pages through one `shell()` helper. The e-ink render pipeline is untouched by that. |
 | `start-display.ps1` | **Always-on launcher for the display server.** Runs `node server.js` and keeps it alive (restart loop). `-Install` adds a hidden **Startup-folder login item** (Task Scheduler is blocked here) + starts it now; `-Uninstall` removes it. Logs to `server.log`. |
 | `start-vault.ps1` | **Always-on launcher for Vault Verdict** (port 8787) — mirrors start-display.ps1. Keeps `node vault-verdict.js` alive so the **god-roll drop poller + two-way DIM sync** run whenever the PC is on. `-Install`/`-Uninstall` (Startup-folder item, "TRMNL Vault Verdict.lnk"). Logs to `vault.log` — **since 2026-07-12 the server's own console output (DIM warnings, drop alerts, auto-manager notes) is captured there too** (timestamped, rotated at ~2MB to `vault.log.old`); before that only launcher lines + crashes landed, which made sync issues invisible. Independent of the display launcher. |
 | `watch-destiny.ps1` | Optional game-coupled alternative: watches for `destiny2.exe` and starts/stops the server with the game. `-Setup` tried to register a Task Scheduler task but that is **denied** on this PC. Logs to `watcher.log`. |
@@ -524,6 +524,49 @@ Core priorities, in his words:
     overflow, and no new console errors versus the pre-change baseline.
     `node tests/guardrails.js --static` grew checks that fail the build if any page declares its own
     `body{max-width}`/`body{padding}` again or drops its `<main class="page">` wrapper.
+  - **One source of truth for the skin — 430 dead declarations deleted (2026-08-28, follow-up
+    to the shell):** the pages were carrying a second, *losing* copy of the theme. Nine of them
+    declared their own `:root` palette; `theme.css` loads after every page's inline `<style>`, so
+    its values always won and the copies did nothing — editing a page's `:root` was a no-op, which
+    is exactly how `artifacts.html` ended up calling `var(--void)` when **no file defined `--void`**
+    (its Void filter chip rendered with a transparent fill and a near-black border; fixed here).
+    The same was true of the component rules: `.btn` was re-declared on nine pages with its own
+    background/border/colour/padding/font, and `theme.css` overrode every one of them.
+    **What was done:** the 11 tokens the pages declared that `theme.css` did *not* have
+    (`--void --arc --kinetic --stasis --strand --exotic --fav --und --el --pve --pvp`) moved up
+    into `theme.css`; all nine page-level `:root` blocks were deleted; and every page declaration
+    that `theme.css` already overrode was stripped (`.btn` collapses to `cursor:pointer`,
+    `.btn.sm`/`.btn.mut`/`.btn.red`/`.tab.on` disappear entirely, `.card` keeps only its padding).
+    The orphaned `.nav`/`.nav a` rules from the pre-banner top nav went too. **430 declarations,
+    218 net lines.**
+    **Proof it changed nothing:** a computed-style fingerprint of all 1535 elements on all 11 pages
+    (26 properties each) is byte-identical before and after, and so is a hover/focus fingerprint of
+    every `.btn .btn.sm .btn.mut .btn.red .tab .chip .pk select input a` on every page. `--void`
+    is the one deliberate difference.
+  - **Static assets are cached and revalidated (2026-08-28):** `theme.css`, `banner.js` and
+    `perktip.js` went out with **no `Cache-Control` at all**, and every HTML page hit did a fresh
+    `fs.readFileSync` off disk. Both servers now share the same pattern: read once, keep it in
+    memory, re-read only when the file's **mtime** changes, and send an **ETag** — so Diego's
+    "edit HTML/CSS, hard-refresh, no restart" workflow still works exactly as before (verified: an
+    edit is picked up live, the ETag changes, the new bytes are served). CSS/JS get
+    `max-age=60, must-revalidate`, fonts keep `max-age=604800`, HTML gets `no-cache` (always
+    revalidate — a 304 still saves the whole body). **34.6KB of shared CSS+JS stopped being
+    re-sent on every tab switch**, plus the HTML body when unchanged.
+  - **The TRMNL display server's pages joined the suite (2026-08-28):** `/` and `/settings` on
+    port 3000 were a light-grey Arial page with rounded cards — the one screen that looked like a
+    different product. `server.js` now serves `/theme.css` and `/fonts/` itself and renders both
+    pages through one `shell(title, active, body, extraCss)` helper: same nameplate strip, same
+    single-row tab bar (Status · Content · Phone display — this server's own pages, since it is a
+    different port), same `.page` column, same square dark cards. Measured identical to the 8787
+    pages at 1440×900 and 390×844 (banner `x=0 w=viewport`, inner column `x=100 w=1240`, tabs
+    `h=41`, `h1` `x=116` at 24px, body 15px). Verified functionally end-to-end, not just visually:
+    driving the real page changed rotation 30→120s, description size 25→32, and enabled Quests at
+    5 per screen, and `GET /api/config` confirmed all three landed. **The e-ink render itself
+    (`render.js` → SVG → 1-bit BMP → the panel) is a separate pipeline and was not touched.**
+  - **Two smaller unifications (2026-08-28):** the right-hand control rail is one `--rail` token
+    (340px) instead of 320px on Weapon Vault and 360px on Perk Finder; and a bare `h2` is 14px in
+    `theme.css` instead of 15/13/12px on three pages (scoped `.card h2` / `.panel h2` / `.step h2`
+    / `.mbox h2` are component headings and keep their own size).
   - **Smart exotic swap (2026-07-04, `smartEquipWeapon` in vault-verdict.js, used by `/api/equip`):**
     Bungie AUTO-unequips an existing exotic when you equip a 2nd one, but leaves the freed slot
     however it likes. To control it we equip a matching-ammo legendary into the old exotic's slot

@@ -41,6 +41,25 @@
   --legendary:#522f65;
   --solar:#f1631d;
 
+  /* Element / state colors that used to live in nine separate per-page :root blocks
+     (2026-08-28). Those blocks were dead — this file loads after every page's inline
+     <style>, so ITS values always won and editing a page's :root did nothing. These are
+     the only tokens the pages declared that were NOT already here, so they moved up. */
+  --void:#a777c5;          /* alias of --purp; artifacts.html referenced --void with no
+                              definition anywhere, so its Void filter chip had no fill */
+  --arc:#6de8f1;           /* alias of --keep */
+  --kinetic:#e6e6e6;
+  --stasis:#4d88ff;
+  --strand:#35e366;
+  --exotic:#cdae32;        /* alias of --gold */
+  --fav:#cfae42;           /* weapon-vault tile favourite flag */
+  --und:#a97fd6;           /* vault-verdict "undecided" verdict */
+  --el:#f1631d;            /* builds.html element accent DEFAULT — cards override it
+                              inline per subclass (style="--el:..."), so this is the
+                              fallback, not decoration. Do not delete. */
+  --pve:#7fd08a;           /* perk-finder popularity split bar */
+  --pvp:#ff7a6b;
+
   --clip:none;             /* square everything that used the chamfer polygon */
   --disp:'Arimo',"Helvetica Neue",Helvetica,Arial,sans-serif;
   --text:'Arimo',"Helvetica Neue",Helvetica,Arial,sans-serif;
@@ -88,6 +107,8 @@ h1 span,.disp span{ color:var(--gold); }
   --page-max:1240px;     /* one content width for every page */
   --page-pad:16px;       /* one left/right gutter for every page */
   --page-bottom:84px;    /* clearance under content for the fixed "Updated" chip / export bar */
+  --rail:340px;          /* the right-hand control rail — was 320px on Weapon Vault and 360px
+                            on Perk Finder, for no reason anyone remembered */
 }
 html{ -webkit-text-size-adjust:100%; }
 body{ margin:0; padding:0 0 var(--page-bottom); max-width:none;
@@ -96,6 +117,11 @@ body{ margin:0; padding:0 0 var(--page-bottom); max-width:none;
 
 /* page heading — same size, same rhythm, on every page */
 h1{ font-size:24px; font-weight:600; margin:0; }
+/* section heading. Size only, and bare h2 only: component headings (.card h2, .panel h2,
+   .step h2, .mbox h2) are scoped and keep their own size — this was 15px / 13px / 12px on
+   three pages for the same job. No letter-spacing here: .disp already supplies it where a
+   heading wants it, and setting it on bare h2 leaked into the scoped ones. */
+h2{ font-size:14px; }
 .sub{ color:var(--mut); font-size:12.5px; line-height:1.5; margin:5px 0 14px; max-width:110ch; }
 
 /* ---------- account nameplate banner (rendered by banner.js) ----------
