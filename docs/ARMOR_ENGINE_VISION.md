@@ -201,3 +201,9 @@ chose:
 **2026-08-29** — on the declutter UI and the shared banner:
 
 > "There’s no apply button. Did you check the website? The banners are still all different sizes."
+
+---
+
+**2026-08-29** — on DIM:
+
+> "sync with dim not working appearantly, double check and fix"

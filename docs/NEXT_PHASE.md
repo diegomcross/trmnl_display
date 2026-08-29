@@ -3,6 +3,33 @@
 > Maintained per CLAUDE.md. When a feature ships, move it to HANDOFF.md
 > "What works now" and delete it here.
 
+## Where we are (2026-08-29b — DIM sync for ARMOR was broken; fixed)
+
+Diego: *"sync with dim not working appearantly, double check and fix"*. He was right.
+
+`fetchArmor()` read tags from `dimOverlay()` — a parse of the static `dim-data.json` export, which
+does not exist here — while `fetchWeapons()` had always used the live DIM API. **555 armor pieces
+carried DIM tags the app never displayed**, and 148 pieces in DIM loadouts scored as 0.
+
+Fixed: armor now uses `dimTagsFresh(e)` and a new cached `dimLoadoutCounts(e)`. Verified: all 555
+now agree exactly, 0 mismatches.
+
+**This re-activated three declutter safety nets that had never once fired** (DIEGO_RULES §4f rule 19).
+The first live run then exposed that his DIM data still holds junk tags on 12 exotics he owns no
+other copy of, and 19 pieces in loadouts — names matching the unexplained 2026-08-23 bulk tagging.
+Rules 20-21 make a junk tag drop to `review` in those cases, plus a sweep so no exotic can ever have
+all copies junked.
+
+Audit after the fix, all zero: exotics he would stop owning, equipped in junk, DIM-loadout in junk,
+favourite-tagged in junk, set slots broken, slots emptied. Warlock 380 keep / 175 junk / 30 review /
+83 oos. Apply dry-run 164 locked · 31 unlocked · **261** tagged (was 564 — 303 pieces already carry the
+right tag, which is what working sync looks like). `CHECK.cmd`: 135 passed, 0 failed.
+
+**Worth Diego knowing:** the whole Armor Vault page now reflects his DIM tags, so its top counters
+moved too. And the 2026-08-23 junk tags are still sitting in DIM — the app simply could not see
+them before. Clearing them in DIM is his call.
+
+---
 ## Where we are (2026-08-29 — UI fixes: Apply button visible, banner one size)
 
 Diego: *"There’s no apply button. Did you check the website? The banners are still all different

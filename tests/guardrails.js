@@ -131,6 +131,14 @@ async function fetchOk(url, ms) {
     "the banner breaks out of each page column so it is one size everywhere");
   has('theme.css', /.gb{ max-width:1160px;/,
     'the banner is centred at ONE fixed width on every page');
+  has('vault-verdict.js', /const tags = await dimTagsFresh\(e\);            \/\/ id -> tag string/,
+    'armor reads LIVE DIM tags, not the dead dim-data.json export');
+  has('vault-verdict.js', 'async function dimLoadoutCounts',
+    'armor gets DIM loadout counts from the live API (the in-a-loadout rescue)');
+  has('vault-verdict.js', 'last copy of this exotic you own',
+    'no exotic can ever have ALL its copies junked');
+  has('vault-verdict.js', 'but it is the only copy of this exotic you own',
+    'a DIM junk tag drops to review rather than destroying a sole exotic');
 
   sect('Auto-Manager — tagging & staging rules');
   has('vault-verdict.js', /def\.tt !== 5\) return skip\('not a legendary'\)/, 'legendaries only — exotics/rares never touched');
