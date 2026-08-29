@@ -3,6 +3,82 @@
 > Maintained per CLAUDE.md. When a feature ships, move it to HANDOFF.md
 > "What works now" and delete it here.
 
+## Where we are (2026-08-29c — two sessions fixed the same two things; reconciled here)
+
+**Read this first if the history below looks contradictory.** Two Claude sessions worked in
+parallel on 2026-08-29 and both landed on the same two complaints. Nothing was lost; this is how
+they were merged.
+
+**The banner was fixed twice, two different ways.**
+- On `main` (session 01RDzLH): `#gbanner{width:100vw}` breaks out of each page's column, `.gb`
+  centres at 1160px, `html{overflow-x:clip}` swallows the scrollbar 100vw counts. Surgical —
+  every page kept its own content width.
+- On this branch: no page owns a width at all any more. `--page-max`/`--page-pad` in `theme.css`,
+  every page's content in `<main class="page">`, the banner as two full-bleed strips centring on
+  `.gb-in`. Broader — it also unified `h1`/`.sub`/`.disp`, deleted 430 dead declarations and nine
+  duplicate `:root` palettes, and fixed a latent bug (`artifacts.html` used an undefined `--void`).
+- **Kept: the shell.** It solves the banner one layer down, so the break-out is unnecessary, and
+  keeping both would fight — `.gb{max-width:1160px}` would re-constrain the full-bleed nameplate,
+  and `overflow-x:clip` would hide exactly the horizontal-overflow regressions the page sweep
+  tests for. The two guardrails that asserted the old CSS now assert the *rule* instead.
+
+**DIM sync was diagnosed twice, and only one of them was Diego's actual bug.**
+- On `main` (session 01RDzLH): `fetchArmor()` read tags from `dimOverlay()`, a parse of the static
+  `dim-data.json` export that does not exist on his PC, so 555 tagged armor pieces showed as
+  untagged. **That was the real fault**, and it is fixed on main.
+- On this branch: DIM answers 401 for five reasons, none of which made our cached token look
+  invalid, so the server re-sent a dead token forever with no way to recover. Real, and worth
+  having — but it was *not* what Diego was seeing.
+- **Kept: both.** They compose exactly — armor now reads live DIM tags through `dimTagsFresh`,
+  which is the call this branch wrapped in 401 recovery and automatic self-repair. The armor fix
+  makes sync correct; the hardening keeps it correct.
+
+---
+## Where we are (2026-08-29b — DIM sync for ARMOR was broken; fixed)
+
+Diego: *"sync with dim not working appearantly, double check and fix"*. He was right.
+
+`fetchArmor()` read tags from `dimOverlay()` — a parse of the static `dim-data.json` export, which
+does not exist here — while `fetchWeapons()` had always used the live DIM API. **555 armor pieces
+carried DIM tags the app never displayed**, and 148 pieces in DIM loadouts scored as 0.
+
+Fixed: armor now uses `dimTagsFresh(e)` and a new cached `dimLoadoutCounts(e)`. Verified: all 555
+now agree exactly, 0 mismatches.
+
+**This re-activated three declutter safety nets that had never once fired** (DIEGO_RULES §4f rule 19).
+The first live run then exposed that his DIM data still holds junk tags on 12 exotics he owns no
+other copy of, and 19 pieces in loadouts — names matching the unexplained 2026-08-23 bulk tagging.
+Rules 20-21 make a junk tag drop to `review` in those cases, plus a sweep so no exotic can ever have
+all copies junked.
+
+Audit after the fix, all zero: exotics he would stop owning, equipped in junk, DIM-loadout in junk,
+favourite-tagged in junk, set slots broken, slots emptied. Warlock 380 keep / 175 junk / 30 review /
+83 oos. Apply dry-run 164 locked · 31 unlocked · **261** tagged (was 564 — 303 pieces already carry the
+right tag, which is what working sync looks like). `CHECK.cmd`: 135 passed, 0 failed.
+
+**Worth Diego knowing:** the whole Armor Vault page now reflects his DIM tags, so its top counters
+moved too. And the 2026-08-23 junk tags are still sitting in DIM — the app simply could not see
+them before. Clearing them in DIM is his call.
+
+---
+## Where we are (2026-08-29 — UI fixes: Apply button visible, banner one size)
+
+Diego: *"There’s no apply button. Did you check the website? The banners are still all different
+sizes."* Both were real and both are fixed — see DIEGO_RULES §4e rules 15-17.
+
+- **Apply button**: was `hidden` until a preview ran, inside a collapsed `<details>`. On a cold
+  page load it did not exist. Now the panel is `open` and the button is visible-but-disabled.
+- **Banner**: `#gbanner` inherited each page’s body max-width (856px to full-window). It now
+  breaks out and centres at one fixed 1160px on all 10 pages. Verified: identical width, height
+  and left edge everywhere, and no horizontal scrollbar.
+
+Full click-through verified in the real UI on a cold load: Run preview → Apply → confirmation diff
+(173 lock / 36 unlock / 564 tags / 3 skipped) → Cancel. **Nothing was written** — still no
+`armor-apply-history.json` and 0 `armor-declutter` rows in tag history. `CHECK.cmd`: 131 passed.
+
+**Lesson recorded as rule 17:** every earlier test opened the panel with `dcPanel.open = true`,
+which is why neither problem was ever seen. Test cold, click what Diego clicks.
+
 ## Where we are (2026-08-28 — ONE page shell + the skin cleanup, all SHIPPED)
 
 Diego: *"I need you to access the webpages and make them all consistent, banner size, positioning,
@@ -94,6 +170,7 @@ branch, so the work needs merging. Until then every "double-click X" instruction
 4. Leftover polish, small: the fixed "Updated Xs ago" chip can sit over the bottom-right of Vault
    Verdict's export bar on a phone (a `padding-right` on `.export` clears it); `builds.html`'s
    modal `.mbox h2` is 16px against everything else's 14px.
+
 
 ---
 ## Where we are (2026-08-27 — reuse bias + non-★ floor SHIPPED, spec §9 step 5 done)

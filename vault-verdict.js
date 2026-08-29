@@ -550,6 +550,26 @@ async function dimReadLoadouts(e) {
   return j.loadouts.map((l) => (l && l.loadout) ? l.loadout : l);
 }
 
+// How many DIM loadouts each instance appears in. Cached — fetchArmor runs on every armor
+// request and this is a second DIM round-trip. Falls back to the last good map on failure so a
+// DIM blip can never silently drop the "in a loadout" safety net to zero.
+let DIM_LO_COUNT = {}, DIM_LO_AT = 0;
+async function dimLoadoutCounts(e, maxAgeMs = 120000) {
+  if (DIM_OFF) return DIM_LO_COUNT;
+  if (Date.now() - DIM_LO_AT < maxAgeMs) return DIM_LO_COUNT;
+  try {
+    const los = await dimReadLoadouts(e);
+    const out = {};
+    for (const lo of los) {
+      for (const it of [...(lo.equipped || []), ...(lo.unequipped || [])]) {
+        if (it && it.id) out[it.id] = (out[it.id] || 0) + 1;
+      }
+    }
+    DIM_LO_COUNT = out; DIM_LO_AT = Date.now();
+  } catch (err) { console.warn('DIM loadout read failed, keeping last counts:', err.message); }
+  return DIM_LO_COUNT;
+}
+
 // Map DIM loadouts → DRAFT builds (Diego 2026-07-12: import as drafts; watch stays OFF
 // until he opens each draft, refines the goals, and saves). Subclass plugs are classified
 // BY THEIR pc (never socket index); stasis totems/trinkets fold to aspects/fragments.
@@ -888,7 +908,15 @@ async function applyLook(e, characterId, look) {
 // ---------- profile -> armor items ----------
 async function fetchArmor(e) {
   const { prof, man, m, raw } = await fetchProfile(e);
-  const { tags, loadoutCount } = dimOverlay();
+  // Diego 2026-08-29: "sync with dim not working". It was not. This read tags from
+  // dimOverlay() — a parse of the static `dim-data.json` export, which does not exist on this
+  // machine — so every armor piece came back untagged while fetchWeapons() had been using the
+  // LIVE DIM API all along. 555 of his armor pieces carried DIM tags that the app never showed,
+  // and three declutter safety nets that key off it.tag / it.lo were silently dead:
+  //   "you tagged it junk", "kept from junk: you tagged it favorite", and the DIM-loadout rescue.
+  // Armor now reads the same live source as weapons.
+  const tags = await dimTagsFresh(e);            // id -> tag string (falls back to the disk mirror)
+  const loadoutCount = await dimLoadoutCounts(e);
 
   const instances = prof.itemComponents?.instances?.data || {};
   const liveStats = prof.itemComponents?.stats?.data || {};
@@ -937,10 +965,9 @@ async function fetchArmor(e) {
     ter = TERN[terK] || '—';
 
     const setDef = def.set ? man.sets[def.set] : null;
-    const dim = tags[id] || {};
     out.push({
       n: def.n, id, hash: it.itemHash, icon: def.icon || '',
-      tag: dim.tag || '', note: dim.note || '',
+      tag: tags[id] || '', note: DIM_NOTES[id] || '',
       x: def.tt === 6, t: inst.gearTier ?? 0,
       slot, cls: CLASS[def.c] || '—', src: def.src || '',
       a: archetype, ter, mw: 0, tune, tuneKind,
@@ -1922,10 +1949,23 @@ function armorDeclutter(items, ratings) {
   // that exotic, the opposite of his 2026-08-15 "exotics are farming targets". So a 2.0
   // exotic is junked ONLY when a 3.0 copy of the SAME exotic is already in the vault; with no 3.0
   // copy it stays in scope and the exotic pass judges it like any other farming target.
+  const exoCount = {};
+  for (const i of items) if (i.x) exoCount[`${i.cls}|${i.n}`] = (exoCount[`${i.cls}|${i.n}`] || 0) + 1;
+  const exoticCopies = (i) => exoCount[`${i.cls}|${i.n}`] || 0;
   const modernExotic = new Set(items.filter((i) => i.x && i.t > 0).map((i) => `${i.cls}|${i.n}`));
   const live = [];
   for (const it of items) {
-    if (it.tag === 'junk') { say(it.id, 'junk', 'You tagged it junk.'); continue; }
+    if (it.tag === 'junk') {
+      // Diego's own junk tag still wins (DIEGO_RULES §4) — but it drops to REVIEW, not junk, when
+      // honouring it would cost something unrecoverable. Found 2026-08-29, the first run after the
+      // live-DIM fix: 12 exotics he owns no other copy of, and 19 pieces sitting in DIM loadouts,
+      // all carried DIM junk tags matching the unexplained 2026-08-23 bulk tagging. Review is never
+      // written by Apply, so this costs him nothing and cannot quietly destroy a sole exotic.
+      if (it.lo > 0) { say(it.id, 'review', `You tagged it junk — but it is in ${it.lo} DIM loadout${it.lo > 1 ? 's' : ''}.`); continue; }
+      if (it.x && exoticCopies(it) <= 1) { say(it.id, 'review', 'You tagged it junk — but it is the only copy of this exotic you own.'); continue; }
+      say(it.id, 'junk', 'You tagged it junk.');
+      continue;
+    }
     if (it.t === 0) {
       if (!it.x) { say(it.id, 'junk', 'Armor 2.0 legacy — trash (Diego 2026-07-12: junk always).'); continue; }
       if (modernExotic.has(`${it.cls}|${it.n}`)) {
@@ -2129,6 +2169,23 @@ function armorDeclutter(items, ratings) {
     else if (it.lo > 0) say(it.id, 'review', why + ` Kept from junk: in ${it.lo} DIM loadout${it.lo > 1 ? 's' : ''}.`);
     else if ((lastOfSlot[`${it.cls}|${it.slot}`] || 0) <= 1) say(it.id, 'review', why + ' Kept from junk: your last legendary in this slot.');
     else say(it.id, 'junk', why);
+  }
+
+  // LAST-EXOTIC GUARANTEE. Whatever route a verdict took — his own DIM junk tag, the Armor 2.0
+  // rule, or losing the duplicate ranking — never let every copy of an exotic end up junk. Found
+  // 2026-08-29: 4 exotics where he owns two copies and BOTH carried a stale DIM junk tag, so the
+  // per-piece rescue could not see it. Done as a sweep so no future path can slip past it.
+  const exoByName = new Map();
+  for (const it of items) {
+    if (!it.x) continue;
+    const k = `${it.cls}|${it.n}`;
+    if (!exoByName.has(k)) exoByName.set(k, []);
+    exoByName.get(k).push(it);
+  }
+  for (const [, copies] of exoByName) {
+    if (!copies.every((c) => verdicts[c.id] && verdicts[c.id].v === 'junk')) continue;
+    const best = copies.slice().sort((a, b) => b.t - a.t || b.tot - a.tot)[0];
+    verdicts[best.id] = { v: 'review', why: `${verdicts[best.id].why} Kept from junk: it is the last copy of this exotic you own.` };
   }
 
   // Anything on a character is never presented as junk. applyArmorDeclutter() already refuses to

@@ -246,6 +246,47 @@ Two more the same day, while the preview was being built:
     change: for all rated sets × all ★ exotics, the count of set slots where Diego OWNS a piece but
     the engine kept none must be **0**. Sets he cannot complete are a farming problem, not a
     declutter one.
+
+### 4e. Look at the actual page (2026-08-29)
+
+15. **The Apply button must be visible on a cold page load.** It shipped as `hidden` until a
+    preview had been run, INSIDE a `<details>` that was collapsed by default — so opening the
+    page showed no Apply button at all. Now: `#dcPanel` is `open`, and `#dcApply` renders
+    visible-but-`disabled` with a title explaining that the preview comes first.
+
+16. **One banner size on every page.** `banner.js` emits identical markup everywhere, but
+    `#gbanner` sat inside each page’s own column and every page picks its own body max-width
+    (measured 2026-08-29: Armor Vault 856px, Weapon Watch 1056, New Drops 1076, Builds 1136,
+    Perk Finder 1156, Weapon Vault full-window). The banner inherited that and changed size as
+    Diego moved between pages. Fixed in `theme.css`: `#gbanner` breaks out of the column
+    (`width:100vw` + negative margins, `html{overflow-x:clip}` so it adds no scrollbar) and
+    `.gb` centres at a single `max-width:1160px`. Page content widths are unchanged.
+
+17. **Verify in the real UI, not by script.** Every earlier test opened the declutter panel with
+    `dcPanel.open = true` before clicking, which is exactly why the hidden Apply button and the
+    collapsed panel were never noticed. Load the page cold and click what Diego would click.
+
+### 4f. Armor reads LIVE DIM data (2026-08-29)
+
+18. **Armor tags come from the DIM API, never from `dim-data.json`.** `fetchArmor()` used
+    `dimOverlay()`, which parses a static export file that does not exist on Diego’s machine, while
+    `fetchWeapons()` had always used the live API. Result: **555 of his armor pieces carried DIM
+    tags (432 keep / 121 junk / 2 favourite) that the app never showed**, and 148 pieces sat in DIM
+    loadouts the app scored as 0. Armor now calls `dimTagsFresh(e)` + `dimLoadoutCounts(e)`.
+
+19. **Three declutter safety nets were silently dead** for as long as rule 18 was broken, because
+    they all key off `it.tag` / `it.lo`: "You tagged it junk", "Kept from junk: you tagged it
+    favorite", and the DIM-loadout rescue. Any claim that Diego has "0 review" pieces made before
+    2026-08-29 was this bug, not his data.
+
+20. **A DIM junk tag yields to the unrecoverable rescues.** His own junk tag still wins (§4), but it
+    drops to `review` when the piece is in a DIM loadout, or is the only copy of that exotic. On the
+    first live-DIM run this protected 12 exotics and 19 loadout pieces whose junk tags match the
+    unexplained 2026-08-23 bulk tagging. `review` is never written by Apply, so this costs nothing.
+
+21. **Last-exotic guarantee.** A final sweep in `armorDeclutter()` ensures no exotic ever has ALL
+    its copies junked, whatever route the verdicts took. Rule 20 alone missed 4 exotics where he
+    owns two copies and both carried a stale junk tag.
 ## 5. Perk lists & Perk Finder
 
 - **No exotic perks / frames / non-trait plugs in perk lists** (2026-07-04 commit

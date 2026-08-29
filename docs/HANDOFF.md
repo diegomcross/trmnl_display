@@ -490,6 +490,17 @@ Core priorities, in his words:
     this shared bar. Verified: banner + character-switch (Warlock ✦532 ↔ Titan ✦550) work on all
     pages, no content regressed. **Still open per Diego's ask** (surface, don't assume): a left
     filter rail (element/ammo/rarity like BrayTech) and a right power/currency rail — see NEXT_PHASE.
+  - **Two sessions, same two complaints — how they were reconciled (2026-08-29):** The banner
+    was fixed twice. `main` broke `#gbanner` out of each page's column (`width:100vw`,
+    `.gb{max-width:1160px}`, `html{overflow-x:clip}`); this branch removed the cause instead —
+    no page owns a width, so the banner inherits nothing inconsistent. **The shell was kept and
+    the break-out dropped**, because `.gb{max-width:1160px}` would re-constrain the full-bleed
+    nameplate and `overflow-x:clip` would mask the horizontal-overflow regressions the page sweep
+    exists to catch. The two guardrails that asserted the old CSS were re-pointed at the rule
+    rather than deleted. Everything else from `main` — the Apply-button fix, the live-DIM armor
+    fix, `dimLoadoutCounts`, the sole-exotic and in-a-loadout junk rescues — is untouched and
+    re-verified here (Apply button confirmed visible and disabled on a **cold** load in a real
+    browser, per their rule 17).
   - **DIM troubleshooting is fully automatic (2026-08-29):** Diego — *"I want you to fully
     automate this troubleshooting so you can do without my intervention."* Nothing about DIM now
     requires him to run anything. `dim-diagnose.js` holds the whole diagnosis as one pure
@@ -511,7 +522,14 @@ Core priorities, in his words:
     the tag cache; an expired Bungie login is correctly reported as needing him. 12/12 assertions,
     plus 9/9 on the 401-recovery path.
   - **DIM sync can recover from a rejected token, and says when it can't (2026-08-29):**
-    Diego asked why DIM sync wasn't working. Read against DIM's own server source
+    **Correction first: this was NOT what Diego was seeing.** His actual fault was found in a
+    parallel session and is fixed on `main` — `fetchArmor()` read tags from the static
+    `dim-data.json` export, which does not exist on his PC, so 555 tagged armor pieces showed as
+    untagged (see the 2026-08-29b entry). What follows is separate hardening of the same
+    subsystem: a real defect, found by reading DIM's source, that would have bitten later. The
+    two compose — armor now reads live tags through `dimTagsFresh`, which is the call this
+    hardening wrapped.
+    Read against DIM's own server source
     (`github.com/DestinyItemManager/dim-api`, commit `826bcc2`), the shape of the bug is this:
     `GET/POST /profile` answers **401** for five distinct reasons — `OriginMismatch`,
     `ApiKeyMismatch`, `UnknownProfileId`, an expired/invalid JWT, and `WebAuthRequired` — and

@@ -329,3 +329,15 @@ input[type=checkbox]{ accent-color:var(--gold); }
 /* ---------- accessibility ---------- */
 :focus-visible{ outline:2px solid var(--gold); outline-offset:2px; }
 @media (prefers-reduced-motion:reduce){ *{ transition:none!important; animation:none!important; } }
+
+/* ---------- banner sizing: superseded, deliberately ----------
+   A parallel session fixed "the banners are still all different sizes" (Diego 2026-08-29) by
+   breaking #gbanner out of each page's column with width:100vw and centring .gb at 1160px,
+   with html{overflow-x:clip} to swallow the scrollbar that 100vw counts. It worked, and its
+   measurements are recorded in HANDOFF.
+   Those three rules are NOT kept here, because the page shell above solves the same problem one
+   layer down: no page owns a width any more, so the banner has nothing inconsistent to inherit
+   and needs no break-out at all. Keeping both would fight — `.gb{max-width:1160px}` would
+   re-constrain the full-bleed nameplate that .gb-in is already centring at --page-max, and
+   overflow-x:clip would hide exactly the horizontal-overflow regressions the page sweep checks
+   for. One mechanism, not two. */

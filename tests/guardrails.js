@@ -123,6 +123,26 @@ async function fetchOk(url, ms) {
     'Apply never touches a piece you tagged favorite');
   has('vault-verdict.js', /const dryRun = opts\.dryRun !== false;/,
     'armor Apply is preview-by-default — live writes need an explicit dryRun:false');
+  has('vault-verdict.html', /id="dcApply" disabled/,
+    'the Apply button is always VISIBLE (disabled until a preview exists), never hidden');
+  has('vault-verdict.html', /<details class="panel" id="dcPanel" open>/,
+    'the declutter panel is open by default so its buttons can be seen');
+  // Diego 2026-08-29: "the banners are still all different sizes". A parallel session enforced
+  // this with #gbanner{width:100vw} + .gb{max-width:1160px}; the page shell now solves it one
+  // layer down (no page owns a width, so the banner inherits nothing inconsistent). Same rule,
+  // different mechanism — so these two checks assert the RULE, not the old implementation.
+  has('theme.css', /\.gb-in\{[^}]*max-width:var\(--page-max\)/,
+    'the banner is centred at ONE fixed width on every page');
+  has('theme.css', /#gbanner\{/,
+    'the banner breaks out of each page column so it is one size everywhere');
+  has('vault-verdict.js', /const tags = await dimTagsFresh\(e\);            \/\/ id -> tag string/,
+    'armor reads LIVE DIM tags, not the dead dim-data.json export');
+  has('vault-verdict.js', 'async function dimLoadoutCounts',
+    'armor gets DIM loadout counts from the live API (the in-a-loadout rescue)');
+  has('vault-verdict.js', 'last copy of this exotic you own',
+    'no exotic can ever have ALL its copies junked');
+  has('vault-verdict.js', 'but it is the only copy of this exotic you own',
+    'a DIM junk tag drops to review rather than destroying a sole exotic');
 
   sect('Auto-Manager — tagging & staging rules');
   has('vault-verdict.js', /def\.tt !== 5\) return skip\('not a legendary'\)/, 'legendaries only — exotics/rares never touched');
