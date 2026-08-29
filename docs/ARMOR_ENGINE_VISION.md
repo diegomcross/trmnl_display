@@ -196,3 +196,8 @@ chose:
 **2026-08-27**, asked how much better a new piece must be for a non-starred exotic:
 
 > "for non starred exotics the floor is between 100-120 for the desired stats"
+---
+
+**2026-08-29** — on the declutter UI and the shared banner:
+
+> "There’s no apply button. Did you check the website? The banners are still all different sizes."

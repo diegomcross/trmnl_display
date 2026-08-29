@@ -174,7 +174,7 @@ details.panel[open] summary::after{content:" –"}
   <div id="exoList"></div>
 </details>
 
-<details class="panel" id="dcPanel">
+<details class="panel" id="dcPanel" open>
   <summary>Build-driven declutter — preview (read-only)</summary>
   <p class="savenote">The engine from <b>docs/ARMOR_DECLUTTER_SPEC.md</b>: for each of your <b>★ favorite
   exotics</b> it solves the <b>watched</b> Build Crafter build — or, with no watched build, that exotic's
@@ -187,7 +187,7 @@ details.panel[open] summary::after{content:" –"}
   niche engine — this panel only shows what the replacement would decide.</p>
   <div class="bar" style="margin-top:8px">
     <button class="btn sm" id="dcRun">Run preview</button>
-    <button class="btn sm" id="dcApply" hidden>Apply to my account…</button>
+    <button class="btn sm" id="dcApply" disabled title="Run the preview first — Apply only ever acts on what the preview is showing.">Apply to my account…</button>
     <button class="btn sm" id="dcHist">Undo a past run</button>
     <span class="count" id="dcStatus" style="margin:0;align-self:center"></span>
   </div>
@@ -587,7 +587,10 @@ async function dcRevert(at){
 
 function renderDeclutter(){
   if(!DC) return;
-  $('dcApply').hidden=false;
+  // Diego 2026-08-29: "There's no apply button." It was hidden:true until a preview had been run,
+  // inside a collapsed <details> — so on a fresh page load it did not exist at all. It now ships
+  // visible but disabled, and this enables it once there is a preview for it to act on.
+  $('dcApply').disabled=false; $('dcApply').title='';
   const byId={}; ITEMS.forEach(i=>byId[i.id]=i);
   const V=DC.verdicts||{};
   const cls=Object.keys(DC.perClass||{}).sort();

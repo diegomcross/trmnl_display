@@ -123,6 +123,14 @@ async function fetchOk(url, ms) {
     'Apply never touches a piece you tagged favorite');
   has('vault-verdict.js', /const dryRun = opts\.dryRun !== false;/,
     'armor Apply is preview-by-default — live writes need an explicit dryRun:false');
+  has('vault-verdict.html', /id="dcApply" disabled/,
+    'the Apply button is always VISIBLE (disabled until a preview exists), never hidden');
+  has('vault-verdict.html', /<details class="panel" id="dcPanel" open>/,
+    'the declutter panel is open by default so its buttons can be seen');
+  has('theme.css', '#gbanner{ width:100vw;',
+    "the banner breaks out of each page column so it is one size everywhere");
+  has('theme.css', /.gb{ max-width:1160px;/,
+    'the banner is centred at ONE fixed width on every page');
 
   sect('Auto-Manager — tagging & staging rules');
   has('vault-verdict.js', /def\.tt !== 5\) return skip\('not a legendary'\)/, 'legendaries only — exotics/rares never touched');

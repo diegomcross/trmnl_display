@@ -3,6 +3,25 @@
 > Maintained per CLAUDE.md. When a feature ships, move it to HANDOFF.md
 > "What works now" and delete it here.
 
+## Where we are (2026-08-29 — UI fixes: Apply button visible, banner one size)
+
+Diego: *"There’s no apply button. Did you check the website? The banners are still all different
+sizes."* Both were real and both are fixed — see DIEGO_RULES §4e rules 15-17.
+
+- **Apply button**: was `hidden` until a preview ran, inside a collapsed `<details>`. On a cold
+  page load it did not exist. Now the panel is `open` and the button is visible-but-disabled.
+- **Banner**: `#gbanner` inherited each page’s body max-width (856px to full-window). It now
+  breaks out and centres at one fixed 1160px on all 10 pages. Verified: identical width, height
+  and left edge everywhere, and no horizontal scrollbar.
+
+Full click-through verified in the real UI on a cold load: Run preview → Apply → confirmation diff
+(173 lock / 36 unlock / 564 tags / 3 skipped) → Cancel. **Nothing was written** — still no
+`armor-apply-history.json` and 0 `armor-declutter` rows in tag history. `CHECK.cmd`: 131 passed.
+
+**Lesson recorded as rule 17:** every earlier test opened the panel with `dcPanel.open = true`,
+which is why neither problem was ever seen. Test cold, click what Diego clicks.
+
+---
 ## Where we are (2026-08-27 — reuse bias + non-★ floor SHIPPED, spec §9 step 5 done)
 
 Diego described the model in full and it exposed two gaps between his intent and the build:

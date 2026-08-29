@@ -246,6 +246,25 @@ Two more the same day, while the preview was being built:
     change: for all rated sets × all ★ exotics, the count of set slots where Diego OWNS a piece but
     the engine kept none must be **0**. Sets he cannot complete are a farming problem, not a
     declutter one.
+
+### 4e. Look at the actual page (2026-08-29)
+
+15. **The Apply button must be visible on a cold page load.** It shipped as `hidden` until a
+    preview had been run, INSIDE a `<details>` that was collapsed by default — so opening the
+    page showed no Apply button at all. Now: `#dcPanel` is `open`, and `#dcApply` renders
+    visible-but-`disabled` with a title explaining that the preview comes first.
+
+16. **One banner size on every page.** `banner.js` emits identical markup everywhere, but
+    `#gbanner` sat inside each page’s own column and every page picks its own body max-width
+    (measured 2026-08-29: Armor Vault 856px, Weapon Watch 1056, New Drops 1076, Builds 1136,
+    Perk Finder 1156, Weapon Vault full-window). The banner inherited that and changed size as
+    Diego moved between pages. Fixed in `theme.css`: `#gbanner` breaks out of the column
+    (`width:100vw` + negative margins, `html{overflow-x:clip}` so it adds no scrollbar) and
+    `.gb` centres at a single `max-width:1160px`. Page content widths are unchanged.
+
+17. **Verify in the real UI, not by script.** Every earlier test opened the declutter panel with
+    `dcPanel.open = true` before clicking, which is exactly why the hidden Apply button and the
+    collapsed panel were never noticed. Load the page cold and click what Diego would click.
 ## 5. Perk lists & Perk Finder
 
 - **No exotic perks / frames / non-trait plugs in perk lists** (2026-07-04 commit
