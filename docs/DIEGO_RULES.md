@@ -290,11 +290,14 @@ Two more the same day, while the preview was being built:
   no file defined, so its Void filter chip rendered with no fill. One `:root`, in
   `theme.css`. `tests/guardrails.js` fails the build on a page-level `:root`, and on any
   `var(--x)` that nothing defines.
-- **The TRMNL display server's web pages are part of the suite** (2026-08-28). `/` and
-  `/settings` on port 3000 were a light-grey page with rounded cards — the one corner that
-  looked like a different product. They now serve `theme.css` themselves and use the same
-  nameplate strip, tab row and `.page` column as the 8787 pages. The e-ink render
-  (`render.js` → SVG → 1-bit BMP) is a separate pipeline and is NOT affected by any of this.
+- **The TRMNL display is OFF LIMITS except its settings page** (2026-08-28, verbatim):
+  *"I didn't ask to change the screen on the trmnl display, you can change the settings page,
+  but not the terminal, it works well and I didn't ask you to change that."* An agent had
+  restyled BOTH of the display server's web pages; the status page at `/` was reverted to its
+  original markup the moment he said so. What is allowed: `/settings` (the content picker) on
+  the shared `theme.css` shell. What is NOT: the status page at `/`, the phone `/display` page,
+  and above all the e-ink render itself (`render.js` → SVG → 1-bit BMP → the panel). Do not
+  touch the terminal's screen or its pages again without him asking, in those words, first.
 
 ## 7. Sharing the app (2026-07-17)
 

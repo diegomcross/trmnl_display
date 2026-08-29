@@ -68,7 +68,7 @@ Core priorities, in his words:
 |---|---|
 | `auth-and-snapshot.js` | Interactive Bungie OAuth + writes `snapshot.json` (full profile dump). Run once / to re-auth. |
 | `render.js` | `buildModel(profile)` -> data model; page renderers (`renderSVG`=Orders, `renderQuestsSVG`, `renderTriumphsSVG`, `renderTitleSVG`, `renderDropAlert`=god-roll drop) + `renderPage()` dispatcher. CLI run writes `screen.png` + prints a report. |
-| `server.js` | Always-on TRMNL BYOS HTTP server. Pulls a fresh profile each cycle, picks the current rotation page, renders, converts to 1-bit BMP, serves it. Interrupts the rotation for `drop-alert.json` god-roll alerts (`activeAlert`). Hosts `/settings`, `/display`, `/screen.png`. **Since 2026-08-28 its two web pages (`/` status and `/settings` content picker) use the same `theme.css` page shell as the Vault Verdict suite** — it serves `/theme.css` and `/fonts/` itself (cached, ETag) and builds both pages through one `shell()` helper. The e-ink render pipeline is untouched by that. |
+| `server.js` | Always-on TRMNL BYOS HTTP server. Pulls a fresh profile each cycle, picks the current rotation page, renders, converts to 1-bit BMP, serves it. Interrupts the rotation for `drop-alert.json` god-roll alerts (`activeAlert`). Hosts `/settings`, `/display`, `/screen.png`. **Only `/settings` uses the shared `theme.css` shell** (2026-08-28); it serves `/theme.css` and `/fonts/` itself (cached, ETag) via a `shell()` helper. **The status page at `/`, the phone `/display` page and the e-ink render are deliberately untouched — see DIEGO_RULES §6.** |
 | `start-display.ps1` | **Always-on launcher for the display server.** Runs `node server.js` and keeps it alive (restart loop). `-Install` adds a hidden **Startup-folder login item** (Task Scheduler is blocked here) + starts it now; `-Uninstall` removes it. Logs to `server.log`. |
 | `start-vault.ps1` | **Always-on launcher for Vault Verdict** (port 8787) — mirrors start-display.ps1. Keeps `node vault-verdict.js` alive so the **god-roll drop poller + two-way DIM sync** run whenever the PC is on. `-Install`/`-Uninstall` (Startup-folder item, "TRMNL Vault Verdict.lnk"). Logs to `vault.log` — **since 2026-07-12 the server's own console output (DIM warnings, drop alerts, auto-manager notes) is captured there too** (timestamped, rotated at ~2MB to `vault.log.old`); before that only launcher lines + crashes landed, which made sync issues invisible. Independent of the display launcher. |
 | `watch-destiny.ps1` | Optional game-coupled alternative: watches for `destiny2.exe` and starts/stops the server with the game. `-Setup` tried to register a Task Scheduler task but that is **denied** on this PC. Logs to `watcher.log`. |
@@ -552,17 +552,22 @@ Core priorities, in his words:
     `max-age=60, must-revalidate`, fonts keep `max-age=604800`, HTML gets `no-cache` (always
     revalidate — a 304 still saves the whole body). **34.6KB of shared CSS+JS stopped being
     re-sent on every tab switch**, plus the HTML body when unchanged.
-  - **The TRMNL display server's pages joined the suite (2026-08-28):** `/` and `/settings` on
-    port 3000 were a light-grey Arial page with rounded cards — the one screen that looked like a
-    different product. `server.js` now serves `/theme.css` and `/fonts/` itself and renders both
-    pages through one `shell(title, active, body, extraCss)` helper: same nameplate strip, same
-    single-row tab bar (Status · Content · Phone display — this server's own pages, since it is a
-    different port), same `.page` column, same square dark cards. Measured identical to the 8787
-    pages at 1440×900 and 390×844 (banner `x=0 w=viewport`, inner column `x=100 w=1240`, tabs
-    `h=41`, `h1` `x=116` at 24px, body 15px). Verified functionally end-to-end, not just visually:
-    driving the real page changed rotation 30→120s, description size 25→32, and enabled Quests at
-    5 per screen, and `GET /api/config` confirmed all three landed. **The e-ink render itself
-    (`render.js` → SVG → 1-bit BMP → the panel) is a separate pipeline and was not touched.**
+  - **The TRMNL display's SETTINGS PAGE ONLY joined the suite (2026-08-28):** `/settings` on
+    port 3000 was a light-grey Arial page with rounded cards. `server.js` now serves `/theme.css`
+    and `/fonts/` itself (cached, ETag) and renders that one page through a
+    `shell(title, active, body, extraCss)` helper: same nameplate strip, same single-row tab bar,
+    same `.page` column, same square dark cards. Measured identical to the 8787 pages at 1440×900
+    and 390×844. Verified functionally end-to-end: driving the real page changed rotation 30→120s,
+    description size 25→32, and enabled Quests at 5 per screen, and `GET /api/config` confirmed
+    all three landed.
+    **The status page at `/` was ALSO restyled in the first pass and then reverted** — Diego
+    2026-08-28: *"you can change the settings page, but not the terminal, it works well and I
+    didn't ask you to change that."* It is byte-identical to its pre-branch markup again, and
+    `tests/guardrails.js` now fails if anyone moves it onto the shell. The phone `/display` page
+    was never touched. **Neither was the e-ink render** (`render.js` → SVG → 1-bit BMP → the
+    panel): `/screen.bmp` from the pre-branch commit and from this branch are byte-for-byte
+    identical (48,062 bytes, sha256 `7856a68a…`), and `/api/display` + `/api/setup` — the
+    endpoints the physical panel calls — return the same fields.
   - **Two smaller unifications (2026-08-28):** the right-hand control rail is one `--rail` token
     (340px) instead of 320px on Weapon Vault and 360px on Perk Finder; and a bare `h2` is 14px in
     `theme.css` instead of 15/13/12px on three pages (scoped `.card h2` / `.panel h2` / `.step h2`

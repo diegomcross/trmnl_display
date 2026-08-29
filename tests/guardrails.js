@@ -239,9 +239,15 @@ async function fetchOk(url, ms) {
 
   // ---- the display server (3000) is on the same shell as the rest (Diego 2026-08-28) -------
   has('server.js', "path === '/theme.css'", 'display server serves the shared theme');
-  has('server.js', 'function shell(', 'display server pages use the shared page shell');
-  has('server.js', 'class="gb-in"', 'display server renders the same banner strip');
+  has('server.js', 'function shell(', '/settings uses the shared page shell');
+  has('server.js', 'class="gb-in"', '/settings renders the same banner strip');
   hasNot('server.js', /background:#f4f4f5/, 'the old light-grey settings page is gone');
+  // Diego 2026-08-28, verbatim: "you can change the settings page, but not the terminal, it
+  // works well and I didn't ask you to change that." ONLY /settings was restyled. The status
+  // page at / keeps its original plain markup, and render.js (the e-ink pipeline) is untouched.
+  has('server.js', 'Destiny 2 TRMNL dashboard</h2>', 'status page / keeps its original markup');
+  has('server.js', "font-family:Arial,Helvetica,sans-serif;margin:24px", 'status page / is not on the shared theme');
+  hasNot('server.js', /shell\('Destiny 2 TRMNL — Status'/, 'status page / was NOT moved onto the shell');
 
   // ------------------------------------------------------------------ sharing (RULES sect 7)
   sect('Setup wizard & sharing');

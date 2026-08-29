@@ -23,9 +23,10 @@ optimization list that came out of it: *"approved, proceed."*
 3. **Static assets cached + ETagged** in both servers; 34.6KB of shared CSS/JS no longer re-sent
    on every tab switch, HTML no longer re-read off disk per hit. Editing HTML/CSS still needs no
    restart — verified live.
-4. **The TRMNL display server's pages joined the suite.** `/` and `/settings` on port 3000 use the
-   same shell; `server.js` serves `theme.css` + fonts itself. Save flow tested end-to-end. The
-   e-ink render pipeline was not touched.
+4. **The TRMNL display's `/settings` page only.** It uses the same shell; `server.js` serves
+   `theme.css` + fonts itself. Save flow tested end-to-end. The status page at `/` was restyled
+   too and then **reverted at Diego's word** (DIEGO_RULES §6) — the terminal and its other pages
+   are off limits. The e-ink render was never touched (byte-identical `/screen.bmp`).
 5. `--rail` token (340px) replaces the 320/360px rails.
 
 `tests/guardrails.js`: **179 checks, 0 failing** — it now fails the build if a page re-declares

@@ -389,12 +389,14 @@ function optionsPayload() {
   };
 }
 
-// The display server's two web pages share one nameplate strip + tab row with the Vault
-// Verdict suite (theme.css .gb / .gb-nav / .page). They live on a different port, so the
-// tabs here are this server's own pages, not the 8787 ones.
+// Chrome for the /settings content picker ONLY (theme.css .gb / .gb-nav / .page), so it
+// matches the Vault Verdict pages. Diego 2026-08-28: "you can change the settings page, but
+// not the terminal" — the status page at / and the e-ink render itself are left alone.
 function shell(title, active, body, extraCss) {
   const tabs = [['/', 'Status'], ['/settings', 'Content'], ['/display', 'Phone display']]
     .map(([h, t]) => `<a href="${h}" class="gnav-a${h === active ? ' on' : ''}">${t}</a>`).join('');
+  // Only /settings uses this shell (Diego 2026-08-28) — Status and the phone display page
+  // are untouched, so those two tabs are plain links out of here.
   return `<!doctype html><html><head><meta charset="utf-8">`
     + `<meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title>`
     + `<style>*{box-sizing:border-box;margin:0;padding:0}`
@@ -416,20 +418,14 @@ function statusPage() {
   const ps = enabledPages(cfg);
   const rot = cfg.rotationSeconds && ps.length > 1 ? `rotating every ${cfg.rotationSeconds}s` : 'single page';
   const pagesTxt = ps.length ? ps.map((p, i) => { const lbl = PAGE_LABEL[p.type] || p.type; return p.type === 'orders' && ps.filter(x => x.type === 'orders').length > 1 ? `${lbl} ${i + 1}` : lbl; }).join(' → ') : 'none enabled';
-  return shell('Destiny 2 TRMNL — Status', '/',
-    `<h1 class="disp">TRMNL <span>Dashboard</span></h1>`
-    + `<p class="sub">Last render <b>${upd}</b> · file <code>${state.filename}</code>`
-    + `${state.error ? ` · <span class="bad">error: ${state.error}</span>` : ''}</p>`
-    + `<div class="card"><div class="lbl">Rotation</div>`
-    + `<p class="note"><b>${pagesTxt}</b> · ${rot}${DEMO ? ' · <b>DEMO mode</b>' : ''}</p></div>`
-    + `<div class="card"><div class="lbl">What the panel is showing now</div>`
-    + `<img src="/screen.bmp?t=${Date.now()}" width="800" height="480" alt="current e-ink screen"></div>`,
-    `code{background:rgba(0,0,0,.45);border:1px solid var(--line);padding:1px 6px;font-size:12.5px}`
-    + `.card{padding:14px 16px;margin-bottom:14px}`
-    + `.lbl{display:block;font-family:var(--disp);text-transform:uppercase;letter-spacing:.09em;font-size:10.5px;color:var(--dim);margin-bottom:8px}`
-    + `.note{font-size:13px;color:var(--mut);line-height:1.5}`
-    + `.bad{color:var(--junk)}`
-    + `img{max-width:100%;height:auto;border:1px solid var(--line-strong);background:#fff}`);
+  // Diego 2026-08-28: this page stays exactly as it was — he did not ask for it to be
+  // restyled. Only /settings moved onto the shared theme.
+  return `<!doctype html><meta charset="utf-8"><title>Destiny 2 TRMNL</title><body style="font-family:Arial,Helvetica,sans-serif;margin:24px">`
+    + `<h2>Destiny 2 TRMNL dashboard</h2>`
+    + `<p>Last render: <b>${upd}</b> · file: <code>${state.filename}</code>${state.error ? ` · <span style="color:#b00">error: ${state.error}</span>` : ''}</p>`
+    + `<p>Pages: <b>${pagesTxt}</b> · ${rot}${DEMO ? ' · <b>DEMO mode</b>' : ''} · <a href="/settings">Settings</a> · <a href="/display">Phone display</a></p>`
+    + `<img src="/screen.bmp?t=${Date.now()}" width="800" height="480" style="border:1px solid #ccc">`
+    + `</body>`;
 }
 
 function settingsPage() {
