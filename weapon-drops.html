@@ -5,64 +5,44 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>New Drops — Weapon Watch</title>
 <style>
-:root{
-  --bg:#0c0e12; --panel:#151821; --panel2:#1b1f2b; --line:#2a2f3d;
-  --ink:#e9ebf2; --mut:#8b93a7; --dim:#5c6375;
-  --gold:#cfae42; --keep:#5fd0dd; --junk:#ff6a52;
-  --clip:polygon(10px 0,100% 0,100% calc(100% - 10px),calc(100% - 10px) 100%,0 100%,0 10px);
-}
+/* design tokens live in theme.css — this page had its own dead copy (2026-08-28) */
 *{box-sizing:border-box;margin:0;padding:0}
-body{background:var(--bg);color:var(--ink);font:15px/1.45 "Segoe UI",Roboto,system-ui,sans-serif;padding:12px;padding-bottom:40px}
-.disp{font-family:Bahnschrift,"Roboto Condensed","Arial Narrow",sans-serif;text-transform:uppercase;letter-spacing:.09em}
-h1{font-size:22px;font-weight:600}
-h1 span{color:var(--gold)}
-.sub{color:var(--mut);font-size:12px;margin:2px 0 10px}
-.nav{display:flex;gap:6px;margin:6px 0 4px;flex-wrap:wrap}
-.nav a{font-family:Bahnschrift,"Roboto Condensed","Arial Narrow",sans-serif;text-transform:uppercase;letter-spacing:.06em;font-size:12px;text-decoration:none;color:var(--mut);border:1px solid var(--line);padding:5px 12px;clip-path:polygon(8px 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%,0 8px)}
-.nav a.on{color:var(--gold);border-color:var(--gold);background:rgba(207,174,66,.12)}
 .bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
-.btn{background:var(--panel2);border:1px solid var(--gold);color:var(--gold);padding:8px 13px;font-size:12px;cursor:pointer;clip-path:var(--clip);font-family:inherit}
-.btn:active{background:var(--gold);color:#000}
-.btn.sm{padding:5px 10px;font-size:11px}
-.btn.mut{border-color:var(--line);color:var(--mut)}
-.count{color:var(--mut);font-size:12px}
+.btn{cursor:pointer}
+.count{font-size:12px}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:12px}
-.drop{background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--gold);clip-path:var(--clip);overflow:hidden}
-.drop.god{border-left-color:var(--gold);box-shadow:inset 0 0 0 1px rgba(207,174,66,.35)}
-.art{position:relative;height:118px;background-size:cover;background-position:center;border-bottom:1px solid var(--line)}
+.drop{background:var(--panel);overflow:hidden}
+.drop.god{border-left-color:var(--gold)}
+.art{position:relative;height:118px;background-size:cover;background-position:center}
 .art .shade{position:absolute;inset:0;background:linear-gradient(90deg,rgba(12,14,18,.85),rgba(12,14,18,.15))}
 .art .nm{position:absolute;left:12px;bottom:8px;right:12px;font-weight:600;font-size:16px;text-shadow:0 1px 4px #000}
-.art .sc{position:absolute;right:10px;top:10px;background:rgba(12,14,18,.8);border:1px solid var(--line);color:var(--mut);font-weight:700;font-size:14px;padding:3px 9px;clip-path:var(--clip);font-variant-numeric:tabular-nums}
-.art .sc.hot{border-color:var(--gold);color:var(--gold)}
-.art .tag{position:absolute;left:12px;top:10px;font-size:10px;color:var(--gold);border:1px solid var(--gold);background:rgba(207,174,66,.15);padding:2px 8px;clip-path:var(--clip);text-transform:uppercase;letter-spacing:.05em}
+.art .sc{position:absolute;right:10px;top:10px;font-weight:700;font-size:14px;padding:3px 9px;font-variant-numeric:tabular-nums}
+.art .tag{position:absolute;left:12px;top:10px;font-size:10px;padding:2px 8px}
 .body{padding:10px 12px}
-.colh{font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.08em;margin:7px 0 4px;font-family:Bahnschrift,"Roboto Condensed",sans-serif}
+.colh{font-size:10px;text-transform:uppercase;letter-spacing:.08em;margin:7px 0 4px}
 .perks{display:flex;gap:6px;flex-wrap:wrap}
 .perk{display:flex;align-items:center;gap:5px;background:var(--panel2);border:1px solid var(--line);color:var(--mut);padding:3px 8px 3px 4px;font-size:11px;clip-path:polygon(6px 0,100% 0,100% calc(100% - 6px),calc(100% - 6px) 100%,0 100%,0 6px)}
 .perk img{width:20px;height:20px;flex-shrink:0}
 .perk.roll{color:var(--ink);border-color:var(--mut)}
 .perk.match{color:var(--gold);border-color:var(--gold);background:rgba(207,174,66,.14);font-weight:600}
-.meta{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:9px;font-size:11px;color:var(--mut)}
+.meta{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:9px;font-size:11px}
 .meta img{width:18px;height:18px;vertical-align:middle}
-.st{background:var(--panel2);padding:2px 7px;font-size:11px;color:var(--mut);clip-path:var(--clip);font-variant-numeric:tabular-nums}
-.st b{color:var(--ink)} .st.hi b{color:var(--gold)}
+.st{padding:2px 7px;font-variant-numeric:tabular-nums} .st.hi b{color:var(--gold)}
 .acts{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
-.lockb{background:none;border:1px solid var(--line);color:var(--mut);cursor:pointer;font-size:11px;padding:4px 10px;clip-path:var(--clip);font-family:inherit}
-.lockb.on{border-color:var(--gold);color:var(--gold)}
+.lockb{cursor:pointer;font-size:11px;padding:4px 10px}
 .tchip{background:none;border:1px solid var(--line);color:var(--mut);cursor:pointer;font-size:11px;padding:4px 10px;clip-path:var(--clip);font-family:inherit}
 .tchip.on.fav{border-color:var(--fav-man);color:var(--fav-man);background:rgba(255,134,200,.14)}
 .tchip.on.fav.af{border-color:var(--fav-auto);color:var(--fav-auto);background:rgba(110,222,155,.14)}
 .tchip.on.keep{border-color:var(--keep);color:var(--keep);background:rgba(95,208,221,.12)}
 .tchip.on.junk{border-color:var(--junk);color:var(--junk);background:rgba(255,106,82,.12)}
-.note{color:var(--dim);font-size:12px}
+.note{font-size:12px}
 .big{text-align:center;color:var(--mut);padding:40px 12px}
-:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
-@media(min-width:760px){body{max-width:1100px;margin:0 auto}}
 </style>
 <link rel="stylesheet" href="/theme.css">
 </head>
 <body>
 <div id="gbanner"></div>
+<main class="page">
 <h1 class="disp">New <span>Drops</span></h1>
 <p class="sub">Fresh drops of your watched weapons, scored against your god-roll wishlist.</p>
 <div class="bar">
@@ -176,5 +156,6 @@ window.GRELOAD=()=>load(false);   // banner "Updated" chip / auto-refresh hook
 </script>
 <script src="/perktip.js"></script>
 <script src="/banner.js"></script>
+</main>
 </body>
 </html>

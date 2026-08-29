@@ -68,7 +68,7 @@ Core priorities, in his words:
 |---|---|
 | `auth-and-snapshot.js` | Interactive Bungie OAuth + writes `snapshot.json` (full profile dump). Run once / to re-auth. |
 | `render.js` | `buildModel(profile)` -> data model; page renderers (`renderSVG`=Orders, `renderQuestsSVG`, `renderTriumphsSVG`, `renderTitleSVG`, `renderDropAlert`=god-roll drop) + `renderPage()` dispatcher. CLI run writes `screen.png` + prints a report. |
-| `server.js` | Always-on TRMNL BYOS HTTP server. Pulls a fresh profile each cycle, picks the current rotation page, renders, converts to 1-bit BMP, serves it. Interrupts the rotation for `drop-alert.json` god-roll alerts (`activeAlert`). Hosts `/settings`, `/display`, `/screen.png`. |
+| `server.js` | Always-on TRMNL BYOS HTTP server. Pulls a fresh profile each cycle, picks the current rotation page, renders, converts to 1-bit BMP, serves it. Interrupts the rotation for `drop-alert.json` god-roll alerts (`activeAlert`). Hosts `/settings`, `/display`, `/screen.png`. **Only `/settings` uses the shared `theme.css` shell** (2026-08-28); it serves `/theme.css` and `/fonts/` itself (cached, ETag) via a `shell()` helper. **The status page at `/`, the phone `/display` page and the e-ink render are deliberately untouched — see DIEGO_RULES §6.** |
 | `start-display.ps1` | **Always-on launcher for the display server.** Runs `node server.js` and keeps it alive (restart loop). `-Install` adds a hidden **Startup-folder login item** (Task Scheduler is blocked here) + starts it now; `-Uninstall` removes it. Logs to `server.log`. |
 | `start-vault.ps1` | **Always-on launcher for Vault Verdict** (port 8787) — mirrors start-display.ps1. Keeps `node vault-verdict.js` alive so the **god-roll drop poller + two-way DIM sync** run whenever the PC is on. `-Install`/`-Uninstall` (Startup-folder item, "TRMNL Vault Verdict.lnk"). Logs to `vault.log` — **since 2026-07-12 the server's own console output (DIM warnings, drop alerts, auto-manager notes) is captured there too** (timestamped, rotated at ~2MB to `vault.log.old`); before that only launcher lines + crashes landed, which made sync issues invisible. Independent of the display launcher. |
 | `watch-destiny.ps1` | Optional game-coupled alternative: watches for `destiny2.exe` and starts/stops the server with the game. `-Setup` tried to register a Task Scheduler task but that is **denied** on this PC. Logs to `watcher.log`. |
@@ -79,11 +79,13 @@ Core priorities, in his words:
 | `weapon-watch.html` | **Weapon Watch** god-roll tracker UI (served at `/weapons`): pick weapons, tag up to 6 perks (normal/★high priority), wanted masterwork + watched stats; scores every copy in the vault. Copies render as an **organized table** (score, columns 3/4, full stat names + MW badge, kills, location, actions — redesigned 2026-07-06, see "What works now"), direct tag chips, Select-multiple batch mode, smart Vault/Equip, no-jump perk selection. Config → `weapon-watch.json`, tags → `weapon-tags.json` (gitignored). |
 | `weapon-drops.html` | **New Drops dashboard** (served at `/drops`): visual cards for *fresh* drops of watched weapons — weapon art, rolled perk icons, masterwork icon, stats, score/🎯. Per-card actions: **Fav / Keep / Junk** tag chips (`/api/tag`, DIM vocab, active chip clears on re-tap) + Lock + smart Equip/→Vault + Seen. Perk hover popup (`perktip.js`, added 2026-07-09 — was the one page missing it) + PVE/PVP roll chip. Backed by `weapon-seen.json` (gitignored) + `/api/drops/ack`. |
 | `dim-probe.js` | One-off DIM Sync API check (gitignored). Diego runs `node dim-probe.js` to confirm two-way DIM sync works before it's built. |
+| `dim-diagnose.js` | **The DIM self-check, as one pure function** (2026-08-29). `diagnose(state)` returns `{ok, fix, summary, checks[]}`; it performs no side effects, so applying a fix stays in one reviewable place (`dimSelfHeal`). Catches ApiKeyMismatch, UnknownProfileId, a wrong-account token, DIM- and Bungie-token expiry **offline** by decoding the DIM JWT's `sub`/`iss`/`exp`/`profileIds`, then makes at most one live call. Tells a real DIM 401 (always carries a JSON `error`) from a proxy/VPN 403 (never does). **Shared by the server and the CLI so they cannot drift.** |
+| `dim-doctor.js` + `DIM-DOCTOR.cmd` | Thin command-line shell over `dim-diagnose.js`, for when the server will not start. Normally unnecessary — the server runs the same check itself. Read-only, prints no secrets. |
 | `fashion.html` | **Fashion loadouts** (served at `/fashion`): each character's equipped armor ornaments + shaders with icons; save named looks (`fashion.json`, gitignored) and re-apply them in one click. Apply requires the character to be in orbit. |
-| `theme.css` | **Shared visual theme** for all four Vault Verdict pages (served at `/theme.css`, linked after each page's inline `<style>`). BrayTech/in-game look: ground `#101312`, hairline white borders, square tiles, Destiny rarity/energy colors, self-hosted **Arimo** (Helvetica/Neue-Haas twin) type, tabular numbers. Pages share CSS-var names so this one file re-skins everything — **edit design tokens here, once.** Also styles the **item tiles** (`.wtile` weapon art, `.pkico` perk-icon tiles) that Weapon Watch renders from `/api/weapons` art — a token repaint alone did NOT read as BrayTech; the real look needed the actual weapon/perk artwork as rarity-framed square tiles. The e-ink display (`server.js`, 1-bit) is separate and unaffected. |
+| `theme.css` | **Shared visual theme AND the one page shell** for every Vault Verdict page (served at `/theme.css`, linked after each page's inline `<style>`). BrayTech/in-game look: ground `#101312`, hairline white borders, square tiles, Destiny rarity/energy colors, self-hosted **Arimo** (Helvetica/Neue-Haas twin) type, tabular numbers. **Since 2026-08-28 it also owns page LAYOUT**, not just tokens: `--page-max` (1240px), `--page-pad` (16px), `--page-bottom`, the `.page` content column, the full-bleed `.gb`/`.gb-nav` banner strips, and the `h1` / `.sub` / `.disp` sizing — no page sets a width or padding of its own any more. Pages share CSS-var names so this one file re-skins AND re-spaces everything — **edit design tokens and page geometry here, once.** Also styles the **item tiles** (`.wtile` weapon art, `.pkico` perk-icon tiles) that Weapon Watch renders from `/api/weapons` art — a token repaint alone did NOT read as BrayTech; the real look needed the actual weapon/perk artwork as rarity-framed square tiles. The e-ink display (`server.js`, 1-bit) is separate and unaffected. |
 | `fonts/arimo-*.woff2` | Self-hosted Arimo 400/500/700 (latin subset, Apache-2.0), served at `/fonts/`. Bundled so type is identical on every device incl. Android. |
 | `weapon-vault.html` | **Weapon Vault** (served at `/vault`): your whole arsenal as a BrayTech-style tile grid (rarity-framed squares, power, element pip, lock, tag border), grouped by slot (Kinetic/Energy/Power), tiles lazy-load via IntersectionObserver. **Tile look (BrayTech-tuned 2026-07-04):** roomy 74px tiles, weapon art, a **clipped top-left corner** as the tag flag (keep=cyan / fav=gold / junk=red — replaced the distracting full-width bar), a small element diamond + power on a bottom gradient strip, lock top-right. **BrayTech-style layout (redesigned 2026-07-04):** grouped **by slot** (Kinetic/Energy/Power); within each slot the **selected guardian's** weapons sit on the LEFT — **Equipped** (marked cyan) as its own group, then that character's **Inventory** below it — a divider, then the shared **Vault** on the right, **capped to 3 rows** with a "Show all N" button (`capVaultRows` counts the grid's resolved columns × 3). **Only one guardian** shows, driven by the banner's emblem-dot selector: `banner.js` dispatches `gbanner:char {cid,cls}` (+ sets `window.GBANNER`) on load and on switch; the vault filters `w.ownCid===selCid` (vault is account-wide). (Earlier all-characters "location sections" version was scrapped — Diego: "looks nothing like DIM/BrayTech, only show one character.") **Sort control:** Power / Recent (by instanceId ≈ acquisition order) / Kills (from the kill-tracker, profile component 309) / Perk·Mine / Perk·Blend (best tracked/blended perk per column, summed). Right rail: quick filters (element/ammo/rarity/locked/new/tag + name search) that hide non-matches, and a **perk combo filter** (two column-aware slots, same rule as Perk Finder) that lights up matching weapons; click a tile to inspect its perks/MW **and manage it like DIM — Equip / To Vault / Lock / Keep / Fav / Junk** (calls `/api/equip`,`/api/vault`,`/api/lock`,`/api/tag`). Equip uses the **smart exotic swap** (below). Reads `/api/weapons` + `/api/perks`. First slice of the "vault-as-grid" vision (armor vault next). |
-| `banner.js` | **Shared in-game nameplate + section nav** (served at `/banner.js`, included by every page via `<script src="/banner.js">` into a `<div id="gbanner">`). Renders your equipped **emblem art as the banner background**, Bungie name, power (✦light) + class, character-switch dots, and the right-aligned section tabs (Armor Vault · Weapon Vault · Fashion · Perk Finder · New Drops · Artifacts). Data from `/api/account`. Also renders the **"Updated Xs ago" data-freshness chip** (polls `/api/status`; click = force refresh; auto-reloads pages that set `window.GRELOAD` when idle — see "Data freshness overhaul"). Replaces the old per-page `<nav class="nav">` — edit nav/banner in this one file. |
+| `banner.js` | **Shared in-game nameplate + section nav** (served at `/banner.js`, included by every page via `<script src="/banner.js">` into a `<div id="gbanner">`). Renders **two full-bleed strips** (2026-08-28): the nameplate — your equipped **emblem art as the background**, Bungie name, power (✦light) + class, character-switch dots — and, under it, the section tabs as their own **single-row strip** that scrolls sideways on a phone (the active tab is auto-scrolled into view). Both centre their contents in `.gb-in`, which uses the same `--page-max`/`--page-pad` as `<main class="page">`, so banner, `<h1>` and content share one left edge on every page. Data from `/api/account`. Also renders the **"Updated Xs ago" data-freshness chip** (polls `/api/status`; click = force refresh; auto-reloads pages that set `window.GRELOAD` when idle — see "Data freshness overhaul"). Replaces the old per-page `<nav class="nav">` — edit nav/banner in this one file. |
 | `perk-finder.html` | **Perk Finder** (served at `/perks`): pickable list of *all* trait perks in the game, ranked by community popularity (PvE/PvP split bar), with search + column/owned/ranked filters. Two builder modes: **Pick perks** (default, flat — click any perks, column/order irrelevant; weapons ranked by how many they can roll) and **Combo** (Slot 1 + Slot 2; a **full match only when a weapon can roll one perk from each slot in *different columns***). Both feed the Inventory/Farmable match panel; saved as `{perks:[]}` (flat) or `{slots:[[],[]]}` (combo), auto-detected on load. Perk list ranks by **Mine** (how often you track a perk across your watched weapons, priority-weighted — default), **Community** (DIM wishlist), or **Blend** (Mine full weight + Community ×0.35 → surfaces sleeper rolls). Save role-tagged combos (ad-clear/pve/pvp/dps) to `perk-combos.json` (gitignored). Backed by `/api/perks` (which overlays `mine` from `weapon-watch.json`) + `/api/combos`. |
 | `.dim-wishlist.json` | Gitignored cache: the parsed DIM community wishlist folded to `{perkName:{weapons:[names],pve:[names],pvp:[names]}}` (distinct recommended weapons, not a raw roll-line count — see the popularity-algorithm note in "What works now") — the input to Perk Finder's "popularity" (`pop`). Re-downloaded weekly from the voltron list. |
 | `.clarity.json` | Gitignored cache: **Clarity community insights** (the same data DIM shows on perks) folded to `{perkName:insightText}`. Downloaded weekly from `database-clarity.github.io/Live-Clarity-Database/descriptions/dim.json`, flattened (`descriptions.en[].linesContent[].text`). Raw source for the perk **hover popup** (cleaned by `insightBullets`). |
@@ -488,6 +490,155 @@ Core priorities, in his words:
     this shared bar. Verified: banner + character-switch (Warlock ✦532 ↔ Titan ✦550) work on all
     pages, no content regressed. **Still open per Diego's ask** (surface, don't assume): a left
     filter rail (element/ammo/rarity like BrayTech) and a right power/currency rail — see NEXT_PHASE.
+  - **Two sessions, same two complaints — how they were reconciled (2026-08-29):** The banner
+    was fixed twice. `main` broke `#gbanner` out of each page's column (`width:100vw`,
+    `.gb{max-width:1160px}`, `html{overflow-x:clip}`); this branch removed the cause instead —
+    no page owns a width, so the banner inherits nothing inconsistent. **The shell was kept and
+    the break-out dropped**, because `.gb{max-width:1160px}` would re-constrain the full-bleed
+    nameplate and `overflow-x:clip` would mask the horizontal-overflow regressions the page sweep
+    exists to catch. The two guardrails that asserted the old CSS were re-pointed at the rule
+    rather than deleted. Everything else from `main` — the Apply-button fix, the live-DIM armor
+    fix, `dimLoadoutCounts`, the sole-exotic and in-a-loadout junk rescues — is untouched and
+    re-verified here (Apply button confirmed visible and disabled on a **cold** load in a real
+    browser, per their rule 17).
+  - **DIM troubleshooting is fully automatic (2026-08-29):** Diego — *"I want you to fully
+    automate this troubleshooting so you can do without my intervention."* Nothing about DIM now
+    requires him to run anything. `dim-diagnose.js` holds the whole diagnosis as one pure
+    function; `dimSelfHeal()` in the server runs it **20 seconds after boot, every 15 minutes,
+    and immediately whenever a DIM call fails**, applies the fix it can, and re-verifies by doing
+    a real tag read — so a healed sync is immediately correct, not merely quiet.
+    **What it repairs unattended:** a token DIM rejects (cleared, re-minted); a
+    `platformMembershipId` DIM refuses (corrected from the token's own `profileIds`); a token
+    issued for a different app or a different Bungie account (cleared); an unusable DIM app on
+    `OriginMismatch` (re-registered, old `.dim-app.json` kept as `.bak`).
+    **The one case it cannot fix** is Diego's Bungie login lapsing — no code can — and it says so
+    in plain words instead of a 401 in a log.
+    **Where he sees it:** a **DIM sync** card at the top of `/settings` showing Working / Repairing
+    itself / Needs you, when it last checked, and what the last automatic fix was, plus a "Check
+    now" button; `GET/POST /api/dim/health`; and the banner chip, which reads "DIM sync error"
+    rather than a vague red dot.
+    **Verified** against a stand-in DIM driving the real `dimSelfHeal`: a wrong profile id, a
+    mismatched app key and an `OriginMismatch` each repair themselves end-to-end and repopulate
+    the tag cache; an expired Bungie login is correctly reported as needing him. 12/12 assertions,
+    plus 9/9 on the 401-recovery path.
+  - **DIM sync can recover from a rejected token, and says when it can't (2026-08-29):**
+    **Correction first: this was NOT what Diego was seeing.** His actual fault was found in a
+    parallel session and is fixed on `main` — `fetchArmor()` read tags from the static
+    `dim-data.json` export, which does not exist on his PC, so 555 tagged armor pieces showed as
+    untagged (see the 2026-08-29b entry). What follows is separate hardening of the same
+    subsystem: a real defect, found by reading DIM's source, that would have bitten later. The
+    two compose — armor now reads live tags through `dimTagsFresh`, which is the call this
+    hardening wrapped.
+    Read against DIM's own server source
+    (`github.com/DestinyItemManager/dim-api`, commit `826bcc2`), the shape of the bug is this:
+    `GET/POST /profile` answers **401** for five distinct reasons — `OriginMismatch`,
+    `ApiKeyMismatch`, `UnknownProfileId`, an expired/invalid JWT, and `WebAuthRequired` — and
+    **none of them make our cached token look invalid**, because `dimAuth` only checked its
+    `exp`. So the server re-sent the same dead token every 30 seconds indefinitely,
+    `dimTagsFresh` swallowed the error into `DIM_LAST_ERR`, and the app went on serving the
+    cached tag map. The only thing that ever cleared `.dim-token.json` was a re-login through
+    `/setup`. **Sync could be dead for weeks and the UI looked normal.**
+    **Fixed:** every DIM call now goes through `dimCall()`, which on a 401 drops the token,
+    re-authenticates once, and retries; if a *brand-new* token is refused too it sets a 10-minute
+    `DIM_RETRY_AFTER` backoff and writes a `DIM_LAST_ERR` naming `dim-doctor.js`, instead of
+    hammering DIM and Bungie. A successful read clears the backoff.
+    **Also fixed — the wrong-profile trap:** `dimAuth` picks `platformMembershipId` from
+    `primaryMembershipId`, else the first membership Bungie lists. DIM only accepts a profile in
+    the token's `profileIds` (`api/utils.ts` → `checkPlatformMembershipId`), and with cross-save
+    or a leftover membership from an old platform those can differ — a permanent 401 with no way
+    to self-correct. The token is a JWT, so `dimAuth` now decodes it (no secret needed) and, when
+    our pick isn't in `profileIds`, uses the profile DIM named (they arrive primary-first).
+    **Verified** against a stand-in DIM server exercising the real `dimAuth`/`dimCall`: a 401 on
+    a cached token self-heals and reads its tags; a refused profile id is corrected to the one
+    DIM named; a persistently-refused token re-auths exactly once, stops after two attempts, and
+    the backoff suppresses further calls. 9/9 assertions.
+    **And made visible:** a DIM failure used to show only as a red dot on the "Updated" chip,
+    which reads as "data is a bit old" — that is how this went unnoticed. The chip now reads
+    **"DIM sync error"** with the DIM error and the fix in its tooltip.
+  - **ONE page shell for every page (2026-08-28, `theme.css` + `banner.js` + `<main class="page">`):**
+    Diego: *"make them all consistent, banner size, positioning, right now every page behaves like an
+    independent style and this is ugly."* He was right — every page used to set its **own**
+    `body{padding}` and its **own** `body{max-width}` at its **own** breakpoint (880 / 900 / 1000 /
+    1080 / 1100 / 1160 / 1180 / 1280px), so at a 1440px window the banner measured 856 / 976 / 1056 /
+    1076 / 1136 / 1156 / 1256 / 1416px wide and started at x = 12 / 92 / 142 / 152 / 182 / 192 / 232 /
+    292px depending on which tab you were on. `h1` was 20px on one page, 22px on seven, 32px on two;
+    body text 14 / 15 / 16px; `.disp` was uppercase on six pages and mixed-case on five (only those
+    six declared it locally); `setup.html` even loaded `theme.css` *before* its own `<style>`, so the
+    shared skin lost the cascade there.
+    **How it works now** — three pieces, no per-page geometry anywhere:
+      1. `theme.css` owns the shell: `--page-max:1240px`, `--page-pad:16px`, `--page-bottom:84px`,
+         `body{margin:0;padding:0 0 var(--page-bottom);max-width:none;font-size:15px}`, and
+         `.page{max-width:var(--page-max);margin:0 auto;padding:0 var(--page-pad)}`. `h1` (24px),
+         `.sub`, and `.disp` (uppercase; `input.disp` exempt so a typed build name isn't shouted)
+         are sized here and **only** here.
+      2. `banner.js` renders the banner as **two full-bleed strips** — the emblem-art nameplate, then
+         the 10 section tabs on their own strip. Each centres its contents in `.gb-in`, which uses the
+         same `--page-max`/`--page-pad` as `.page`, so the banner, the `<h1>` and the content all line
+         up on one left edge. The tab strip is **one non-wrapping row** (`flex-wrap:nowrap` +
+         `overflow-x:auto`); it used to wrap to 2 rows on every page and to different heights on
+         different pages. On a phone it scrolls sideways with a fade on the right edge, and the active
+         tab is `scrollIntoView`-ed so you can always see where you are.
+      3. Every page (all 10, plus `setup.html`) wraps its content in `<main class="page">` and no
+         longer declares `body{max-width}` or `body{padding}`. `settings.html` / `auto-manager.html`
+         keep a 900px form column but it is now **left-aligned** with the banner instead of separately
+         centred; `setup.html` gained a static nameplate strip of identical geometry (it has no account
+         yet, so no `banner.js`) and lost its rounded corners so it matches the square house style.
+    Vault Verdict's armor list (`#list`) became a responsive grid — it used to be a single column
+    capped at 880px and now flows into 2 columns at the shared width, 1 on a phone.
+    **Verified** with headless Chromium at 1440×900 and 390×844 on all 11 pages: banner box
+    `x=0 w=viewport h=93`, inner column `x=100 w=1240`, tab strip `h=41`, `h1` at `x=116 y=154` at
+    24px, body 15px — **identical on every page**, one row of tabs everywhere, zero horizontal
+    overflow, and no new console errors versus the pre-change baseline.
+    `node tests/guardrails.js --static` grew checks that fail the build if any page declares its own
+    `body{max-width}`/`body{padding}` again or drops its `<main class="page">` wrapper.
+  - **One source of truth for the skin — 430 dead declarations deleted (2026-08-28, follow-up
+    to the shell):** the pages were carrying a second, *losing* copy of the theme. Nine of them
+    declared their own `:root` palette; `theme.css` loads after every page's inline `<style>`, so
+    its values always won and the copies did nothing — editing a page's `:root` was a no-op, which
+    is exactly how `artifacts.html` ended up calling `var(--void)` when **no file defined `--void`**
+    (its Void filter chip rendered with a transparent fill and a near-black border; fixed here).
+    The same was true of the component rules: `.btn` was re-declared on nine pages with its own
+    background/border/colour/padding/font, and `theme.css` overrode every one of them.
+    **What was done:** the 11 tokens the pages declared that `theme.css` did *not* have
+    (`--void --arc --kinetic --stasis --strand --exotic --fav --und --el --pve --pvp`) moved up
+    into `theme.css`; all nine page-level `:root` blocks were deleted; and every page declaration
+    that `theme.css` already overrode was stripped (`.btn` collapses to `cursor:pointer`,
+    `.btn.sm`/`.btn.mut`/`.btn.red`/`.tab.on` disappear entirely, `.card` keeps only its padding).
+    The orphaned `.nav`/`.nav a` rules from the pre-banner top nav went too. **430 declarations,
+    218 net lines.**
+    **Proof it changed nothing:** a computed-style fingerprint of all 1535 elements on all 11 pages
+    (26 properties each) is byte-identical before and after, and so is a hover/focus fingerprint of
+    every `.btn .btn.sm .btn.mut .btn.red .tab .chip .pk select input a` on every page. `--void`
+    is the one deliberate difference.
+  - **Static assets are cached and revalidated (2026-08-28):** `theme.css`, `banner.js` and
+    `perktip.js` went out with **no `Cache-Control` at all**, and every HTML page hit did a fresh
+    `fs.readFileSync` off disk. Both servers now share the same pattern: read once, keep it in
+    memory, re-read only when the file's **mtime** changes, and send an **ETag** — so Diego's
+    "edit HTML/CSS, hard-refresh, no restart" workflow still works exactly as before (verified: an
+    edit is picked up live, the ETag changes, the new bytes are served). CSS/JS get
+    `max-age=60, must-revalidate`, fonts keep `max-age=604800`, HTML gets `no-cache` (always
+    revalidate — a 304 still saves the whole body). **34.6KB of shared CSS+JS stopped being
+    re-sent on every tab switch**, plus the HTML body when unchanged.
+  - **The TRMNL display's SETTINGS PAGE ONLY joined the suite (2026-08-28):** `/settings` on
+    port 3000 was a light-grey Arial page with rounded cards. `server.js` now serves `/theme.css`
+    and `/fonts/` itself (cached, ETag) and renders that one page through a
+    `shell(title, active, body, extraCss)` helper: same nameplate strip, same single-row tab bar,
+    same `.page` column, same square dark cards. Measured identical to the 8787 pages at 1440×900
+    and 390×844. Verified functionally end-to-end: driving the real page changed rotation 30→120s,
+    description size 25→32, and enabled Quests at 5 per screen, and `GET /api/config` confirmed
+    all three landed.
+    **The status page at `/` was ALSO restyled in the first pass and then reverted** — Diego
+    2026-08-28: *"you can change the settings page, but not the terminal, it works well and I
+    didn't ask you to change that."* It is byte-identical to its pre-branch markup again, and
+    `tests/guardrails.js` now fails if anyone moves it onto the shell. The phone `/display` page
+    was never touched. **Neither was the e-ink render** (`render.js` → SVG → 1-bit BMP → the
+    panel): `/screen.bmp` from the pre-branch commit and from this branch are byte-for-byte
+    identical (48,062 bytes, sha256 `7856a68a…`), and `/api/display` + `/api/setup` — the
+    endpoints the physical panel calls — return the same fields.
+  - **Two smaller unifications (2026-08-28):** the right-hand control rail is one `--rail` token
+    (340px) instead of 320px on Weapon Vault and 360px on Perk Finder; and a bare `h2` is 14px in
+    `theme.css` instead of 15/13/12px on three pages (scoped `.card h2` / `.panel h2` / `.step h2`
+    / `.mbox h2` are component headings and keep their own size).
   - **Smart exotic swap (2026-07-04, `smartEquipWeapon` in vault-verdict.js, used by `/api/equip`):**
     Bungie AUTO-unequips an existing exotic when you equip a 2nd one, but leaves the freed slot
     however it likes. To control it we equip a matching-ammo legendary into the old exotic's slot

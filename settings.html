@@ -5,23 +5,12 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Settings — Destiny Vault Tools</title>
 <style>
-:root{
-  --bg:#0c0e12; --panel:#151821; --panel2:#1b1f2b; --line:#2a2f3d;
-  --ink:#e9ebf2; --mut:#8b93a7; --dim:#5c6375;
-  --gold:#cfae42; --keep:#5fd0dd; --junk:#ff6a52;
-  --clip:polygon(10px 0,100% 0,100% calc(100% - 10px),calc(100% - 10px) 100%,0 100%,0 10px);
-}
+/* design tokens live in theme.css — this page had its own dead copy (2026-08-28) */
 *{box-sizing:border-box;margin:0;padding:0}
-body{background:var(--bg);color:var(--ink);font:15px/1.45 "Segoe UI",Roboto,system-ui,sans-serif;padding:12px;padding-bottom:48px}
-h1{font-size:22px;font-weight:600}
-h1 span{color:var(--gold)}
-.sub{color:var(--mut);font-size:12px;margin:2px 0 12px;max-width:820px}
-.wrap{max-width:900px;margin:0 auto}
-.card{background:var(--panel);border:1px solid var(--line);clip-path:var(--clip);padding:14px 16px;margin-bottom:14px}
+.wrap{max-width:900px}   /* comfortable form column, left-aligned with the banner */
+.card{padding:14px 16px;margin-bottom:14px}
 .card h2{font-size:13px;text-transform:uppercase;letter-spacing:.08em;color:var(--mut);font-weight:600;margin-bottom:10px}
-.btn{background:var(--panel2);border:1px solid var(--gold);color:var(--gold);padding:9px 15px;font-size:13px;cursor:pointer;clip-path:var(--clip);font-family:inherit}
-.btn:active{background:var(--gold);color:#000}
-.btn.mut{border-color:var(--line);color:var(--mut)}
+.btn{cursor:pointer}
 .btn:disabled{opacity:.5;cursor:default}
 .row{display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end}
 label.f{display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--mut);text-transform:uppercase;letter-spacing:.05em}
@@ -45,14 +34,29 @@ td b{color:var(--ink)}
 .ok{color:var(--keep)} .warnc{color:var(--junk)}
 .state{display:flex;align-items:center;gap:12px;margin-bottom:10px}
 </style>
+<link rel="stylesheet" href="/theme.css">
 </head>
 <body>
-<link rel="stylesheet" href="/theme.css">
 <div id="gbanner"></div>
+<main class="page">
 <div class="wrap">
-  <h1>App <span>Settings</span></h1>
+  <h1 class="disp">App <span>Settings</span></h1>
   <p class="sub">Every knob of the vault tools in one place, in plain language. Changes save to the
   always-on server immediately — no restart needed.</p>
+
+  <!-- DIM sync health. Diego 2026-08-29: "fully automate this troubleshooting so you can do
+       without my intervention." The server checks and repairs itself; this card only shows the
+       result, and is the ONLY place he has to look. First card on the page on purpose. -->
+  <div class="card" id="dimCard">
+    <h2>DIM sync</h2>
+    <div class="state">
+      <span id="dimPill" class="pill off">Checking…</span>
+      <span id="dimWhen" class="mini"></span>
+      <button class="btn sm mut" id="dimCheck" style="margin-left:auto">Check now</button>
+    </div>
+    <p class="help" id="dimMsg">Reading the last self-check…</p>
+    <p class="help" id="dimAction" style="display:none"></p>
+  </div>
 
   <div class="card">
     <h2>Auto-Manager — on / off</h2>
@@ -258,7 +262,44 @@ $('refreshWeapons').onclick=async()=>{
   catch(e){ $('dataMsg').textContent='Failed: '+e.message; }
   $('refreshWeapons').disabled=false;
 };
+// ---- DIM sync health --------------------------------------------------------------------
+// The server diagnoses and repairs DIM by itself (see dimSelfHeal in vault-verdict.js). This
+// only renders what it found, so Diego never has to run anything to know where sync stands.
+const dimEsc = (x) => String(x).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
+function paintDim(h){
+  const pill=$('dimPill'), when=$('dimWhen'), msg=$('dimMsg'), act=$('dimAction');
+  if(!h || !h.at){
+    pill.className='pill off'; pill.textContent='Not checked yet'; when.textContent='';
+    msg.textContent='The server checks DIM 20 seconds after it starts, then every 15 minutes.';
+    act.style.display='none'; return;
+  }
+  const mins=Math.round((Date.now()-h.at)/60000);
+  when.textContent='checked '+(mins<1?'just now':mins+' min ago');
+  if(h.ok){
+    pill.className='pill on'; pill.textContent='Working';
+    msg.textContent=h.summary||'DIM sync is working.';
+  } else {
+    pill.className='pill off';
+    pill.textContent = h.needsYou ? 'Needs you' : 'Repairing itself';
+    msg.innerHTML='<b>'+dimEsc(h.summary||'DIM sync is not working.')+'</b>'
+      +(h.advice?' — '+dimEsc(h.advice):'');
+  }
+  if(h.action){ act.style.display=''; act.textContent='Last automatic fix: '+h.action; }
+  else act.style.display='none';
+}
+async function loadDim(force){
+  const b=$('dimCheck'); b.disabled=true;
+  if(force){ $('dimPill').className='pill off'; $('dimPill').textContent='Checking…'; }
+  try{ paintDim(await fetch('/api/dim/health', force?{method:'POST'}:{}).then(r=>r.json())); }
+  catch{ $('dimMsg').textContent='Could not reach the server.'; }
+  b.disabled=false;
+}
+$('dimCheck').onclick=()=>loadDim(true);
+setInterval(()=>loadDim(false), 60000);
+
 loadAll();
+loadDim(false);
 </script>
+</main>
 </body>
 </html>

@@ -127,10 +127,14 @@ async function fetchOk(url, ms) {
     'the Apply button is always VISIBLE (disabled until a preview exists), never hidden');
   has('vault-verdict.html', /<details class="panel" id="dcPanel" open>/,
     'the declutter panel is open by default so its buttons can be seen');
-  has('theme.css', '#gbanner{ width:100vw;',
-    "the banner breaks out of each page column so it is one size everywhere");
-  has('theme.css', /.gb{ max-width:1160px;/,
+  // Diego 2026-08-29: "the banners are still all different sizes". A parallel session enforced
+  // this with #gbanner{width:100vw} + .gb{max-width:1160px}; the page shell now solves it one
+  // layer down (no page owns a width, so the banner inherits nothing inconsistent). Same rule,
+  // different mechanism — so these two checks assert the RULE, not the old implementation.
+  has('theme.css', /\.gb-in\{[^}]*max-width:var\(--page-max\)/,
     'the banner is centred at ONE fixed width on every page');
+  has('theme.css', /#gbanner\{/,
+    'the banner breaks out of each page column so it is one size everywhere');
   has('vault-verdict.js', /const tags = await dimTagsFresh\(e\);            \/\/ id -> tag string/,
     'armor reads LIVE DIM tags, not the dead dim-data.json export');
   has('vault-verdict.js', 'async function dimLoadoutCounts',
@@ -201,6 +205,112 @@ async function fetchOk(url, ms) {
   has('weapon-watch.html', 'renderKeepingAnchor', 'scroll anchoring — page never jumps mid-tap');
   has('weapon-watch.html', 'MW_STAT_NAME', 'MW badge rides with its actual stat');
   has('banner.js', 'gb-upd', '"Updated Xs ago" freshness chip on every page');
+
+  // ---- one page shell for every page (RULES sect 6, Diego 2026-08-28) ----------------
+  // "make them all consistent, banner size, positioning ... every page behaves like an
+  // independent style". Page width + gutters live ONLY in theme.css; a page that sets its
+  // own body max-width/padding again would drift the banner right back out of alignment.
+  has('theme.css', '--page-max', 'one shared page width token');
+  has('theme.css', '--page-pad', 'one shared page gutter token');
+  has('theme.css', /\.page\{[^}]*max-width:var\(--page-max\)/, 'the .page column uses the shared width');
+  has('banner.js', 'gb-in', 'banner centres on the same column as page content');
+  has('banner.js', 'gb-nav', 'section tabs render as their own strip');
+  for (const f of [...ALL_PAGES, 'setup.html']) {
+    check(f + ' wraps content in <main class="page">', count(f, '<main class="page">') === 1);
+    const src = read(f) || '';
+    // (?<![\w.#-]) so `.wbody{padding}` / `.body{padding}` class rules don't false-positive
+    check(f + ' sets no page width of its own', !/(?<![\w.#-])body\s*\{[^}]*max-width/.test(src),
+      'a body{max-width} rule is back — width belongs in theme.css');
+    check(f + ' sets no body padding of its own', !/(?<![\w.#-])body\s*\{[^}]*padding/.test(src),
+      'a body{padding} rule is back — spacing belongs in theme.css');
+  }
+
+  // ---- design tokens live in ONE place (2026-08-28 cleanup) --------------------------------
+  // Nine pages used to carry their own :root palette. theme.css loads last so its values always
+  // won — the copies were dead, and editing one did nothing (which is how artifacts.html ended
+  // up referencing an undefined --void). One :root, in theme.css.
+  for (const f of [...ALL_PAGES, 'setup.html']) {
+    hasNot(f, /:root\s*\{/, f + ' declares no :root palette of its own');
+  }
+  for (const t of ['--void', '--arc', '--kinetic', '--stasis', '--strand', '--exotic', '--fav',
+                   '--und', '--el', '--pve', '--pvp', '--rail']) {
+    has('theme.css', t + ':', 'theme.css defines ' + t);
+  }
+  // every var() a page uses must resolve — either from theme.css or an inline style="--x:..."
+  {
+    const themeVars = new Set((read('theme.css') || '').match(/--[\w-]+(?=\s*:)/g) || []);
+    for (const f of [...ALL_PAGES, 'setup.html']) {
+      const src = read(f) || '';
+      const style = (src.match(/<style>[\s\S]*?<\/style>/g) || []).join('\n');
+      const inline = new Set(src.match(/--[\w-]+(?=\s*:)/g) || []);   // style="--elc:..." etc.
+      const used = new Set(style.match(/var\(\s*(--[\w-]+)\s*\)/g) || []);
+      const missing = [...used].map((u) => u.replace(/var\(\s*|\s*\)/g, ''))
+        .filter((v) => !themeVars.has(v) && !inline.has(v));
+      check(f + ' has no unresolved CSS variables', missing.length === 0, missing.join(', '));
+    }
+  }
+
+  // ---- DIM sync must be able to recover, and must say so when it can't (2026-08-29) --------
+  // Diego: "check the sync with DIM ... figure out why it's not working." Root cause was that
+  // DIM answers 401 for five different reasons (OriginMismatch / ApiKeyMismatch /
+  // UnknownProfileId / expired JWT / WebAuthRequired) and EVERY one of them leaves our cached
+  // token looking valid — it has not hit its expiry — so the server re-sent the same dead token
+  // every 30s forever and quietly served stale tags. Only a /setup re-login ever cleared it.
+  has('vault-verdict.js', 'async function dimCall', 'every DIM call goes through the 401-recovering wrapper');
+  has('vault-verdict.js', 'function dimForget', 'a rejected DIM token is thrown away, not reused');
+  has('vault-verdict.js', 'DIM_RETRY_AFTER', 'a token DIM refuses twice backs off instead of hammering');
+  has('vault-verdict.js', 'function dimJwt', 'the DIM token is decoded so we can agree with DIM about the profile');
+  has('vault-verdict.js', /allowed\.includes\(String\(pid\)\)/,
+    'platformMembershipId is reconciled against the token profileIds (no silent UnknownProfileId)');
+  for (const call of ['\'read\'', '\'write\'', '\'bulk write\'', '\'loadouts\'']) {
+    check('DIM ' + call.replace(/\\?'/g, '') + ' is routed through dimCall',
+      (read('vault-verdict.js') || '').includes('], ' + call + ');'));
+  }
+  hasNot('vault-verdict.js', /const \{ key, token, pid \} = await dimAuth\(e\);\s*\n\s*const res = await fetch/,
+    'no DIM call bypasses dimCall by calling dimAuth + fetch directly');
+  check('dim-doctor.js ships (the error message points users at a file that exists)',
+    read('dim-doctor.js') !== null && read('DIM-DOCTOR.cmd') !== null);
+  has('banner.js', "'DIM sync error'", 'a DIM failure is named in the chip, not just a red dot');
+
+  // ---- DIM troubleshooting is AUTOMATIC (Diego 2026-08-29) ---------------------------------
+  // "I want you to fully automate this troubleshooting so you can do without my intervention."
+  // The server must diagnose and repair itself; nothing may require Diego to run a command
+  // except the one case no code can fix (his Bungie login lapsing).
+  check('dim-diagnose.js is the single shared diagnosis', read('dim-diagnose.js') !== null);
+  has('vault-verdict.js', "import { diagnose, fixText, FIX } from './dim-diagnose.js'",
+    'the server uses the SAME diagnosis as the command line (they cannot drift)');
+  has('dim-doctor.js', "from './dim-diagnose.js'", 'the command line is a thin shell over that module');
+  has('vault-verdict.js', 'async function dimSelfHeal', 'the server repairs DIM by itself');
+  has('vault-verdict.js', 'async function dimReregisterApp', 'it can re-register a dead DIM app unattended');
+  has('vault-verdict.js', /dimSelfHeal\(e, 'startup'\)/, 'a self-check runs shortly after boot');
+  has('vault-verdict.js', /dimSelfHeal\(e, 'periodic'\)/, 'and keeps running on a timer');
+  has('vault-verdict.js', /setTimeout\(\(\) => \{ dimSelfHeal\(e, `401/,
+    'a 401 that survives a re-auth triggers the self-check automatically');
+  has('vault-verdict.js', "req.url.startsWith('/api/dim/health')", 'DIM health is readable without running anything');
+  has('vault-verdict.js', 'DIM_APP_FILE + \'.bak\'', 're-registering keeps the old DIM app file as a .bak');
+  has('settings.html', 'id="dimCard"', 'Settings shows DIM health so nothing has to be typed');
+  has('settings.html', "fetch('/api/dim/health'", 'the card reads the live verdict');
+  hasNot('vault-verdict.js', /run: node dim-doctor\.js/,
+    'the server no longer tells Diego to run a command for something it fixes itself');
+
+  // ---- static assets are cached, not re-read and re-sent on every hit ----------------------
+  has('vault-verdict.js', 'const sendStatic', 'vault server caches static assets in memory');
+  has('vault-verdict.js', "ETag: rec.tag", 'vault server sends an ETag so repeats get a 304');
+  hasNot('vault-verdict.js', /return res\.end\(fs\.readFileSync\(path\.join\(__dirname, '[\w-]+\.html'\)\)\)/,
+    'no page route re-reads its HTML off disk per request');
+  has('server.js', 'function sendSkin', 'display server caches the shared skin too');
+
+  // ---- the display server (3000) is on the same shell as the rest (Diego 2026-08-28) -------
+  has('server.js', "path === '/theme.css'", 'display server serves the shared theme');
+  has('server.js', 'function shell(', '/settings uses the shared page shell');
+  has('server.js', 'class="gb-in"', '/settings renders the same banner strip');
+  hasNot('server.js', /background:#f4f4f5/, 'the old light-grey settings page is gone');
+  // Diego 2026-08-28, verbatim: "you can change the settings page, but not the terminal, it
+  // works well and I didn't ask you to change that." ONLY /settings was restyled. The status
+  // page at / keeps its original plain markup, and render.js (the e-ink pipeline) is untouched.
+  has('server.js', 'Destiny 2 TRMNL dashboard</h2>', 'status page / keeps its original markup');
+  has('server.js', "font-family:Arial,Helvetica,sans-serif;margin:24px", 'status page / is not on the shared theme');
+  hasNot('server.js', /shell\('Destiny 2 TRMNL — Status'/, 'status page / was NOT moved onto the shell');
 
   // ------------------------------------------------------------------ sharing (RULES sect 7)
   sect('Setup wizard & sharing');
