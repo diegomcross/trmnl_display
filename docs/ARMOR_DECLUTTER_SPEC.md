@@ -175,8 +175,9 @@ Every row shows the math, matching the existing `favMath` style.
   read-only preview and does not touch DIM tags until Diego explicitly says so.
 - **Never enable the Auto-Manager.** It stays `enabled:false` (2026-07-12 mass-retag
   incident).
-- **Never restart Diego's servers from the agent shell.** Ask him to double-click
-  `REBOOT.cmd`. HTML/CSS needs no restart; server JS does.
+- **SUPERSEDED 2026-08-29 (DIEGO_RULES §4g rule 22):** this said to ask Diego to double-click
+  `REBOOT.cmd`. He now wants the agent to edit his local copy and run the reboots itself, with no
+  intervention from him. Server-JS: reboot and verify the ports yourself. HTML/CSS: no restart.
 - **Never remove an existing feature** without explicit authorization.
 - Test against the live API and a real browser before pushing.
 - Update `DIEGO_RULES.md`, `NEXT_PHASE.md`, `HANDOFF.md`, and

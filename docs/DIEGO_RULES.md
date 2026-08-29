@@ -16,9 +16,11 @@
 - **Never remove or regress an existing feature without explicit authorization.**
   If a feature went missing, restoring it is the top priority. (CLAUDE.md)
 - **Test before push** — real server, real endpoints, real browser, live Bungie API.
-- **Never restart Diego's servers from the agent shell** — relaunched windows come
-  out visible and he closes them, killing the app (2026-07-12 incident). Ask him to
-  double-click `REBOOT.cmd`; HTML/CSS needs no restart, server-JS does.
+- **Reboot Diego's servers YOURSELF, and always edit the local copy on his PC**
+  (2026-08-29, verbatim): *"YOU SHOULD ALWAYS USE THE LOCAL COPY IN MY COMPUTER TO MAKE
+  CHANGES SO EVERYTHING IS ALWAYS UPTODATE AND YOU CONTROL REBOOTS AS WELL, NO
+  INTERVENTION FROM ME NEEDED."* **REVERSES the 2026-07-12 never-restart-from-the-shell
+  rule.** Full procedure in §4g rule 22.
 - **Never (re-)enable the Auto-Manager without Diego's explicit go** (2026-07-12:
   agent re-enabled it mid-game → mass-retag incident, ~94 junk tags + 57 stages).
   It stays `enabled:false` until he says otherwise.
@@ -287,6 +289,30 @@ Two more the same day, while the preview was being built:
 21. **Last-exotic guarantee.** A final sweep in `armorDeclutter()` ensures no exotic ever has ALL
     its copies junked, whatever route the verdicts took. Rule 20 alone missed 4 exotics where he
     owns two copies and both carried a stale junk tag.
+
+### 4g. The local copy and the reboots are yours (2026-08-29)
+
+22. **Diego, verbatim:** *"YOU SHOULD ALWAYS USE THE LOCAL COPY IN MY COMPUTER TO MAKE CHANGES SO
+    EVERYTHING IS ALWAYS UPTODATE AND YOU CONTROL REBOOTS AS WELL, NO INTERVENTION FROM ME
+    NEEDED."*
+
+    This reverses the 2026-07-12 rule that said never to restart from the agent shell. That rule
+    existed because relaunched keep-alive windows came out visible in his session, he closed them,
+    and the app died. Repeated reboots through the PowerShell tool on 2026-08-27/29 did not
+    reproduce it — the servers came back detached and stayed up every time.
+
+    - Edit the files in `C:\Users\diego\Desktop\cola_ai_v3\trmnl_display` **directly**. Never a copy, never a
+      worktree, never a scratchpad version he would have to move into place.
+    - After any **server-JS** change, reboot and verify before reporting:
+      `cmd /c "C:\Users\diego\Desktop\cola_ai_v3\trmnl_display\REBOOT.cmd"`, wait ~30s, then confirm 8787
+      and 3000 are LISTENING and answering 200. HTML / CSS / theme.css are served from disk and
+      need no reboot.
+    - **Never end a message with "double-click REBOOT.cmd" again.** He should never have to.
+    - The PowerShell tool prints `ERROR: Input redirection is not supported` from the batch
+      file trailing `timeout` command. Cosmetic — the reboot still succeeds; check the ports.
+
+    **What did NOT change:** the Auto-Manager still stays `enabled:false` without his explicit go
+    (§3), armor is still never auto-tagged (§4), and Apply is still his button to press.
 ## 5. Perk lists & Perk Finder
 
 - **No exotic perks / frames / non-trait plugs in perk lists** (2026-07-04 commit

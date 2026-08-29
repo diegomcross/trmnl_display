@@ -16,6 +16,15 @@ ship working code, and verify pushes actually landed on GitHub.
    `node vault-verdict.js`), hit the real endpoints, and load the page in a
    browser when UI changed. Bungie-facing code must be verified against the
    live API, not assumed from docs.
+4. **Work in Diego’s local repo and reboot his servers yourself** (2026-08-29):
+   *"YOU SHOULD ALWAYS USE THE LOCAL COPY IN MY COMPUTER TO MAKE CHANGES SO EVERYTHING IS
+   ALWAYS UPTODATE AND YOU CONTROL REBOOTS AS WELL, NO INTERVENTION FROM ME NEEDED."*
+   Edit `C:\Users\diego\Desktop\cola_ai_v3\trmnl_display` directly. After a server-JS change run
+   `cmd /c "C:\Users\diego\Desktop\cola_ai_v3\trmnl_display\REBOOT.cmd"`, wait ~30s and confirm ports
+   8787 + 3000 answer before reporting. HTML/CSS need no reboot. Never ask him to do it.
+   Reverses the old "never restart from the agent shell" rule. Does NOT change: the
+   Auto-Manager stays off without his go, and armor Apply stays his button to press.
+
 3. **Commit and push to `origin main`** when a piece of work is done. Small,
    described commits.
 

@@ -207,3 +207,10 @@ chose:
 **2026-08-29** — on DIM:
 
 > "sync with dim not working appearantly, double check and fix"
+
+---
+
+**2026-08-29** — on how the agent should work:
+
+> "YOU SHOULD ALWAYS USE THE LOCAL COPY IN MY COMPUTER TO MAKE CHANGES SO EVERYTHING IS ALWAYS
+> UPTODATE AND YOU CONTROL REBOOTS AS WELL, NO INTERVENTION FROM ME NEEDED"
