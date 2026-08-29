@@ -34,39 +34,49 @@ optimization list that came out of it: *"approved, proceed."*
 a `var(--x)` nothing defines, re-reads HTML off disk per request, or reverts the display server's
 pages to their own styling.
 
-## DIM sync — root cause found and fixed, ONE THING LEFT FOR DIEGO (2026-08-29)
+## DIM sync — fixed AND fully automated (2026-08-29)
 
-Diego: *"check the sync with DIM, open DIM, check the API, figure out why it's not working."*
+Diego: *"check the sync with DIM ... figure out why it's not working"*, then *"I want you to
+fully automate this troubleshooting so you can do without my intervention."*
 
-**Found and shipped** (detail in HANDOFF): DIM answers 401 for five different reasons, none of
-which made our cached token look invalid, so the server re-sent a dead token every 30s forever
-and served stale tags in silence. Every DIM call now recovers from a 401 once and backs off
-after; the `platformMembershipId` is reconciled against the token's own `profileIds`; the banner
-chip says **"DIM sync error"** instead of showing a vague red dot; and `dim-doctor.js` ships.
+**Root cause:** DIM answers 401 for five different reasons, none of which made our cached token
+look invalid, so the server re-sent a dead token every 30s forever and served stale tags in
+silence. **Shipped:** 401 recovery, profile-id reconciliation, and a self-check
+(`dim-diagnose.js` + `dimSelfHeal`) that runs 20s after boot, every 15 minutes, and on any DIM
+failure — repairing a rejected token, a refused profile, a mismatched app key, and an
+`OriginMismatch` (by re-registering) without anyone touching anything. Health shows on
+`/settings`. Detail in HANDOFF.
 
-**BLOCKED: awaiting Diego — one command.** The agent sandbox cannot reach
-`api.destinyitemmanager.com` (the environment's network policy 403s it at the proxy) and has no
-copy of his `.dim-app.json` / `.dim-token.json` / `tokens.json`, so **which** of the five modes
-he is actually hitting could not be confirmed from here. He needs to run, on his PC:
+**The one thing no code can fix:** if his Bungie login has lapsed, the Settings card says
+**"Needs you"** and names the step. Nothing else needs him.
 
-```
-node dim-doctor.js          (or double-click DIM-DOCTOR.cmd)
-```
+**Still to confirm on his PC:** which mode he was actually in. The sandbox cannot reach
+`api.destinyitemmanager.com` (blocked at the proxy) and has none of his token files, so this was
+diagnosed from DIM's own server source rather than from his live account. Once the branch is on
+`main` and he reboots, the Settings card answers it without him doing anything — and in most of
+the five cases the server will already have repaired it before he looks.
 
-It is read-only and prints no secrets, so the whole output can be pasted straight into the chat.
-Sections 1–3 are offline checks that already pin down ApiKeyMismatch, UnknownProfileId, a
-wrong-account token, an expired DIM token and an expired Bungie refresh token; section 4 makes
-one live call and names the fix for whatever DIM answers.
-
-**Prior art worth knowing:** sync last verified working **2026-07-03** ("992 tags read"). The DIM
-token is a **30-day** JWT, so that one expired around 2026-08-02. Re-minting needs a live Bungie
-**refresh** token (90 days) — if his Bungie login lapsed, `dim-doctor.js` section 1 says so
-immediately and the fix is `/setup` step 2, not anything DIM-side.
+**Prior art:** sync last verified working 2026-07-03 ("992 tags read"). The DIM token is a 30-day
+JWT, so that one expired around 2026-08-02; re-minting needs a live Bungie *refresh* token
+(90 days). If his Bungie login lapsed too, that is the "Needs you" case.
 
 **Still open from before, unchanged:** `auto-manage.json` has `enabled: true` and the weapons
 Auto-Manager ticks every minute, against his standing rule that it stays off (DIEGO_RULES §3) —
-**BLOCKED: awaiting Diego**. Worth resolving alongside the DIM work, since an Auto-Manager acting
-on stale tags is exactly the combination that produced the unexplained 2026-08-23 mass junk-tag.
+**BLOCKED: awaiting Diego**. Worth resolving alongside this, since an Auto-Manager acting on
+stale tags is exactly the combination behind the unexplained 2026-08-23 mass junk-tag.
+
+---
+## BLOCKER FOR EVERYTHING ON THIS BRANCH — get it onto `main` (2026-08-29)
+
+Diego runs `main`. As of this writing **five commits of finished, tested work sit in an unmerged
+draft PR** (#1) and none of it is on his machine: the page shell, the skin cleanup, the asset
+caching, the TRMNL settings page, the DIM fix, the DIM automation, `dim-diagnose.js`,
+`dim-doctor.js`, `DIM-DOCTOR.cmd`. He hit this directly — *"I can't find DIM-DOCTOR.cmd"* — and
+he was right to.
+
+**Next agent: check `git log origin/main..HEAD` before telling Diego to do anything with a file.**
+His CLAUDE.md says to push to `origin main` when work is done; this session was constrained to a
+branch, so the work needs merging. Until then every "double-click X" instruction is wrong.
 
 ---
 **Next — nothing here is started, and none of it is requested work:**

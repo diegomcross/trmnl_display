@@ -44,6 +44,20 @@ td b{color:var(--ink)}
   <p class="sub">Every knob of the vault tools in one place, in plain language. Changes save to the
   always-on server immediately — no restart needed.</p>
 
+  <!-- DIM sync health. Diego 2026-08-29: "fully automate this troubleshooting so you can do
+       without my intervention." The server checks and repairs itself; this card only shows the
+       result, and is the ONLY place he has to look. First card on the page on purpose. -->
+  <div class="card" id="dimCard">
+    <h2>DIM sync</h2>
+    <div class="state">
+      <span id="dimPill" class="pill off">Checking…</span>
+      <span id="dimWhen" class="mini"></span>
+      <button class="btn sm mut" id="dimCheck" style="margin-left:auto">Check now</button>
+    </div>
+    <p class="help" id="dimMsg">Reading the last self-check…</p>
+    <p class="help" id="dimAction" style="display:none"></p>
+  </div>
+
   <div class="card">
     <h2>Auto-Manager — on / off</h2>
     <div class="state">
@@ -248,7 +262,43 @@ $('refreshWeapons').onclick=async()=>{
   catch(e){ $('dataMsg').textContent='Failed: '+e.message; }
   $('refreshWeapons').disabled=false;
 };
+// ---- DIM sync health --------------------------------------------------------------------
+// The server diagnoses and repairs DIM by itself (see dimSelfHeal in vault-verdict.js). This
+// only renders what it found, so Diego never has to run anything to know where sync stands.
+const dimEsc = (x) => String(x).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
+function paintDim(h){
+  const pill=$('dimPill'), when=$('dimWhen'), msg=$('dimMsg'), act=$('dimAction');
+  if(!h || !h.at){
+    pill.className='pill off'; pill.textContent='Not checked yet'; when.textContent='';
+    msg.textContent='The server checks DIM 20 seconds after it starts, then every 15 minutes.';
+    act.style.display='none'; return;
+  }
+  const mins=Math.round((Date.now()-h.at)/60000);
+  when.textContent='checked '+(mins<1?'just now':mins+' min ago');
+  if(h.ok){
+    pill.className='pill on'; pill.textContent='Working';
+    msg.textContent=h.summary||'DIM sync is working.';
+  } else {
+    pill.className='pill off';
+    pill.textContent = h.needsYou ? 'Needs you' : 'Repairing itself';
+    msg.innerHTML='<b>'+dimEsc(h.summary||'DIM sync is not working.')+'</b>'
+      +(h.advice?' — '+dimEsc(h.advice):'');
+  }
+  if(h.action){ act.style.display=''; act.textContent='Last automatic fix: '+h.action; }
+  else act.style.display='none';
+}
+async function loadDim(force){
+  const b=$('dimCheck'); b.disabled=true;
+  if(force){ $('dimPill').className='pill off'; $('dimPill').textContent='Checking…'; }
+  try{ paintDim(await fetch('/api/dim/health', force?{method:'POST'}:{}).then(r=>r.json())); }
+  catch{ $('dimMsg').textContent='Could not reach the server.'; }
+  b.disabled=false;
+}
+$('dimCheck').onclick=()=>loadDim(true);
+setInterval(()=>loadDim(false), 60000);
+
 loadAll();
+loadDim(false);
 </script>
 </main>
 </body>

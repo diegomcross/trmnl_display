@@ -17,6 +17,7 @@ import http from 'node:http';
 import path from 'node:path';
 import { exec } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { diagnose, fixText, FIX } from './dim-diagnose.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ENV_FILE = path.join(__dirname, '.env');
@@ -326,7 +327,7 @@ let DIM_RETRY_AFTER = 0;
 
 async function dimAuth(e) {
   const key = dimKey();
-  if (!key) { DIM_OFF = true; throw new Error('DIM not set up (.dim-app.json missing) — open /setup step 3, or run: node dim-doctor.js'); }
+  if (!key) { DIM_OFF = true; throw new Error('DIM has not been set up on this PC yet — open the setup page, step 3.'); }
   try { const t = JSON.parse(fs.readFileSync(DIM_TOKEN_FILE, 'utf8')); if (t.token && Date.now() < t.exp - 60000) return { key, token: t.token, pid: t.pid }; } catch {}
   const tok = await accessToken(e);
   const ms = await bungie(`${BASE}/User/GetMembershipsById/${tok.membership_id}/254/`, e, tok.access_token);
@@ -374,10 +375,84 @@ async function dimCall(e, build, label) {
   if (res.status === 401) {
     const again = await res.clone().json().catch(() => ({}));
     DIM_RETRY_AFTER = Date.now() + 600000;   // 10 min: a fresh token was refused too, so retrying now is pointless
-    DIM_LAST_ERR = `DIM ${label}: 401 ${again.error || ''} even with a brand-new token — run: node dim-doctor.js`;
-    console.warn(DIM_LAST_ERR);
+    DIM_LAST_ERR = `DIM ${label}: 401 ${again.error || ''} even with a brand-new token`;
+    console.warn(DIM_LAST_ERR + ' — running the automatic self-check');
+    // Don't await: the caller is mid-request. The self-check diagnoses, applies the fix it can,
+    // and re-verifies on its own; the next call picks up the repaired state.
+    setTimeout(() => { dimSelfHeal(e, `401 ${again.error || ''}`).catch(() => {}); }, 0);
   }
   return { res, auth };
+}
+
+// ---- automatic DIM troubleshooting (Diego 2026-08-29) --------------------------------------
+// "I want you to fully automate this troubleshooting so you can do without my intervention."
+// So nothing here asks him to run a command. When DIM misbehaves the server diagnoses itself
+// with the same module the dim-doctor command uses, applies whatever fix is safe to apply on
+// its own, and records the verdict for the Settings page and /api/dim/health. The only outcome
+// that still needs Diego is a lapsed BUNGIE login, which no amount of retrying can fix — and
+// that one is stated in plain words instead of a 401 buried in a log.
+let DIM_HEALTH = { at: 0, ok: null, summary: 'not checked yet', fix: FIX.NONE, action: '', checks: [] };
+let dimHealing = false;
+
+function dimState() {
+  const rd = (f) => { try { return JSON.parse(fs.readFileSync(f, 'utf8')); } catch { return null; } };
+  let envv = null; try { envv = env(); } catch {}
+  return {
+    env: envv, tokens: rd(TOKENS_FILE), app: rd(DIM_APP_FILE), token: rd(DIM_TOKEN_FILE),
+    mirrorCount: Object.keys(loadTags() || {}).length,
+  };
+}
+
+// Register a fresh DIM app. Only reached when DIM says the current key is unusable
+// (OriginMismatch). The old file is kept as .bak — nothing is destroyed.
+async function dimReregisterApp(e) {
+  const appId = 'vault-verdict-' + Math.random().toString(36).slice(2, 8);
+  const reg = await fetch(`${DIM_API}/new_app`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', Origin: DIM_ORIGIN },
+    body: JSON.stringify({ id: appId, bungieApiKey: e.BUNGIE_API_KEY, origin: DIM_ORIGIN }),
+  });
+  const rj = await reg.json().catch(() => ({}));
+  const k = rj?.app?.dimApiKey || rj?.dimApiKey;
+  if (!k) throw new Error(`DIM app registration failed (HTTP ${reg.status})`);
+  try { if (fs.existsSync(DIM_APP_FILE)) fs.copyFileSync(DIM_APP_FILE, DIM_APP_FILE + '.bak'); } catch {}
+  fs.writeFileSync(DIM_APP_FILE, JSON.stringify({ appId, dimApiKey: k }, null, 2));
+  dimForget();   // the old token was issued for the old app
+}
+
+// Diagnose, fix what we safely can, verify. Returns the final health record.
+async function dimSelfHeal(e, why = 'scheduled') {
+  if (dimHealing) return DIM_HEALTH;
+  dimHealing = true;
+  try {
+    let v = await diagnose({ ...dimState(), live: true, dimApi: DIM_API });
+    let action = '';
+    if (!v.ok) {
+      console.warn(`DIM self-check (${why}): ${v.summary}`);
+      if (v.fix === FIX.DROP_TOKEN) {
+        dimForget(); DIM_RETRY_AFTER = 0;
+        action = 'cleared the cached DIM login';
+      } else if (v.fix === FIX.REREGISTER_APP && e) {
+        try { await dimReregisterApp(e); DIM_RETRY_AFTER = 0; action = 're-registered the DIM app'; }
+        catch (err) { action = 'could not re-register the DIM app: ' + err.message; }
+      }
+      // Re-verify by doing the real thing: a tag read. That both proves the fix and
+      // repopulates the cache, so a healed sync is immediately correct rather than merely quiet.
+      if (action && !action.startsWith('could not')) {
+        try {
+          await dimReadTags(e);
+          v = { ok: true, fix: FIX.NONE, summary: 'Fixed automatically — DIM sync is working again.', checks: v.checks };
+          console.warn(`DIM self-check: ${action} — sync restored.`);
+        } catch (err) {
+          v = await diagnose({ ...dimState(), live: true, dimApi: DIM_API });
+          if (v.ok) v = { ...v, ok: false, summary: 'Still failing after an automatic fix: ' + err.message };
+        }
+      }
+    }
+    DIM_HEALTH = { at: Date.now(), ok: v.ok, summary: v.summary, fix: v.fix, action,
+                   advice: fixText(v.fix), checks: v.checks };
+    DIM_LAST_ERR = v.ok ? '' : v.summary;
+    return DIM_HEALTH;
+  } finally { dimHealing = false; }
 }
 
 let DIM_NOTES = {};       // instanceId -> DIM note text (read-only cache; preserved on tag writes)
@@ -410,7 +485,13 @@ async function dimReadTags(e) {
 async function dimTagsFresh(e, maxAgeMs = 30000) {
   if (DIM_OFF) return DIM_TAGS;
   if (Date.now() - DIM_TAGS_AT > maxAgeMs) {
-    try { await dimReadTags(e); } catch (err) { DIM_LAST_ERR = err.message; console.warn('DIM read failed, using cached tags:', err.message); if (!Object.keys(DIM_TAGS).length) DIM_TAGS = loadTags(); }
+    try { await dimReadTags(e); } catch (err) {
+      DIM_LAST_ERR = err.message;
+      console.warn('DIM read failed, using cached tags:', err.message);
+      if (!Object.keys(DIM_TAGS).length) DIM_TAGS = loadTags();
+      // Diagnose + self-heal in the background rather than failing quietly until someone notices.
+      if (Date.now() - DIM_HEALTH.at > 300000) setTimeout(() => { dimSelfHeal(e, 'read failed').catch(() => {}); }, 0);
+    }
   }
   return DIM_TAGS;
 }
@@ -2498,7 +2579,11 @@ async function main() {
         // Lightweight heartbeat for the banner's "Updated" chip — NO Bungie/DIM calls.
         return json({
           weaponsAt: wcache ? wFetchedAt : 0, fetching: !!wFetching, gameUp,
-          dim: { off: DIM_OFF, at: DIM_TAGS_AT, err: DIM_LAST_ERR },
+          dim: { off: DIM_OFF, at: DIM_TAGS_AT, err: DIM_LAST_ERR,
+                 health: { at: DIM_HEALTH.at, ok: DIM_HEALTH.ok, summary: DIM_HEALTH.summary,
+                           advice: DIM_HEALTH.advice || '', action: DIM_HEALTH.action || '',
+                           needsYou: DIM_HEALTH.fix === FIX.RELOGIN_BUNGIE || DIM_HEALTH.fix === FIX.SETUP_DIM
+                                     || DIM_HEALTH.fix === FIX.NETWORK } },
           auto: { at: AUTO_LOG.at, state: AUTO_LOG.state || '', enabled: !!loadAuto().enabled },
           activity: LAST_ACT,   // {safe,hash,mode,name,at} — the banner chip shows this
           builds: { unread: loadBuildAlerts().filter((a) => !a.read).length },   // Builds-tab badge
@@ -2659,6 +2744,11 @@ async function main() {
         saveAutoFavSet(autoFavSet);
         wcache = null;   // tags changed under the cache
         return json({ ok: true, reverted, errors, total: run.actions.length });
+      }
+      // DIM health. GET = last verdict (cheap). POST = run the full self-check now.
+      if (req.url.startsWith('/api/dim/health')) {
+        if (req.method === 'POST') return json(await dimSelfHeal(e, 'asked from Settings'));
+        return json(DIM_HEALTH);
       }
       if (req.url.startsWith('/api/auto')) {
         // thresholds (comboFloor) feed the per-copy rollScore baked into the weapons cache
@@ -3178,6 +3268,19 @@ async function main() {
     finally { buildsBusy = false; }
   }
   setInterval(() => { checkBuilds().catch(() => {}); }, 60000);
+
+  // Automatic DIM health (Diego 2026-08-29: "fully automate this troubleshooting"). One check
+  // shortly after boot so a broken sync is found and repaired before he ever opens a page, then
+  // every 15 minutes. dimSelfHeal is a no-op when the last check was healthy and recent, so this
+  // costs one cheap call an hour in the normal case.
+  if (e) {
+    setTimeout(() => { dimSelfHeal(e, 'startup').catch(() => {}); }, 20000);
+    setInterval(() => {
+      if (DIM_OFF) return;                                  // DIM was never set up here
+      if (DIM_HEALTH.ok && Date.now() - DIM_HEALTH.at < 3600000) return;   // healthy and recent
+      dimSelfHeal(e, 'periodic').catch(() => {});
+    }, 900000);
+  }
 
   // Auto-manage cadence (Diego 2026-07-12, "save API calls"): while Destiny is RUNNING,
   // pace by where you are — IN an activity the tick is just the cheap 1-call activity

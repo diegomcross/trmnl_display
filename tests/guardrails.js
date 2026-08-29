@@ -252,6 +252,27 @@ async function fetchOk(url, ms) {
     read('dim-doctor.js') !== null && read('DIM-DOCTOR.cmd') !== null);
   has('banner.js', "'DIM sync error'", 'a DIM failure is named in the chip, not just a red dot');
 
+  // ---- DIM troubleshooting is AUTOMATIC (Diego 2026-08-29) ---------------------------------
+  // "I want you to fully automate this troubleshooting so you can do without my intervention."
+  // The server must diagnose and repair itself; nothing may require Diego to run a command
+  // except the one case no code can fix (his Bungie login lapsing).
+  check('dim-diagnose.js is the single shared diagnosis', read('dim-diagnose.js') !== null);
+  has('vault-verdict.js', "import { diagnose, fixText, FIX } from './dim-diagnose.js'",
+    'the server uses the SAME diagnosis as the command line (they cannot drift)');
+  has('dim-doctor.js', "from './dim-diagnose.js'", 'the command line is a thin shell over that module');
+  has('vault-verdict.js', 'async function dimSelfHeal', 'the server repairs DIM by itself');
+  has('vault-verdict.js', 'async function dimReregisterApp', 'it can re-register a dead DIM app unattended');
+  has('vault-verdict.js', /dimSelfHeal\(e, 'startup'\)/, 'a self-check runs shortly after boot');
+  has('vault-verdict.js', /dimSelfHeal\(e, 'periodic'\)/, 'and keeps running on a timer');
+  has('vault-verdict.js', /setTimeout\(\(\) => \{ dimSelfHeal\(e, `401/,
+    'a 401 that survives a re-auth triggers the self-check automatically');
+  has('vault-verdict.js', "req.url.startsWith('/api/dim/health')", 'DIM health is readable without running anything');
+  has('vault-verdict.js', 'DIM_APP_FILE + \'.bak\'', 're-registering keeps the old DIM app file as a .bak');
+  has('settings.html', 'id="dimCard"', 'Settings shows DIM health so nothing has to be typed');
+  has('settings.html', "fetch('/api/dim/health'", 'the card reads the live verdict');
+  hasNot('vault-verdict.js', /run: node dim-doctor\.js/,
+    'the server no longer tells Diego to run a command for something it fixes itself');
+
   // ---- static assets are cached, not re-read and re-sent on every hit ----------------------
   has('vault-verdict.js', 'const sendStatic', 'vault server caches static assets in memory');
   has('vault-verdict.js', "ETag: rec.tag", 'vault server sends an ETag so repeats get a 304');

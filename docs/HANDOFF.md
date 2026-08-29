@@ -79,7 +79,8 @@ Core priorities, in his words:
 | `weapon-watch.html` | **Weapon Watch** god-roll tracker UI (served at `/weapons`): pick weapons, tag up to 6 perks (normal/★high priority), wanted masterwork + watched stats; scores every copy in the vault. Copies render as an **organized table** (score, columns 3/4, full stat names + MW badge, kills, location, actions — redesigned 2026-07-06, see "What works now"), direct tag chips, Select-multiple batch mode, smart Vault/Equip, no-jump perk selection. Config → `weapon-watch.json`, tags → `weapon-tags.json` (gitignored). |
 | `weapon-drops.html` | **New Drops dashboard** (served at `/drops`): visual cards for *fresh* drops of watched weapons — weapon art, rolled perk icons, masterwork icon, stats, score/🎯. Per-card actions: **Fav / Keep / Junk** tag chips (`/api/tag`, DIM vocab, active chip clears on re-tap) + Lock + smart Equip/→Vault + Seen. Perk hover popup (`perktip.js`, added 2026-07-09 — was the one page missing it) + PVE/PVP roll chip. Backed by `weapon-seen.json` (gitignored) + `/api/drops/ack`. |
 | `dim-probe.js` | One-off DIM Sync API check (gitignored). Diego runs `node dim-probe.js` to confirm two-way DIM sync works before it's built. |
-| `dim-doctor.js` + `DIM-DOCTOR.cmd` | **"Why isn't DIM syncing?" in one command** (2026-08-29). Read-only, prints no secrets. Decodes the DIM token's JWT locally (`sub` / `iss` / `exp` / `profileIds`) to catch ApiKeyMismatch, UnknownProfileId, a wrong-account token and expiry **without a network call**, then does one live `GET /profile` and maps DIM's error to the exact fix. Distinguishes a real DIM 401 (always carries a JSON `error`) from a proxy/VPN 403 (never does). Diego double-clicks the .cmd. |
+| `dim-diagnose.js` | **The DIM self-check, as one pure function** (2026-08-29). `diagnose(state)` returns `{ok, fix, summary, checks[]}`; it performs no side effects, so applying a fix stays in one reviewable place (`dimSelfHeal`). Catches ApiKeyMismatch, UnknownProfileId, a wrong-account token, DIM- and Bungie-token expiry **offline** by decoding the DIM JWT's `sub`/`iss`/`exp`/`profileIds`, then makes at most one live call. Tells a real DIM 401 (always carries a JSON `error`) from a proxy/VPN 403 (never does). **Shared by the server and the CLI so they cannot drift.** |
+| `dim-doctor.js` + `DIM-DOCTOR.cmd` | Thin command-line shell over `dim-diagnose.js`, for when the server will not start. Normally unnecessary — the server runs the same check itself. Read-only, prints no secrets. |
 | `fashion.html` | **Fashion loadouts** (served at `/fashion`): each character's equipped armor ornaments + shaders with icons; save named looks (`fashion.json`, gitignored) and re-apply them in one click. Apply requires the character to be in orbit. |
 | `theme.css` | **Shared visual theme AND the one page shell** for every Vault Verdict page (served at `/theme.css`, linked after each page's inline `<style>`). BrayTech/in-game look: ground `#101312`, hairline white borders, square tiles, Destiny rarity/energy colors, self-hosted **Arimo** (Helvetica/Neue-Haas twin) type, tabular numbers. **Since 2026-08-28 it also owns page LAYOUT**, not just tokens: `--page-max` (1240px), `--page-pad` (16px), `--page-bottom`, the `.page` content column, the full-bleed `.gb`/`.gb-nav` banner strips, and the `h1` / `.sub` / `.disp` sizing — no page sets a width or padding of its own any more. Pages share CSS-var names so this one file re-skins AND re-spaces everything — **edit design tokens and page geometry here, once.** Also styles the **item tiles** (`.wtile` weapon art, `.pkico` perk-icon tiles) that Weapon Watch renders from `/api/weapons` art — a token repaint alone did NOT read as BrayTech; the real look needed the actual weapon/perk artwork as rarity-framed square tiles. The e-ink display (`server.js`, 1-bit) is separate and unaffected. |
 | `fonts/arimo-*.woff2` | Self-hosted Arimo 400/500/700 (latin subset, Apache-2.0), served at `/fonts/`. Bundled so type is identical on every device incl. Android. |
@@ -489,6 +490,26 @@ Core priorities, in his words:
     this shared bar. Verified: banner + character-switch (Warlock ✦532 ↔ Titan ✦550) work on all
     pages, no content regressed. **Still open per Diego's ask** (surface, don't assume): a left
     filter rail (element/ammo/rarity like BrayTech) and a right power/currency rail — see NEXT_PHASE.
+  - **DIM troubleshooting is fully automatic (2026-08-29):** Diego — *"I want you to fully
+    automate this troubleshooting so you can do without my intervention."* Nothing about DIM now
+    requires him to run anything. `dim-diagnose.js` holds the whole diagnosis as one pure
+    function; `dimSelfHeal()` in the server runs it **20 seconds after boot, every 15 minutes,
+    and immediately whenever a DIM call fails**, applies the fix it can, and re-verifies by doing
+    a real tag read — so a healed sync is immediately correct, not merely quiet.
+    **What it repairs unattended:** a token DIM rejects (cleared, re-minted); a
+    `platformMembershipId` DIM refuses (corrected from the token's own `profileIds`); a token
+    issued for a different app or a different Bungie account (cleared); an unusable DIM app on
+    `OriginMismatch` (re-registered, old `.dim-app.json` kept as `.bak`).
+    **The one case it cannot fix** is Diego's Bungie login lapsing — no code can — and it says so
+    in plain words instead of a 401 in a log.
+    **Where he sees it:** a **DIM sync** card at the top of `/settings` showing Working / Repairing
+    itself / Needs you, when it last checked, and what the last automatic fix was, plus a "Check
+    now" button; `GET/POST /api/dim/health`; and the banner chip, which reads "DIM sync error"
+    rather than a vague red dot.
+    **Verified** against a stand-in DIM driving the real `dimSelfHeal`: a wrong profile id, a
+    mismatched app key and an `OriginMismatch` each repair themselves end-to-end and repopulate
+    the tag cache; an expired Bungie login is correctly reported as needing him. 12/12 assertions,
+    plus 9/9 on the 401-recovery path.
   - **DIM sync can recover from a rejected token, and says when it can't (2026-08-29):**
     Diego asked why DIM sync wasn't working. Read against DIM's own server source
     (`github.com/DestinyItemManager/dim-api`, commit `826bcc2`), the shape of the bug is this:

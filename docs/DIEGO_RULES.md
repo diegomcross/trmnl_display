@@ -311,6 +311,23 @@ Two more the same day, while the preview was being built:
   error"** in the banner chip, not just a red dot; (d) `dim-doctor.js` ships and any error
   message that tells the user to run something must name a file that actually exists.
 
+- **Troubleshooting is the app's job, not Diego's** (2026-08-29, verbatim: *"I want you to
+  fully automate this troubleshooting so you can do without my intervention."*). Never ship a
+  fix whose last step is "Diego runs a command". The server diagnoses itself (`dim-diagnose.js`,
+  shared by the server and the CLI so they cannot drift), repairs what it safely can unattended
+  (clear a rejected token, re-register a dead DIM app — old file kept as `.bak`), re-verifies by
+  doing the real work, and shows the verdict on the Settings page. The ONLY acceptable "needs
+  you" outcome is one no code can fix — his Bungie login lapsing — and it must say so in plain
+  words, not as an error code. This generalises beyond DIM: any new failure mode gets a
+  self-check and an automatic repair before it gets a troubleshooting instruction.
+- **Work Diego cannot see is not done** (2026-08-29, from: *"I can't find DIM-DOCTOR.cmd why are
+  you making so many mistakes?"*). He runs `main`. Four commits sat in an unmerged draft PR while
+  the agent gave him instructions — "double-click REBOOT.cmd", "run DIM-DOCTOR.cmd" — that could
+  not possibly work, because none of those files existed on his machine. Before telling him to do
+  ANYTHING with a file, confirm the file is on `main`. His CLAUDE.md says to push to `origin main`
+  when a piece of work is done; if a session is constrained to a branch instead, say so plainly
+  and get the PR merged rather than describing the work as if it had shipped.
+
 ## 7. Sharing the app (2026-07-17)
 
 - Diego's friend gets his OWN copy on his OWN PC — no hosted multi-user version.
