@@ -230,6 +230,28 @@ async function fetchOk(url, ms) {
     }
   }
 
+  // ---- DIM sync must be able to recover, and must say so when it can't (2026-08-29) --------
+  // Diego: "check the sync with DIM ... figure out why it's not working." Root cause was that
+  // DIM answers 401 for five different reasons (OriginMismatch / ApiKeyMismatch /
+  // UnknownProfileId / expired JWT / WebAuthRequired) and EVERY one of them leaves our cached
+  // token looking valid — it has not hit its expiry — so the server re-sent the same dead token
+  // every 30s forever and quietly served stale tags. Only a /setup re-login ever cleared it.
+  has('vault-verdict.js', 'async function dimCall', 'every DIM call goes through the 401-recovering wrapper');
+  has('vault-verdict.js', 'function dimForget', 'a rejected DIM token is thrown away, not reused');
+  has('vault-verdict.js', 'DIM_RETRY_AFTER', 'a token DIM refuses twice backs off instead of hammering');
+  has('vault-verdict.js', 'function dimJwt', 'the DIM token is decoded so we can agree with DIM about the profile');
+  has('vault-verdict.js', /allowed\.includes\(String\(pid\)\)/,
+    'platformMembershipId is reconciled against the token profileIds (no silent UnknownProfileId)');
+  for (const call of ['\'read\'', '\'write\'', '\'bulk write\'', '\'loadouts\'']) {
+    check('DIM ' + call.replace(/\\?'/g, '') + ' is routed through dimCall',
+      (read('vault-verdict.js') || '').includes('], ' + call + ');'));
+  }
+  hasNot('vault-verdict.js', /const \{ key, token, pid \} = await dimAuth\(e\);\s*\n\s*const res = await fetch/,
+    'no DIM call bypasses dimCall by calling dimAuth + fetch directly');
+  check('dim-doctor.js ships (the error message points users at a file that exists)',
+    read('dim-doctor.js') !== null && read('DIM-DOCTOR.cmd') !== null);
+  has('banner.js', "'DIM sync error'", 'a DIM failure is named in the chip, not just a red dot');
+
   // ---- static assets are cached, not re-read and re-sent on every hit ----------------------
   has('vault-verdict.js', 'const sendStatic', 'vault server caches static assets in memory');
   has('vault-verdict.js', "ETag: rec.tag", 'vault server sends an ETag so repeats get a 304');

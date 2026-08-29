@@ -310,9 +310,23 @@ let DIM_OFF = false;      // set true if DIM has no app key so we stop trying
 let DIM_LAST_ERR = '';    // last DIM read failure (surfaced by /api/status — console output is easy to miss)
 const dimKey = () => { try { return JSON.parse(fs.readFileSync(DIM_APP_FILE, 'utf8')).dimApiKey; } catch { return null; } };
 
+// The DIM token is a JWT; its middle segment is base64url JSON we can read with no secret.
+// It carries `profileIds` — the ONLY Destiny profiles DIM will answer for with this token
+// (api/routes/profile.ts -> checkPlatformMembershipId). Reading it lets us agree with DIM
+// about which profile to ask for, instead of guessing and getting 401 UnknownProfileId.
+function dimJwt(token) {
+  try {
+    return JSON.parse(Buffer.from(String(token).split('.')[1].replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8'));
+  } catch { return null; }
+}
+// Throw away a token DIM has rejected so the next call mints a fresh one.
+function dimForget() { try { fs.unlinkSync(DIM_TOKEN_FILE); } catch {} }
+// After a 401 that survives one re-auth, stop hammering DIM (and Bungie) for a while.
+let DIM_RETRY_AFTER = 0;
+
 async function dimAuth(e) {
   const key = dimKey();
-  if (!key) { DIM_OFF = true; throw new Error('DIM not set up (.dim-app.json missing) — run dim-probe.js'); }
+  if (!key) { DIM_OFF = true; throw new Error('DIM not set up (.dim-app.json missing) — open /setup step 3, or run: node dim-doctor.js'); }
   try { const t = JSON.parse(fs.readFileSync(DIM_TOKEN_FILE, 'utf8')); if (t.token && Date.now() < t.exp - 60000) return { key, token: t.token, pid: t.pid }; } catch {}
   const tok = await accessToken(e);
   const ms = await bungie(`${BASE}/User/GetMembershipsById/${tok.membership_id}/254/`, e, tok.access_token);
@@ -325,16 +339,53 @@ async function dimAuth(e) {
   const j = await res.json().catch(() => ({}));
   if (!j.accessToken) throw new Error(`DIM auth: ${j.error || res.status} ${j.message || ''}`);
   const exp = Date.now() + (j.expiresInSeconds ? j.expiresInSeconds * 1000 : 29 * 864e5);
-  fs.writeFileSync(DIM_TOKEN_FILE, JSON.stringify({ token: j.accessToken, exp, pid }));
-  return { key, token: j.accessToken, pid };
+  // Reconcile the profile id with the one DIM just told us it will accept. We pick `pid` from
+  // primaryMembershipId (else the first membership Bungie lists), but with cross-save — or a
+  // leftover membership from an old platform — that can be a profile DIM refuses, and every
+  // later call would 401 UnknownProfileId with no way to self-correct. The token's profileIds
+  // are authoritative and sorted primary-first, so trust them when they disagree.
+  let usePid = pid;
+  const claims = dimJwt(j.accessToken);
+  const allowed = (claims && Array.isArray(claims.profileIds)) ? claims.profileIds : [];
+  if (allowed.length && !allowed.includes(String(pid))) {
+    console.warn(`DIM: profile ${pid} is not one DIM accepts (${allowed.join(', ')}) — using ${allowed[0]}`);
+    usePid = allowed[0];
+  }
+  fs.writeFileSync(DIM_TOKEN_FILE, JSON.stringify({ token: j.accessToken, exp, pid: usePid }));
+  return { key, token: j.accessToken, pid: usePid };
+}
+
+// Every DIM call goes through here. DIM answers 401 for five different reasons (OriginMismatch,
+// ApiKeyMismatch, UnknownProfileId, an expired/invalid JWT, WebAuthRequired) and ALL of them
+// leave our cached token looking perfectly valid — it has not hit its expiry. Before this,
+// the server re-sent the same dead token every 30s indefinitely and quietly served stale tags;
+// only a re-login through /setup ever cleared it. Now a 401 drops the token and re-auths once.
+// `build(auth)` returns [url, init] so the retry uses the FRESH key/token/pid, not the old ones.
+async function dimCall(e, build, label) {
+  if (Date.now() < DIM_RETRY_AFTER) throw new Error(DIM_LAST_ERR || `DIM ${label}: backing off after repeated 401s`);
+  let auth = await dimAuth(e);
+  let res = await fetch(...build(auth));
+  if (res.status !== 401) return { res, auth };
+  const first = await res.clone().json().catch(() => ({}));
+  console.warn(`DIM ${label}: 401 ${first.error || ''} — dropping the cached token and re-authenticating once`);
+  dimForget();
+  auth = await dimAuth(e);
+  res = await fetch(...build(auth));
+  if (res.status === 401) {
+    const again = await res.clone().json().catch(() => ({}));
+    DIM_RETRY_AFTER = Date.now() + 600000;   // 10 min: a fresh token was refused too, so retrying now is pointless
+    DIM_LAST_ERR = `DIM ${label}: 401 ${again.error || ''} even with a brand-new token — run: node dim-doctor.js`;
+    console.warn(DIM_LAST_ERR);
+  }
+  return { res, auth };
 }
 
 let DIM_NOTES = {};       // instanceId -> DIM note text (read-only cache; preserved on tag writes)
 async function dimReadTags(e) {
-  const { key, token, pid } = await dimAuth(e);
-  const res = await fetch(`${DIM_API}/profile?platformMembershipId=${pid}&destinyVersion=2&components=tags`, {
-    headers: { 'X-API-Key': key, Authorization: `Bearer ${token}`, Origin: DIM_ORIGIN },
-  });
+  const { res } = await dimCall(e, ({ key, token, pid }) => [
+    `${DIM_API}/profile?platformMembershipId=${pid}&destinyVersion=2&components=tags`,
+    { headers: { 'X-API-Key': key, Authorization: `Bearer ${token}`, Origin: DIM_ORIGIN } },
+  ], 'read');
   const j = await res.json().catch(() => ({}));
   if (!Array.isArray(j.tags)) throw new Error(`DIM read: ${j.error || res.status}`);
   const out = {}, notes = {};
@@ -350,7 +401,7 @@ async function dimReadTags(e) {
     for (const id of Object.keys(prev)) if (!out[id]) changes.push({ id, from: prev[id], to: 'none', src: 'dim' });
     logTagHistory(changes);
   }
-  DIM_TAGS = out; DIM_NOTES = notes; DIM_TAGS_AT = Date.now(); DIM_LAST_ERR = '';
+  DIM_TAGS = out; DIM_NOTES = notes; DIM_TAGS_AT = Date.now(); DIM_LAST_ERR = ''; DIM_RETRY_AFTER = 0;
   saveJsonSafe(TAGS_FILE, out); // mirror to disk as an offline fallback
   return out;
 }
@@ -365,13 +416,12 @@ async function dimTagsFresh(e, maxAgeMs = 30000) {
 }
 
 async function dimWriteTag(e, id, tag, notes) {
-  const { key, token, pid } = await dimAuth(e);
   const payload = { id, tag: (tag && tag !== 'none') ? tag : null };
   if (notes !== undefined) payload.notes = notes;   // only sent when we mean to set it — omitted = DIM keeps the existing note
-  const res = await fetch(`${DIM_API}/profile`, {
+  const { res } = await dimCall(e, ({ key, token, pid }) => [`${DIM_API}/profile`, {
     method: 'POST', headers: { 'Content-Type': 'application/json', 'X-API-Key': key, Authorization: `Bearer ${token}`, Origin: DIM_ORIGIN },
     body: JSON.stringify({ platformMembershipId: pid, destinyVersion: 2, updates: [{ action: 'tag', payload }] }),
-  });
+  }], 'write');
   const j = await res.json().catch(() => ({}));
   if (res.status !== 200) throw new Error(`DIM write ${res.status}: ${JSON.stringify(j).slice(0, 140)}`);
   if (payload.tag) DIM_TAGS[id] = payload.tag; else delete DIM_TAGS[id];
@@ -387,16 +437,15 @@ async function dimWriteTag(e, id, tag, notes) {
 // than throwing so the caller can mark exactly the un-written tail as failed — otherwise a
 // failure on chunk 3 would make the undo journal disown chunks 1 and 2, which really did write.
 async function dimWriteTagsBulk(e, entries, chunk = 100) {
-  const { key, token, pid } = await dimAuth(e);
   let ok = 0;
   for (let i = 0; i < entries.length; i += chunk) {
     const slice = entries.slice(i, i + chunk);
     const updates = slice.map(({ id, tag }) => ({ action: 'tag', payload: { id, tag: (tag && tag !== 'none') ? tag : null } }));
     try {
-      const res = await fetch(`${DIM_API}/profile`, {
+      const { res } = await dimCall(e, ({ key, token, pid }) => [`${DIM_API}/profile`, {
         method: 'POST', headers: { 'Content-Type': 'application/json', 'X-API-Key': key, Authorization: `Bearer ${token}`, Origin: DIM_ORIGIN },
         body: JSON.stringify({ platformMembershipId: pid, destinyVersion: 2, updates }),
-      });
+      }], 'bulk write');
       const j = await res.json().catch(() => ({}));
       if (res.status !== 200) throw new Error(`DIM bulk write ${res.status}: ${JSON.stringify(j).slice(0, 140)}`);
       for (const { id, tag } of slice) { if (tag && tag !== 'none') DIM_TAGS[id] = tag; else delete DIM_TAGS[id]; }
@@ -411,10 +460,10 @@ async function dimWriteTagsBulk(e, entries, chunk = 100) {
 // stay untouched. The Sync API returns a flat loadouts[] array; the dim-data.json export
 // wraps each as {loadout:{...}} — parse both defensively.
 async function dimReadLoadouts(e) {
-  const { key, token, pid } = await dimAuth(e);
-  const res = await fetch(`${DIM_API}/profile?platformMembershipId=${pid}&destinyVersion=2&components=loadouts`, {
-    headers: { 'X-API-Key': key, Authorization: `Bearer ${token}`, Origin: DIM_ORIGIN },
-  });
+  const { res } = await dimCall(e, ({ key, token, pid }) => [
+    `${DIM_API}/profile?platformMembershipId=${pid}&destinyVersion=2&components=loadouts`,
+    { headers: { 'X-API-Key': key, Authorization: `Bearer ${token}`, Origin: DIM_ORIGIN } },
+  ], 'loadouts');
   const j = await res.json().catch(() => ({}));
   if (!Array.isArray(j.loadouts)) throw new Error(`DIM loadouts: ${j.error || res.status}`);
   return j.loadouts.map((l) => (l && l.loadout) ? l.loadout : l);
@@ -2751,7 +2800,7 @@ async function main() {
         // token belongs to the PREVIOUS Bungie login, so it must be re-minted too.
         wcache = null; cache = null;
         try { fs.unlinkSync(DIM_TOKEN_FILE); } catch {}
-        DIM_TAGS = {}; DIM_TAGS_AT = 0; DIM_OFF = false; DIM_LAST_ERR = '';
+        DIM_TAGS = {}; DIM_TAGS_AT = 0; DIM_OFF = false; DIM_LAST_ERR = ''; DIM_RETRY_AFTER = 0;
         let name = '';
         try {
           const ms = await bungie(`${BASE}/User/GetMembershipsById/${t.membership_id}/254/`, x, t.access_token);

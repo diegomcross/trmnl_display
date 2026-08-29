@@ -299,6 +299,18 @@ Two more the same day, while the preview was being built:
   and above all the e-ink render itself (`render.js` → SVG → 1-bit BMP → the panel). Do not
   touch the terminal's screen or its pages again without him asking, in those words, first.
 
+- **DIM sync must never fail silently** (2026-08-29, from: *"check the sync with DIM, open DIM,
+  check the API, figure out why it's not working."*). DIM answers **401 for five different
+  reasons** (OriginMismatch, ApiKeyMismatch, UnknownProfileId, an expired/invalid JWT,
+  WebAuthRequired) and every one of them leaves our cached token looking valid, because it has
+  not reached its expiry. The server used to re-send that dead token every 30s forever while
+  quietly serving stale tags; only a `/setup` re-login cleared it. Rules now: (a) a 401 drops
+  the token and re-authenticates **once**, then backs off 10 minutes rather than hammering;
+  (b) the `platformMembershipId` is reconciled against the token's own `profileIds`, because
+  with cross-save our guess can be a profile DIM refuses; (c) a DIM failure says **"DIM sync
+  error"** in the banner chip, not just a red dot; (d) `dim-doctor.js` ships and any error
+  message that tells the user to run something must name a file that actually exists.
+
 ## 7. Sharing the app (2026-07-17)
 
 - Diego's friend gets his OWN copy on his OWN PC — no hosted multi-user version.

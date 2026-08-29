@@ -88,8 +88,11 @@
     const act = status.activity;
     const actTxt = !status.gameUp ? ''
       : (act && act.name ? ' · ' + act.name : (act && act.safe === false ? ' · in activity' : ''));
-    c.textContent = 'Updated ' + ago(age) + actTxt;
-    c.title = (dimErr ? 'DIM sync problem: ' + dimErr + '\n' : '')
+    // A DIM failure used to show only as a red dot, which reads as "data is a bit old" —
+    // that is how sync stayed broken for weeks without anyone noticing (Diego 2026-08-29).
+    // Say it in words. The tooltip carries the actual DIM error and what to run.
+    c.textContent = dimErr ? 'DIM sync error' : 'Updated ' + ago(age) + actTxt;
+    c.title = (dimErr ? 'DIM sync problem: ' + dimErr + '\nRun:  node dim-doctor.js  (or double-click DIM-DOCTOR.cmd)\n\n' : '')
       + 'Inventory pulled from Bungie ' + ago(age)
       + (status.gameUp
           ? (act ? '\nActivity: ' + (act.name || 'hash ' + act.hash) + (act.safe ? ' (safe — orbit/social)' : ' (in activity)') + ', checked ' + ago(Date.now() - act.at) : '\nDestiny running — activity not checked yet')

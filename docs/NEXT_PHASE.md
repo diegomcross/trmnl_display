@@ -34,6 +34,41 @@ optimization list that came out of it: *"approved, proceed."*
 a `var(--x)` nothing defines, re-reads HTML off disk per request, or reverts the display server's
 pages to their own styling.
 
+## DIM sync — root cause found and fixed, ONE THING LEFT FOR DIEGO (2026-08-29)
+
+Diego: *"check the sync with DIM, open DIM, check the API, figure out why it's not working."*
+
+**Found and shipped** (detail in HANDOFF): DIM answers 401 for five different reasons, none of
+which made our cached token look invalid, so the server re-sent a dead token every 30s forever
+and served stale tags in silence. Every DIM call now recovers from a 401 once and backs off
+after; the `platformMembershipId` is reconciled against the token's own `profileIds`; the banner
+chip says **"DIM sync error"** instead of showing a vague red dot; and `dim-doctor.js` ships.
+
+**BLOCKED: awaiting Diego — one command.** The agent sandbox cannot reach
+`api.destinyitemmanager.com` (the environment's network policy 403s it at the proxy) and has no
+copy of his `.dim-app.json` / `.dim-token.json` / `tokens.json`, so **which** of the five modes
+he is actually hitting could not be confirmed from here. He needs to run, on his PC:
+
+```
+node dim-doctor.js          (or double-click DIM-DOCTOR.cmd)
+```
+
+It is read-only and prints no secrets, so the whole output can be pasted straight into the chat.
+Sections 1–3 are offline checks that already pin down ApiKeyMismatch, UnknownProfileId, a
+wrong-account token, an expired DIM token and an expired Bungie refresh token; section 4 makes
+one live call and names the fix for whatever DIM answers.
+
+**Prior art worth knowing:** sync last verified working **2026-07-03** ("992 tags read"). The DIM
+token is a **30-day** JWT, so that one expired around 2026-08-02. Re-minting needs a live Bungie
+**refresh** token (90 days) — if his Bungie login lapsed, `dim-doctor.js` section 1 says so
+immediately and the fix is `/setup` step 2, not anything DIM-side.
+
+**Still open from before, unchanged:** `auto-manage.json` has `enabled: true` and the weapons
+Auto-Manager ticks every minute, against his standing rule that it stays off (DIEGO_RULES §3) —
+**BLOCKED: awaiting Diego**. Worth resolving alongside the DIM work, since an Auto-Manager acting
+on stale tags is exactly the combination that produced the unexplained 2026-08-23 mass junk-tag.
+
+---
 **Next — nothing here is started, and none of it is requested work:**
 
 1. **Diego to eyeball it on his PC.** The 8787 pages need only a hard refresh (Ctrl+F5).

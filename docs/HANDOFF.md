@@ -79,6 +79,7 @@ Core priorities, in his words:
 | `weapon-watch.html` | **Weapon Watch** god-roll tracker UI (served at `/weapons`): pick weapons, tag up to 6 perks (normal/★high priority), wanted masterwork + watched stats; scores every copy in the vault. Copies render as an **organized table** (score, columns 3/4, full stat names + MW badge, kills, location, actions — redesigned 2026-07-06, see "What works now"), direct tag chips, Select-multiple batch mode, smart Vault/Equip, no-jump perk selection. Config → `weapon-watch.json`, tags → `weapon-tags.json` (gitignored). |
 | `weapon-drops.html` | **New Drops dashboard** (served at `/drops`): visual cards for *fresh* drops of watched weapons — weapon art, rolled perk icons, masterwork icon, stats, score/🎯. Per-card actions: **Fav / Keep / Junk** tag chips (`/api/tag`, DIM vocab, active chip clears on re-tap) + Lock + smart Equip/→Vault + Seen. Perk hover popup (`perktip.js`, added 2026-07-09 — was the one page missing it) + PVE/PVP roll chip. Backed by `weapon-seen.json` (gitignored) + `/api/drops/ack`. |
 | `dim-probe.js` | One-off DIM Sync API check (gitignored). Diego runs `node dim-probe.js` to confirm two-way DIM sync works before it's built. |
+| `dim-doctor.js` + `DIM-DOCTOR.cmd` | **"Why isn't DIM syncing?" in one command** (2026-08-29). Read-only, prints no secrets. Decodes the DIM token's JWT locally (`sub` / `iss` / `exp` / `profileIds`) to catch ApiKeyMismatch, UnknownProfileId, a wrong-account token and expiry **without a network call**, then does one live `GET /profile` and maps DIM's error to the exact fix. Distinguishes a real DIM 401 (always carries a JSON `error`) from a proxy/VPN 403 (never does). Diego double-clicks the .cmd. |
 | `fashion.html` | **Fashion loadouts** (served at `/fashion`): each character's equipped armor ornaments + shaders with icons; save named looks (`fashion.json`, gitignored) and re-apply them in one click. Apply requires the character to be in orbit. |
 | `theme.css` | **Shared visual theme AND the one page shell** for every Vault Verdict page (served at `/theme.css`, linked after each page's inline `<style>`). BrayTech/in-game look: ground `#101312`, hairline white borders, square tiles, Destiny rarity/energy colors, self-hosted **Arimo** (Helvetica/Neue-Haas twin) type, tabular numbers. **Since 2026-08-28 it also owns page LAYOUT**, not just tokens: `--page-max` (1240px), `--page-pad` (16px), `--page-bottom`, the `.page` content column, the full-bleed `.gb`/`.gb-nav` banner strips, and the `h1` / `.sub` / `.disp` sizing — no page sets a width or padding of its own any more. Pages share CSS-var names so this one file re-skins AND re-spaces everything — **edit design tokens and page geometry here, once.** Also styles the **item tiles** (`.wtile` weapon art, `.pkico` perk-icon tiles) that Weapon Watch renders from `/api/weapons` art — a token repaint alone did NOT read as BrayTech; the real look needed the actual weapon/perk artwork as rarity-framed square tiles. The e-ink display (`server.js`, 1-bit) is separate and unaffected. |
 | `fonts/arimo-*.woff2` | Self-hosted Arimo 400/500/700 (latin subset, Apache-2.0), served at `/fonts/`. Bundled so type is identical on every device incl. Android. |
@@ -488,6 +489,33 @@ Core priorities, in his words:
     this shared bar. Verified: banner + character-switch (Warlock ✦532 ↔ Titan ✦550) work on all
     pages, no content regressed. **Still open per Diego's ask** (surface, don't assume): a left
     filter rail (element/ammo/rarity like BrayTech) and a right power/currency rail — see NEXT_PHASE.
+  - **DIM sync can recover from a rejected token, and says when it can't (2026-08-29):**
+    Diego asked why DIM sync wasn't working. Read against DIM's own server source
+    (`github.com/DestinyItemManager/dim-api`, commit `826bcc2`), the shape of the bug is this:
+    `GET/POST /profile` answers **401** for five distinct reasons — `OriginMismatch`,
+    `ApiKeyMismatch`, `UnknownProfileId`, an expired/invalid JWT, and `WebAuthRequired` — and
+    **none of them make our cached token look invalid**, because `dimAuth` only checked its
+    `exp`. So the server re-sent the same dead token every 30 seconds indefinitely,
+    `dimTagsFresh` swallowed the error into `DIM_LAST_ERR`, and the app went on serving the
+    cached tag map. The only thing that ever cleared `.dim-token.json` was a re-login through
+    `/setup`. **Sync could be dead for weeks and the UI looked normal.**
+    **Fixed:** every DIM call now goes through `dimCall()`, which on a 401 drops the token,
+    re-authenticates once, and retries; if a *brand-new* token is refused too it sets a 10-minute
+    `DIM_RETRY_AFTER` backoff and writes a `DIM_LAST_ERR` naming `dim-doctor.js`, instead of
+    hammering DIM and Bungie. A successful read clears the backoff.
+    **Also fixed — the wrong-profile trap:** `dimAuth` picks `platformMembershipId` from
+    `primaryMembershipId`, else the first membership Bungie lists. DIM only accepts a profile in
+    the token's `profileIds` (`api/utils.ts` → `checkPlatformMembershipId`), and with cross-save
+    or a leftover membership from an old platform those can differ — a permanent 401 with no way
+    to self-correct. The token is a JWT, so `dimAuth` now decodes it (no secret needed) and, when
+    our pick isn't in `profileIds`, uses the profile DIM named (they arrive primary-first).
+    **Verified** against a stand-in DIM server exercising the real `dimAuth`/`dimCall`: a 401 on
+    a cached token self-heals and reads its tags; a refused profile id is corrected to the one
+    DIM named; a persistently-refused token re-auths exactly once, stops after two attempts, and
+    the backoff suppresses further calls. 9/9 assertions.
+    **And made visible:** a DIM failure used to show only as a red dot on the "Updated" chip,
+    which reads as "data is a bit old" — that is how this went unnoticed. The chip now reads
+    **"DIM sync error"** with the DIM error and the fix in its tooltip.
   - **ONE page shell for every page (2026-08-28, `theme.css` + `banner.js` + `<main class="page">`):**
     Diego: *"make them all consistent, banner size, positioning, right now every page behaves like an
     independent style and this is ugly."* He was right — every page used to set its **own**
