@@ -76,3 +76,5 @@ combos-test.json
 perks-test.json
 armor-apply-history.json
 armor-apply-history.json.bak
+watchdog.log
+watchdog.log.old

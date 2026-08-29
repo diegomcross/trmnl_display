@@ -214,3 +214,10 @@ chose:
 
 > "YOU SHOULD ALWAYS USE THE LOCAL COPY IN MY COMPUTER TO MAKE CHANGES SO EVERYTHING IS ALWAYS
 > UPTODATE AND YOU CONTROL REBOOTS AS WELL, NO INTERVENTION FROM ME NEEDED"
+
+---
+
+**2026-08-29** — on always-on behaviour:
+
+> "something else you have to fix. App is crashing instead of staying live all the time. And cmd
+> window stay open instead of disappearing from my taskbar"

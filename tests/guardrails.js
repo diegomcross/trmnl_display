@@ -133,6 +133,16 @@ async function fetchOk(url, ms) {
   // different mechanism — so these two checks assert the RULE, not the old implementation.
   has('theme.css', /\.gb-in\{[^}]*max-width:var\(--page-max\)/,
     'the banner is centred at ONE fixed width on every page');
+  has('REBOOT.cmd', 'Win32_Process',
+    'REBOOT.cmd spawns launchers via WMI so they outlive the shell that started them');
+  has('REBOOT.cmd', 'start-hidden.vbs',
+    'REBOOT.cmd launches through the VBS host so no console window is ever created');
+  has('REBOOT.cmd', 'ping -n 4 127.0.0.1',
+    'REBOOT.cmd waits without `timeout`, which fails when run non-interactively');
+  has('watchdog.ps1', 'Test-PortOpen',
+    'the watchdog checks real ports, not just whether a node process exists');
+  has('watchdog.ps1', 'has no launcher -- restarting it',
+    'the watchdog restarts a server whose keep-alive launcher also died');
   has('theme.css', /#gbanner\{/,
     'the banner breaks out of each page column so it is one size everywhere');
   has('vault-verdict.js', /const tags = await dimTagsFresh\(e\);            \/\/ id -> tag string/,

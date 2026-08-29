@@ -11,6 +11,19 @@ content -- quests, triumphs, titles) on a 7.5" 800x480 monochrome e-ink panel, a
 
 ---
 
+
+### Staying alive (2026-08-29)
+
+| file | role |
+|---|---|
+| `REBOOT.cmd` | restarts both servers. Spawns each launcher via WMI + `start-hidden.vbs` so it is hidden and outlives the calling shell. |
+| `start-hidden.vbs` | GUI-subsystem shim — runs a command with window style 0, so no console is ever allocated. |
+| `watchdog.ps1` | every 60s TCP-checks ports 3000/8787; relaunches a side that is down and has no launcher. `-Install` adds a hidden login item. Logs to `watchdog.log` (gitignored). |
+
+Three hidden login items now exist: **TRMNL D2 Display**, **TRMNL Vault Verdict**, **TRMNL Watchdog**.
+Recovery layers: node dies → its launcher loop restarts it; launcher dies → the watchdog restarts it;
+PC reboots → the login items start everything.
+
 ## DIEGO'S VISION (read this to understand the "why")
 
 The whole point of this project is an **at-a-glance, always-on progress board** for what

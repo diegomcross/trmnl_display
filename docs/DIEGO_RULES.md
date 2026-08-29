@@ -313,6 +313,30 @@ Two more the same day, while the preview was being built:
 
     **What did NOT change:** the Auto-Manager still stays `enabled:false` without his explicit go
     (§3), armor is still never auto-tagged (§4), and Apply is still his button to press.
+
+### 4h. Always-on means always-on (2026-08-29)
+
+23. **Never launch the servers as a child of the calling shell.** `REBOOT.cmd` used
+    `start "" powershell -WindowStyle Hidden -File start-vault.ps1`. Two defects:
+    (a) `start` allocates a **new console** before PowerShell runs, so a `conhost.exe` is created
+    and lives as long as the launcher — that is the window stuck in Diego’s taskbar;
+    (b) the launchers become descendants of whoever ran REBOOT.cmd, so they can be taken down
+    with that process tree (a Windows job-object kill), which is how an agent reboot can leave
+    his app dead.
+    **Fix:** spawn through `Invoke-CimMethod Win32_Process Create` (created by WmiPrvSE, so
+    outside the caller’s job) running `wscript.exe start-hidden.vbs`, a GUI-subsystem host that
+    never gets a console. Verified 2026-08-29: 0 visible windows owned by any of our processes.
+
+24. **A dead launcher must self-heal.** The keep-alive loops restart *node*, but nothing restarted
+    a dead *launcher* — the Startup login item only fires at login, so a launcher lost mid-session
+    stayed lost until the next PC reboot or a manual REBOOT.cmd. `watchdog.ps1` now checks ports
+    3000 and 8787 every 60s (a real TCP connect, not a process-name check) and relaunches only the
+    side that is down, detached and hidden, after two consecutive misses. Installed as its own
+    hidden login item. **Verified by killing the vault server AND its launcher: recovered by itself
+    in 90 seconds.** `watchdog.log` records every action.
+
+25. **`timeout` cannot be used in a .cmd the agent runs.** It reads the console and dies with
+    "Input redirection is not supported". REBOOT.cmd uses `ping -n 4 127.0.0.1 >nul` instead.
 ## 5. Perk lists & Perk Finder
 
 - **No exotic perks / frames / non-trait plugs in perk lists** (2026-07-04 commit
