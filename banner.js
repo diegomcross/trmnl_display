@@ -24,19 +24,28 @@
       ? `<span class="gb-dots">${acc.chars.map((x, i) =>
           `<button class="gdot${i === ci ? ' on' : ''}" data-i="${i}" title="${x.cls} · ✦${x.light}"><img src="${BN}${x.emblem}" alt=""></button>`).join('')}</span>`
       : '';
+    // Two full-bleed strips (see theme.css "page shell"): the nameplate, then the tab bar.
+    // .gb-in centres each strip's contents on the same --page-max/--page-pad as <main class="page">,
+    // so the banner, the <h1> and the content share one left edge on every page.
     el.innerHTML =
       `<div class="gb" style="${bg}">
-        <div class="gb-l">
-          ${c ? `<img class="gb-emb" src="${BN}${c.emblem}" alt="">` : ''}
-          <div class="gb-id">
-            <div class="gb-name">${acc ? acc.name : 'Guardian'}</div>
-            <div class="gb-sub">${c ? `<span class="gb-pow">✦ ${c.light}</span><span class="gb-cls">${c.cls}</span>` : ''}${dots}</div>
+        <div class="gb-in">
+          <div class="gb-l">
+            ${c ? `<img class="gb-emb" src="${BN}${c.emblem}" alt="">` : ''}
+            <div class="gb-id">
+              <div class="gb-name">${acc ? acc.name : 'Guardian'}</div>
+              <div class="gb-sub">${c ? `<span class="gb-pow">✦ ${c.light}</span><span class="gb-cls">${c.cls}</span>` : ''}${dots}</div>
+            </div>
           </div>
         </div>
-        <button class="gb-upd" id="gbupd" type="button" title="Data freshness — click to refresh now">…</button>
-        <nav class="gb-nav">${nav}</nav>
-      </div>`;
+      </div>
+      <nav class="gb-nav"><div class="gb-in">${nav}</div></nav>
+      <button class="gb-upd" id="gbupd" type="button" title="Data freshness — click to refresh now">…</button>`;
     paintChip();
+    // the tab strip is one non-wrapping row that scrolls sideways on a phone — make sure
+    // the section you're actually on is visible in it, whatever the screen width
+    const on = el.querySelector('.gnav-a.on');
+    if (on) try { on.scrollIntoView({ inline: 'center', block: 'nearest' }); } catch {}
     // let pages (e.g. Weapon Vault) react to the selected character
     if (c) {
       window.GBANNER = { cid: c.id, cls: c.cls };
@@ -79,8 +88,11 @@
     const act = status.activity;
     const actTxt = !status.gameUp ? ''
       : (act && act.name ? ' · ' + act.name : (act && act.safe === false ? ' · in activity' : ''));
-    c.textContent = 'Updated ' + ago(age) + actTxt;
-    c.title = (dimErr ? 'DIM sync problem: ' + dimErr + '\n' : '')
+    // A DIM failure used to show only as a red dot, which reads as "data is a bit old" —
+    // that is how sync stayed broken for weeks without anyone noticing (Diego 2026-08-29).
+    // Say it in words. The tooltip carries the actual DIM error and what to run.
+    c.textContent = dimErr ? 'DIM sync error' : 'Updated ' + ago(age) + actTxt;
+    c.title = (dimErr ? 'DIM sync problem: ' + dimErr + '\nRun:  node dim-doctor.js  (or double-click DIM-DOCTOR.cmd)\n\n' : '')
       + 'Inventory pulled from Bungie ' + ago(age)
       + (status.gameUp
           ? (act ? '\nActivity: ' + (act.name || 'hash ' + act.hash) + (act.safe ? ' (safe — orbit/social)' : ' (in activity)') + ', checked ' + ago(Date.now() - act.at) : '\nDestiny running — activity not checked yet')

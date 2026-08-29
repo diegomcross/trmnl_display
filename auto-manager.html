@@ -5,23 +5,12 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Auto-Manager — Weapon Watch</title>
 <style>
-:root{
-  --bg:#0c0e12; --panel:#151821; --panel2:#1b1f2b; --line:#2a2f3d;
-  --ink:#e9ebf2; --mut:#8b93a7; --dim:#5c6375;
-  --gold:#cfae42; --keep:#5fd0dd; --junk:#ff6a52;
-  --clip:polygon(10px 0,100% 0,100% calc(100% - 10px),calc(100% - 10px) 100%,0 100%,0 10px);
-}
+/* design tokens live in theme.css — this page had its own dead copy (2026-08-28) */
 *{box-sizing:border-box;margin:0;padding:0}
-body{background:var(--bg);color:var(--ink);font:15px/1.45 "Segoe UI",Roboto,system-ui,sans-serif;padding:12px;padding-bottom:48px}
-h1{font-size:22px;font-weight:600}
-h1 span{color:var(--gold)}
-.sub{color:var(--mut);font-size:12px;margin:2px 0 12px;max-width:820px}
-.wrap{max-width:900px;margin:0 auto}
-.card{background:var(--panel);border:1px solid var(--line);clip-path:var(--clip);padding:14px 16px;margin-bottom:14px}
+.wrap{max-width:900px}   /* comfortable form column, left-aligned with the banner */
+.card{padding:14px 16px;margin-bottom:14px}
 .card h2{font-size:13px;text-transform:uppercase;letter-spacing:.08em;color:var(--mut);font-weight:600;margin-bottom:10px}
-.btn{background:var(--panel2);border:1px solid var(--gold);color:var(--gold);padding:9px 15px;font-size:13px;cursor:pointer;clip-path:var(--clip);font-family:inherit}
-.btn:active{background:var(--gold);color:#000}
-.btn.mut{border-color:var(--line);color:var(--mut)}
+.btn{cursor:pointer}
 .btn:disabled{opacity:.5;cursor:default}
 .row{display:flex;gap:14px;flex-wrap:wrap;align-items:center}
 .row.sp{justify-content:space-between}
@@ -49,17 +38,17 @@ td{padding:6px 8px;border-bottom:1px solid var(--panel2);vertical-align:middle}
 .up{color:var(--gold);font-size:11px;font-weight:700}
 .err{color:var(--junk);font-size:11px}
 .empty{color:var(--dim);font-size:13px;padding:14px 4px}
-.note{font-size:13px;color:var(--ink)}
-.warn{color:var(--junk)}
+.note{font-size:13px}
 .thresh-help{font-size:11px;color:var(--dim);margin-top:8px;line-height:1.6}
 .thresh-help b{color:var(--mut)}
 </style>
+<link rel="stylesheet" href="/theme.css">
 </head>
 <body>
-<link rel="stylesheet" href="/theme.css">
 <div id="gbanner"></div>
+<main class="page">
 <div class="wrap">
-  <h1>Auto-<span>Manager</span></h1>
+  <h1 class="disp">Auto-<span>Manager</span></h1>
   <p class="sub">Automatically tags weapons keep / favorite / junk by score and stages junk on a character
   to dismantle — but only while Destiny is running and you're in orbit, a social space, or matchmaking
   (never mid-activity). Exotics, locked, and equipped weapons are never touched. There's no dismantle API,
@@ -265,5 +254,6 @@ $('previewBtn').onclick=()=>run(true);
 $('runBtn').onclick=()=>run(false);
 loadAll();
 </script>
+</main>
 </body>
 </html>

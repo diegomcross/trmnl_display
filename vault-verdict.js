@@ -17,6 +17,7 @@ import http from 'node:http';
 import path from 'node:path';
 import { exec } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { diagnose, fixText, FIX } from './dim-diagnose.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ENV_FILE = path.join(__dirname, '.env');
@@ -310,9 +311,23 @@ let DIM_OFF = false;      // set true if DIM has no app key so we stop trying
 let DIM_LAST_ERR = '';    // last DIM read failure (surfaced by /api/status — console output is easy to miss)
 const dimKey = () => { try { return JSON.parse(fs.readFileSync(DIM_APP_FILE, 'utf8')).dimApiKey; } catch { return null; } };
 
+// The DIM token is a JWT; its middle segment is base64url JSON we can read with no secret.
+// It carries `profileIds` — the ONLY Destiny profiles DIM will answer for with this token
+// (api/routes/profile.ts -> checkPlatformMembershipId). Reading it lets us agree with DIM
+// about which profile to ask for, instead of guessing and getting 401 UnknownProfileId.
+function dimJwt(token) {
+  try {
+    return JSON.parse(Buffer.from(String(token).split('.')[1].replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8'));
+  } catch { return null; }
+}
+// Throw away a token DIM has rejected so the next call mints a fresh one.
+function dimForget() { try { fs.unlinkSync(DIM_TOKEN_FILE); } catch {} }
+// After a 401 that survives one re-auth, stop hammering DIM (and Bungie) for a while.
+let DIM_RETRY_AFTER = 0;
+
 async function dimAuth(e) {
   const key = dimKey();
-  if (!key) { DIM_OFF = true; throw new Error('DIM not set up (.dim-app.json missing) — run dim-probe.js'); }
+  if (!key) { DIM_OFF = true; throw new Error('DIM has not been set up on this PC yet — open the setup page, step 3.'); }
   try { const t = JSON.parse(fs.readFileSync(DIM_TOKEN_FILE, 'utf8')); if (t.token && Date.now() < t.exp - 60000) return { key, token: t.token, pid: t.pid }; } catch {}
   const tok = await accessToken(e);
   const ms = await bungie(`${BASE}/User/GetMembershipsById/${tok.membership_id}/254/`, e, tok.access_token);
@@ -325,16 +340,127 @@ async function dimAuth(e) {
   const j = await res.json().catch(() => ({}));
   if (!j.accessToken) throw new Error(`DIM auth: ${j.error || res.status} ${j.message || ''}`);
   const exp = Date.now() + (j.expiresInSeconds ? j.expiresInSeconds * 1000 : 29 * 864e5);
-  fs.writeFileSync(DIM_TOKEN_FILE, JSON.stringify({ token: j.accessToken, exp, pid }));
-  return { key, token: j.accessToken, pid };
+  // Reconcile the profile id with the one DIM just told us it will accept. We pick `pid` from
+  // primaryMembershipId (else the first membership Bungie lists), but with cross-save — or a
+  // leftover membership from an old platform — that can be a profile DIM refuses, and every
+  // later call would 401 UnknownProfileId with no way to self-correct. The token's profileIds
+  // are authoritative and sorted primary-first, so trust them when they disagree.
+  let usePid = pid;
+  const claims = dimJwt(j.accessToken);
+  const allowed = (claims && Array.isArray(claims.profileIds)) ? claims.profileIds : [];
+  if (allowed.length && !allowed.includes(String(pid))) {
+    console.warn(`DIM: profile ${pid} is not one DIM accepts (${allowed.join(', ')}) — using ${allowed[0]}`);
+    usePid = allowed[0];
+  }
+  fs.writeFileSync(DIM_TOKEN_FILE, JSON.stringify({ token: j.accessToken, exp, pid: usePid }));
+  return { key, token: j.accessToken, pid: usePid };
+}
+
+// Every DIM call goes through here. DIM answers 401 for five different reasons (OriginMismatch,
+// ApiKeyMismatch, UnknownProfileId, an expired/invalid JWT, WebAuthRequired) and ALL of them
+// leave our cached token looking perfectly valid — it has not hit its expiry. Before this,
+// the server re-sent the same dead token every 30s indefinitely and quietly served stale tags;
+// only a re-login through /setup ever cleared it. Now a 401 drops the token and re-auths once.
+// `build(auth)` returns [url, init] so the retry uses the FRESH key/token/pid, not the old ones.
+async function dimCall(e, build, label) {
+  if (Date.now() < DIM_RETRY_AFTER) throw new Error(DIM_LAST_ERR || `DIM ${label}: backing off after repeated 401s`);
+  let auth = await dimAuth(e);
+  let res = await fetch(...build(auth));
+  if (res.status !== 401) return { res, auth };
+  const first = await res.clone().json().catch(() => ({}));
+  console.warn(`DIM ${label}: 401 ${first.error || ''} — dropping the cached token and re-authenticating once`);
+  dimForget();
+  auth = await dimAuth(e);
+  res = await fetch(...build(auth));
+  if (res.status === 401) {
+    const again = await res.clone().json().catch(() => ({}));
+    DIM_RETRY_AFTER = Date.now() + 600000;   // 10 min: a fresh token was refused too, so retrying now is pointless
+    DIM_LAST_ERR = `DIM ${label}: 401 ${again.error || ''} even with a brand-new token`;
+    console.warn(DIM_LAST_ERR + ' — running the automatic self-check');
+    // Don't await: the caller is mid-request. The self-check diagnoses, applies the fix it can,
+    // and re-verifies on its own; the next call picks up the repaired state.
+    setTimeout(() => { dimSelfHeal(e, `401 ${again.error || ''}`).catch(() => {}); }, 0);
+  }
+  return { res, auth };
+}
+
+// ---- automatic DIM troubleshooting (Diego 2026-08-29) --------------------------------------
+// "I want you to fully automate this troubleshooting so you can do without my intervention."
+// So nothing here asks him to run a command. When DIM misbehaves the server diagnoses itself
+// with the same module the dim-doctor command uses, applies whatever fix is safe to apply on
+// its own, and records the verdict for the Settings page and /api/dim/health. The only outcome
+// that still needs Diego is a lapsed BUNGIE login, which no amount of retrying can fix — and
+// that one is stated in plain words instead of a 401 buried in a log.
+let DIM_HEALTH = { at: 0, ok: null, summary: 'not checked yet', fix: FIX.NONE, action: '', checks: [] };
+let dimHealing = false;
+
+function dimState() {
+  const rd = (f) => { try { return JSON.parse(fs.readFileSync(f, 'utf8')); } catch { return null; } };
+  let envv = null; try { envv = env(); } catch {}
+  return {
+    env: envv, tokens: rd(TOKENS_FILE), app: rd(DIM_APP_FILE), token: rd(DIM_TOKEN_FILE),
+    mirrorCount: Object.keys(loadTags() || {}).length,
+  };
+}
+
+// Register a fresh DIM app. Only reached when DIM says the current key is unusable
+// (OriginMismatch). The old file is kept as .bak — nothing is destroyed.
+async function dimReregisterApp(e) {
+  const appId = 'vault-verdict-' + Math.random().toString(36).slice(2, 8);
+  const reg = await fetch(`${DIM_API}/new_app`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', Origin: DIM_ORIGIN },
+    body: JSON.stringify({ id: appId, bungieApiKey: e.BUNGIE_API_KEY, origin: DIM_ORIGIN }),
+  });
+  const rj = await reg.json().catch(() => ({}));
+  const k = rj?.app?.dimApiKey || rj?.dimApiKey;
+  if (!k) throw new Error(`DIM app registration failed (HTTP ${reg.status})`);
+  try { if (fs.existsSync(DIM_APP_FILE)) fs.copyFileSync(DIM_APP_FILE, DIM_APP_FILE + '.bak'); } catch {}
+  fs.writeFileSync(DIM_APP_FILE, JSON.stringify({ appId, dimApiKey: k }, null, 2));
+  dimForget();   // the old token was issued for the old app
+}
+
+// Diagnose, fix what we safely can, verify. Returns the final health record.
+async function dimSelfHeal(e, why = 'scheduled') {
+  if (dimHealing) return DIM_HEALTH;
+  dimHealing = true;
+  try {
+    let v = await diagnose({ ...dimState(), live: true, dimApi: DIM_API });
+    let action = '';
+    if (!v.ok) {
+      console.warn(`DIM self-check (${why}): ${v.summary}`);
+      if (v.fix === FIX.DROP_TOKEN) {
+        dimForget(); DIM_RETRY_AFTER = 0;
+        action = 'cleared the cached DIM login';
+      } else if (v.fix === FIX.REREGISTER_APP && e) {
+        try { await dimReregisterApp(e); DIM_RETRY_AFTER = 0; action = 're-registered the DIM app'; }
+        catch (err) { action = 'could not re-register the DIM app: ' + err.message; }
+      }
+      // Re-verify by doing the real thing: a tag read. That both proves the fix and
+      // repopulates the cache, so a healed sync is immediately correct rather than merely quiet.
+      if (action && !action.startsWith('could not')) {
+        try {
+          await dimReadTags(e);
+          v = { ok: true, fix: FIX.NONE, summary: 'Fixed automatically — DIM sync is working again.', checks: v.checks };
+          console.warn(`DIM self-check: ${action} — sync restored.`);
+        } catch (err) {
+          v = await diagnose({ ...dimState(), live: true, dimApi: DIM_API });
+          if (v.ok) v = { ...v, ok: false, summary: 'Still failing after an automatic fix: ' + err.message };
+        }
+      }
+    }
+    DIM_HEALTH = { at: Date.now(), ok: v.ok, summary: v.summary, fix: v.fix, action,
+                   advice: fixText(v.fix), checks: v.checks };
+    DIM_LAST_ERR = v.ok ? '' : v.summary;
+    return DIM_HEALTH;
+  } finally { dimHealing = false; }
 }
 
 let DIM_NOTES = {};       // instanceId -> DIM note text (read-only cache; preserved on tag writes)
 async function dimReadTags(e) {
-  const { key, token, pid } = await dimAuth(e);
-  const res = await fetch(`${DIM_API}/profile?platformMembershipId=${pid}&destinyVersion=2&components=tags`, {
-    headers: { 'X-API-Key': key, Authorization: `Bearer ${token}`, Origin: DIM_ORIGIN },
-  });
+  const { res } = await dimCall(e, ({ key, token, pid }) => [
+    `${DIM_API}/profile?platformMembershipId=${pid}&destinyVersion=2&components=tags`,
+    { headers: { 'X-API-Key': key, Authorization: `Bearer ${token}`, Origin: DIM_ORIGIN } },
+  ], 'read');
   const j = await res.json().catch(() => ({}));
   if (!Array.isArray(j.tags)) throw new Error(`DIM read: ${j.error || res.status}`);
   const out = {}, notes = {};
@@ -350,7 +476,7 @@ async function dimReadTags(e) {
     for (const id of Object.keys(prev)) if (!out[id]) changes.push({ id, from: prev[id], to: 'none', src: 'dim' });
     logTagHistory(changes);
   }
-  DIM_TAGS = out; DIM_NOTES = notes; DIM_TAGS_AT = Date.now(); DIM_LAST_ERR = '';
+  DIM_TAGS = out; DIM_NOTES = notes; DIM_TAGS_AT = Date.now(); DIM_LAST_ERR = ''; DIM_RETRY_AFTER = 0;
   saveJsonSafe(TAGS_FILE, out); // mirror to disk as an offline fallback
   return out;
 }
@@ -359,19 +485,24 @@ async function dimReadTags(e) {
 async function dimTagsFresh(e, maxAgeMs = 30000) {
   if (DIM_OFF) return DIM_TAGS;
   if (Date.now() - DIM_TAGS_AT > maxAgeMs) {
-    try { await dimReadTags(e); } catch (err) { DIM_LAST_ERR = err.message; console.warn('DIM read failed, using cached tags:', err.message); if (!Object.keys(DIM_TAGS).length) DIM_TAGS = loadTags(); }
+    try { await dimReadTags(e); } catch (err) {
+      DIM_LAST_ERR = err.message;
+      console.warn('DIM read failed, using cached tags:', err.message);
+      if (!Object.keys(DIM_TAGS).length) DIM_TAGS = loadTags();
+      // Diagnose + self-heal in the background rather than failing quietly until someone notices.
+      if (Date.now() - DIM_HEALTH.at > 300000) setTimeout(() => { dimSelfHeal(e, 'read failed').catch(() => {}); }, 0);
+    }
   }
   return DIM_TAGS;
 }
 
 async function dimWriteTag(e, id, tag, notes) {
-  const { key, token, pid } = await dimAuth(e);
   const payload = { id, tag: (tag && tag !== 'none') ? tag : null };
   if (notes !== undefined) payload.notes = notes;   // only sent when we mean to set it — omitted = DIM keeps the existing note
-  const res = await fetch(`${DIM_API}/profile`, {
+  const { res } = await dimCall(e, ({ key, token, pid }) => [`${DIM_API}/profile`, {
     method: 'POST', headers: { 'Content-Type': 'application/json', 'X-API-Key': key, Authorization: `Bearer ${token}`, Origin: DIM_ORIGIN },
     body: JSON.stringify({ platformMembershipId: pid, destinyVersion: 2, updates: [{ action: 'tag', payload }] }),
-  });
+  }], 'write');
   const j = await res.json().catch(() => ({}));
   if (res.status !== 200) throw new Error(`DIM write ${res.status}: ${JSON.stringify(j).slice(0, 140)}`);
   if (payload.tag) DIM_TAGS[id] = payload.tag; else delete DIM_TAGS[id];
@@ -387,16 +518,15 @@ async function dimWriteTag(e, id, tag, notes) {
 // than throwing so the caller can mark exactly the un-written tail as failed — otherwise a
 // failure on chunk 3 would make the undo journal disown chunks 1 and 2, which really did write.
 async function dimWriteTagsBulk(e, entries, chunk = 100) {
-  const { key, token, pid } = await dimAuth(e);
   let ok = 0;
   for (let i = 0; i < entries.length; i += chunk) {
     const slice = entries.slice(i, i + chunk);
     const updates = slice.map(({ id, tag }) => ({ action: 'tag', payload: { id, tag: (tag && tag !== 'none') ? tag : null } }));
     try {
-      const res = await fetch(`${DIM_API}/profile`, {
+      const { res } = await dimCall(e, ({ key, token, pid }) => [`${DIM_API}/profile`, {
         method: 'POST', headers: { 'Content-Type': 'application/json', 'X-API-Key': key, Authorization: `Bearer ${token}`, Origin: DIM_ORIGIN },
         body: JSON.stringify({ platformMembershipId: pid, destinyVersion: 2, updates }),
-      });
+      }], 'bulk write');
       const j = await res.json().catch(() => ({}));
       if (res.status !== 200) throw new Error(`DIM bulk write ${res.status}: ${JSON.stringify(j).slice(0, 140)}`);
       for (const { id, tag } of slice) { if (tag && tag !== 'none') DIM_TAGS[id] = tag; else delete DIM_TAGS[id]; }
@@ -411,10 +541,10 @@ async function dimWriteTagsBulk(e, entries, chunk = 100) {
 // stay untouched. The Sync API returns a flat loadouts[] array; the dim-data.json export
 // wraps each as {loadout:{...}} — parse both defensively.
 async function dimReadLoadouts(e) {
-  const { key, token, pid } = await dimAuth(e);
-  const res = await fetch(`${DIM_API}/profile?platformMembershipId=${pid}&destinyVersion=2&components=loadouts`, {
-    headers: { 'X-API-Key': key, Authorization: `Bearer ${token}`, Origin: DIM_ORIGIN },
-  });
+  const { res } = await dimCall(e, ({ key, token, pid }) => [
+    `${DIM_API}/profile?platformMembershipId=${pid}&destinyVersion=2&components=loadouts`,
+    { headers: { 'X-API-Key': key, Authorization: `Bearer ${token}`, Origin: DIM_ORIGIN } },
+  ], 'loadouts');
   const j = await res.json().catch(() => ({}));
   if (!Array.isArray(j.loadouts)) throw new Error(`DIM loadouts: ${j.error || res.status}`);
   return j.loadouts.map((l) => (l && l.loadout) ? l.loadout : l);
@@ -2462,6 +2592,37 @@ async function main() {
       .finally(() => { wFetching = null; });
     return wFetching;
   };
+  // ---- static-asset cache (2026-08-28) --------------------------------------------------
+  // Every page hit used to fs.readFileSync its HTML off disk, and theme.css / banner.js /
+  // perktip.js went out with NO Cache-Control at all — so switching tabs on the phone
+  // re-downloaded ~25KB of unchanged CSS+JS every single time. Now: read once, keep it in
+  // memory, re-read only when the file's mtime changes (so editing HTML/CSS still needs no
+  // restart), and send an ETag. The browser revalidates and normally gets a 304 with no body.
+  const STATIC = new Map();
+  const staticFile = (file) => {
+    const p = path.join(__dirname, file);
+    const st = fs.statSync(p);
+    const tag = '"' + st.mtimeMs.toString(36) + '-' + st.size.toString(36) + '"';
+    const hit = STATIC.get(file);
+    if (hit && hit.tag === tag) return hit;
+    const rec = { tag, buf: fs.readFileSync(p) };
+    STATIC.set(file, rec);
+    return rec;
+  };
+  // sendStatic returns true once it has answered the request.
+  const sendStatic = (req, res, file, type, cc) => {
+    let rec;
+    try { rec = staticFile(file); }
+    catch { res.writeHead(404); res.end('not found'); return true; }
+    // Default is short on purpose: Diego edits HTML/CSS and just hard-refreshes, no restart.
+    // HTML passes 'no-cache' (always revalidate — a 304 still saves the whole body).
+    const headers = { 'Content-Type': type, 'Cache-Control': cc || 'max-age=60, must-revalidate', ETag: rec.tag };
+    if (req.headers['if-none-match'] === rec.tag) { res.writeHead(304, headers); res.end(); return true; }
+    res.writeHead(200, headers);
+    res.end(req.method === 'HEAD' ? undefined : rec.buf);
+    return true;
+  };
+
   const server = http.createServer(async (req, res) => {
     try {
       const json = (obj) => { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(obj)); };
@@ -2475,7 +2636,11 @@ async function main() {
         // Lightweight heartbeat for the banner's "Updated" chip — NO Bungie/DIM calls.
         return json({
           weaponsAt: wcache ? wFetchedAt : 0, fetching: !!wFetching, gameUp,
-          dim: { off: DIM_OFF, at: DIM_TAGS_AT, err: DIM_LAST_ERR },
+          dim: { off: DIM_OFF, at: DIM_TAGS_AT, err: DIM_LAST_ERR,
+                 health: { at: DIM_HEALTH.at, ok: DIM_HEALTH.ok, summary: DIM_HEALTH.summary,
+                           advice: DIM_HEALTH.advice || '', action: DIM_HEALTH.action || '',
+                           needsYou: DIM_HEALTH.fix === FIX.RELOGIN_BUNGIE || DIM_HEALTH.fix === FIX.SETUP_DIM
+                                     || DIM_HEALTH.fix === FIX.NETWORK } },
           auto: { at: AUTO_LOG.at, state: AUTO_LOG.state || '', enabled: !!loadAuto().enabled },
           activity: LAST_ACT,   // {safe,hash,mode,name,at} — the banner chip shows this
           builds: { unread: loadBuildAlerts().filter((a) => !a.read).length },   // Builds-tab badge
@@ -2637,6 +2802,11 @@ async function main() {
         wcache = null;   // tags changed under the cache
         return json({ ok: true, reverted, errors, total: run.actions.length });
       }
+      // DIM health. GET = last verdict (cheap). POST = run the full self-check now.
+      if (req.url.startsWith('/api/dim/health')) {
+        if (req.method === 'POST') return json(await dimSelfHeal(e, 'asked from Settings'));
+        return json(DIM_HEALTH);
+      }
       if (req.url.startsWith('/api/auto')) {
         // thresholds (comboFloor) feed the per-copy rollScore baked into the weapons cache
         if (req.method === 'POST') { saveAuto(JSON.parse(await readBody(req) || '{}')); wcache = null; return json({ ok: true, cfg: loadAuto() }); }
@@ -2777,7 +2947,7 @@ async function main() {
         // token belongs to the PREVIOUS Bungie login, so it must be re-minted too.
         wcache = null; cache = null;
         try { fs.unlinkSync(DIM_TOKEN_FILE); } catch {}
-        DIM_TAGS = {}; DIM_TAGS_AT = 0; DIM_OFF = false; DIM_LAST_ERR = '';
+        DIM_TAGS = {}; DIM_TAGS_AT = 0; DIM_OFF = false; DIM_LAST_ERR = ''; DIM_RETRY_AFTER = 0;
         let name = '';
         try {
           const ms = await bungie(`${BASE}/User/GetMembershipsById/${t.membership_id}/254/`, x, t.access_token);
@@ -2840,38 +3010,25 @@ async function main() {
         if (req.method === 'POST') { saveLooks(JSON.parse(await readBody(req) || '[]')); return json({ ok: true }); }
         return json(loadLooks());
       }
-      if (req.url.startsWith('/theme.css')) {
-        res.writeHead(200, { 'Content-Type': 'text/css; charset=utf-8' });
-        return res.end(fs.readFileSync(path.join(__dirname, 'theme.css')));
-      }
-      if (req.url.startsWith('/banner.js')) {
-        res.writeHead(200, { 'Content-Type': 'application/javascript; charset=utf-8' });
-        return res.end(fs.readFileSync(path.join(__dirname, 'banner.js')));
-      }
-      if (req.url.startsWith('/perktip.js')) {
-        res.writeHead(200, { 'Content-Type': 'application/javascript; charset=utf-8' });
-        return res.end(fs.readFileSync(path.join(__dirname, 'perktip.js')));
-      }
+      if (req.url.startsWith('/theme.css')) return sendStatic(req, res, 'theme.css', 'text/css; charset=utf-8');
+      if (req.url.startsWith('/banner.js')) return sendStatic(req, res, 'banner.js', 'application/javascript; charset=utf-8');
+      if (req.url.startsWith('/perktip.js')) return sendStatic(req, res, 'perktip.js', 'application/javascript; charset=utf-8');
       if (req.url.startsWith('/fonts/')) {
         const f = path.basename(req.url.split('?')[0]);              // no path traversal
         if (/^arimo-\d+\.woff2$/.test(f) && fs.existsSync(path.join(__dirname, 'fonts', f))) {
-          res.writeHead(200, { 'Content-Type': 'font/woff2', 'Cache-Control': 'max-age=604800' });
-          return res.end(fs.readFileSync(path.join(__dirname, 'fonts', f)));
+          return sendStatic(req, res, path.join('fonts', f), 'font/woff2', 'max-age=604800');
         }
         res.writeHead(404); return res.end('not found');
       }
-      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-      if (req.url.startsWith('/setup')) return res.end(fs.readFileSync(path.join(__dirname, 'setup.html')));
-      if (req.url.startsWith('/weapons')) return res.end(fs.readFileSync(path.join(__dirname, 'weapon-watch.html')));
-      if (req.url.startsWith('/vault')) return res.end(fs.readFileSync(path.join(__dirname, 'weapon-vault.html')));
-      if (req.url.startsWith('/perks')) return res.end(fs.readFileSync(path.join(__dirname, 'perk-finder.html')));
-      if (req.url.startsWith('/drops')) return res.end(fs.readFileSync(path.join(__dirname, 'weapon-drops.html')));
-      if (req.url.startsWith('/builds')) return res.end(fs.readFileSync(path.join(__dirname, 'builds.html')));
-      if (req.url.startsWith('/auto')) return res.end(fs.readFileSync(path.join(__dirname, 'auto-manager.html')));
-      if (req.url.startsWith('/settings')) return res.end(fs.readFileSync(path.join(__dirname, 'settings.html')));
-      if (req.url.startsWith('/fashion')) return res.end(fs.readFileSync(path.join(__dirname, 'fashion.html')));
-      if (req.url.startsWith('/artifacts')) return res.end(fs.readFileSync(path.join(__dirname, 'artifacts.html')));
-      return res.end(fs.readFileSync(HTML_FILE));
+      // Page routes. Order matters only in that the first prefix match wins; '/' is the fallback.
+      const PAGE_ROUTES = [
+        ['/setup', 'setup.html'], ['/weapons', 'weapon-watch.html'], ['/vault', 'weapon-vault.html'],
+        ['/perks', 'perk-finder.html'], ['/drops', 'weapon-drops.html'], ['/builds', 'builds.html'],
+        ['/auto', 'auto-manager.html'], ['/settings', 'settings.html'], ['/fashion', 'fashion.html'],
+        ['/artifacts', 'artifacts.html'],
+      ];
+      const page = (PAGE_ROUTES.find(([p]) => req.url.startsWith(p)) || [])[1] || path.basename(HTML_FILE);
+      return sendStatic(req, res, page, 'text/html; charset=utf-8', 'no-cache');
     } catch (err) {
       console.error(err);
       res.writeHead(500, { 'Content-Type': 'application/json' });
@@ -3168,6 +3325,19 @@ async function main() {
     finally { buildsBusy = false; }
   }
   setInterval(() => { checkBuilds().catch(() => {}); }, 60000);
+
+  // Automatic DIM health (Diego 2026-08-29: "fully automate this troubleshooting"). One check
+  // shortly after boot so a broken sync is found and repaired before he ever opens a page, then
+  // every 15 minutes. dimSelfHeal is a no-op when the last check was healthy and recent, so this
+  // costs one cheap call an hour in the normal case.
+  if (e) {
+    setTimeout(() => { dimSelfHeal(e, 'startup').catch(() => {}); }, 20000);
+    setInterval(() => {
+      if (DIM_OFF) return;                                  // DIM was never set up here
+      if (DIM_HEALTH.ok && Date.now() - DIM_HEALTH.at < 3600000) return;   // healthy and recent
+      dimSelfHeal(e, 'periodic').catch(() => {});
+    }, 900000);
+  }
 
   // Auto-manage cadence (Diego 2026-07-12, "save API calls"): while Destiny is RUNNING,
   // pace by where you are — IN an activity the tick is just the cheap 1-call activity

@@ -5,53 +5,34 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Fashion — Loadouts</title>
 <style>
-:root{
-  --bg:#0c0e12; --panel:#151821; --panel2:#1b1f2b; --line:#2a2f3d;
-  --ink:#e9ebf2; --mut:#8b93a7; --dim:#5c6375; --gold:#cfae42; --keep:#5fd0dd; --junk:#ff6a52;
-  --clip:polygon(10px 0,100% 0,100% calc(100% - 10px),calc(100% - 10px) 100%,0 100%,0 10px);
-}
+/* design tokens live in theme.css — this page had its own dead copy (2026-08-28) */
 *{box-sizing:border-box;margin:0;padding:0}
-body{background:var(--bg);color:var(--ink);font:15px/1.45 "Segoe UI",Roboto,system-ui,sans-serif;padding:12px;padding-bottom:40px}
-.disp{font-family:Bahnschrift,"Roboto Condensed","Arial Narrow",sans-serif;text-transform:uppercase;letter-spacing:.09em}
-h1{font-size:22px;font-weight:600}
-h1 span{color:var(--gold)}
-h2{font-size:15px}
-.sub{color:var(--mut);font-size:12px;margin:2px 0 10px}
-.nav{display:flex;gap:6px;margin:6px 0 4px;flex-wrap:wrap}
-.nav a{font-family:Bahnschrift,"Roboto Condensed","Arial Narrow",sans-serif;text-transform:uppercase;letter-spacing:.06em;font-size:12px;text-decoration:none;color:var(--mut);border:1px solid var(--line);padding:5px 12px;clip-path:polygon(8px 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%,0 8px)}
-.nav a.on{color:var(--gold);border-color:var(--gold);background:rgba(207,174,66,.12)}
 .bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
-.btn{background:var(--panel2);border:1px solid var(--gold);color:var(--gold);padding:8px 13px;font-size:12px;cursor:pointer;clip-path:var(--clip);font-family:inherit}
-.btn:active{background:var(--gold);color:#000}
-.btn.sm{padding:5px 10px;font-size:11px}
-.btn.mut{border-color:var(--line);color:var(--mut)}
-.btn.red{border-color:var(--junk);color:var(--junk)}
-.count{color:var(--mut);font-size:12px}
-.card{background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--gold);clip-path:var(--clip);padding:12px;margin-bottom:12px}
+.btn{cursor:pointer}
+.count{font-size:12px}
+.card{padding:12px;margin-bottom:12px}
 .chead{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:10px}
 .chead .cls{font-weight:600;color:var(--gold);font-size:16px}
 .slots{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}
-.slot{background:var(--panel2);border:1px solid var(--line);clip-path:var(--clip);padding:8px}
+.slot{padding:8px}
 .slot .sn{font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.06em;margin-bottom:5px;font-family:Bahnschrift,"Roboto Condensed",sans-serif}
 .cos{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--mut);margin-top:4px;min-width:0}
-.cos img{width:26px;height:26px;flex-shrink:0;border:1px solid var(--line);background:#000}
+.cos img{width:26px;height:26px;flex-shrink:0}
 .cos span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .look .slots{grid-template-columns:repeat(5,1fr)}
 .look .mini{display:flex;flex-direction:column;align-items:center;gap:3px;background:var(--panel2);border:1px solid var(--line);clip-path:var(--clip);padding:6px 4px}
 .look .mini .sn{margin:0 0 2px}
 .look .mini img{width:30px;height:30px;border:1px solid var(--line);background:#000}
-.res{margin-top:8px;font-size:11px}
-.res .ok{color:var(--keep)} .res .bad{color:var(--junk)}
-.warn{background:rgba(255,106,82,.12);border:1px solid var(--junk);color:var(--junk);padding:8px 10px;font-size:12px;clip-path:var(--clip);margin-top:8px}
-.note{color:var(--dim);font-size:12px}
+.res{margin-top:8px;font-size:11px} .res .bad{color:var(--junk)}
+.warn{padding:8px 10px;font-size:12px;margin-top:8px}
+.note{font-size:12px}
 .big{text-align:center;color:var(--mut);padding:30px 12px}
-:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
-@media(min-width:760px){body{max-width:1000px;margin:0 auto}}
 </style>
 <link rel="stylesheet" href="/theme.css">
 </head>
 <body>
 <div id="gbanner"></div>
+<main class="page">
 <h1 class="disp">Fashion <span>Loadouts</span></h1>
 <p class="sub">Save your equipped ornament + shader looks and re-apply them in one click. <b>Apply works only while your character is in orbit.</b></p>
 <div class="bar"><button class="btn" id="refreshBtn">Refresh</button><span class="count" id="status"></span></div>
@@ -151,5 +132,6 @@ load();
 window.GRELOAD=()=>load();   // banner "Updated" chip / auto-refresh hook
 </script>
 <script src="/banner.js"></script>
+</main>
 </body>
 </html>

@@ -3,6 +3,37 @@
 > Maintained per CLAUDE.md. When a feature ships, move it to HANDOFF.md
 > "What works now" and delete it here.
 
+## Where we are (2026-08-29c — two sessions fixed the same two things; reconciled here)
+
+**Read this first if the history below looks contradictory.** Two Claude sessions worked in
+parallel on 2026-08-29 and both landed on the same two complaints. Nothing was lost; this is how
+they were merged.
+
+**The banner was fixed twice, two different ways.**
+- On `main` (session 01RDzLH): `#gbanner{width:100vw}` breaks out of each page's column, `.gb`
+  centres at 1160px, `html{overflow-x:clip}` swallows the scrollbar 100vw counts. Surgical —
+  every page kept its own content width.
+- On this branch: no page owns a width at all any more. `--page-max`/`--page-pad` in `theme.css`,
+  every page's content in `<main class="page">`, the banner as two full-bleed strips centring on
+  `.gb-in`. Broader — it also unified `h1`/`.sub`/`.disp`, deleted 430 dead declarations and nine
+  duplicate `:root` palettes, and fixed a latent bug (`artifacts.html` used an undefined `--void`).
+- **Kept: the shell.** It solves the banner one layer down, so the break-out is unnecessary, and
+  keeping both would fight — `.gb{max-width:1160px}` would re-constrain the full-bleed nameplate,
+  and `overflow-x:clip` would hide exactly the horizontal-overflow regressions the page sweep
+  tests for. The two guardrails that asserted the old CSS now assert the *rule* instead.
+
+**DIM sync was diagnosed twice, and only one of them was Diego's actual bug.**
+- On `main` (session 01RDzLH): `fetchArmor()` read tags from `dimOverlay()`, a parse of the static
+  `dim-data.json` export that does not exist on his PC, so 555 tagged armor pieces showed as
+  untagged. **That was the real fault**, and it is fixed on main.
+- On this branch: DIM answers 401 for five reasons, none of which made our cached token look
+  invalid, so the server re-sent a dead token forever with no way to recover. Real, and worth
+  having — but it was *not* what Diego was seeing.
+- **Kept: both.** They compose exactly — armor now reads live DIM tags through `dimTagsFresh`,
+  which is the call this branch wrapped in 401 recovery and automatic self-repair. The armor fix
+  makes sync correct; the hardening keeps it correct.
+
+---
 ## Where we are (2026-08-29b — DIM sync for ARMOR was broken; fixed)
 
 Diego: *"sync with dim not working appearantly, double check and fix"*. He was right.
@@ -47,6 +78,99 @@ Full click-through verified in the real UI on a cold load: Run preview → Apply
 
 **Lesson recorded as rule 17:** every earlier test opened the panel with `dcPanel.open = true`,
 which is why neither problem was ever seen. Test cold, click what Diego clicks.
+
+## Where we are (2026-08-28 — ONE page shell + the skin cleanup, all SHIPPED)
+
+Diego: *"I need you to access the webpages and make them all consistent, banner size, positioning,
+right now every page behaves like an independent style and this is ugly."* — then, on the
+optimization list that came out of it: *"approved, proceed."*
+
+**Shipped and verified** (full detail in HANDOFF "What works now"; rules locked in DIEGO_RULES §6):
+
+1. **One page shell.** Page width, gutters, bottom clearance, `h1`/`.sub`/`.disp`/`h2` sizing and
+   the banner live only in `theme.css` + `banner.js`; every page wraps content in
+   `<main class="page">`; the banner is a full-bleed nameplate strip with the section tabs on one
+   non-wrapping row underneath. Identical on all 11 pages at 1440×900 and 390×844.
+2. **One source of truth for the skin.** All nine page-level `:root` palettes deleted (the 11
+   tokens they had that `theme.css` lacked moved up), and 430 dead declarations stripped from the
+   component rules. Proven inert by a computed-style fingerprint of 1535 elements plus a
+   hover/focus fingerprint — byte-identical. Fixed a latent bug on the way: `artifacts.html`
+   used `var(--void)` that nothing defined, so its Void filter chip had no fill.
+3. **Static assets cached + ETagged** in both servers; 34.6KB of shared CSS/JS no longer re-sent
+   on every tab switch, HTML no longer re-read off disk per hit. Editing HTML/CSS still needs no
+   restart — verified live.
+4. **The TRMNL display's `/settings` page only.** It uses the same shell; `server.js` serves
+   `theme.css` + fonts itself. Save flow tested end-to-end. The status page at `/` was restyled
+   too and then **reverted at Diego's word** (DIEGO_RULES §6) — the terminal and its other pages
+   are off limits. The e-ink render was never touched (byte-identical `/screen.bmp`).
+5. `--rail` token (340px) replaces the 320/360px rails.
+
+`tests/guardrails.js`: **179 checks, 0 failing** — it now fails the build if a page re-declares
+`body{max-width}`/`body{padding}`, drops its `<main class="page">`, declares its own `:root`, uses
+a `var(--x)` nothing defines, re-reads HTML off disk per request, or reverts the display server's
+pages to their own styling.
+
+## DIM sync — fixed AND fully automated (2026-08-29)
+
+Diego: *"check the sync with DIM ... figure out why it's not working"*, then *"I want you to
+fully automate this troubleshooting so you can do without my intervention."*
+
+**Root cause:** DIM answers 401 for five different reasons, none of which made our cached token
+look invalid, so the server re-sent a dead token every 30s forever and served stale tags in
+silence. **Shipped:** 401 recovery, profile-id reconciliation, and a self-check
+(`dim-diagnose.js` + `dimSelfHeal`) that runs 20s after boot, every 15 minutes, and on any DIM
+failure — repairing a rejected token, a refused profile, a mismatched app key, and an
+`OriginMismatch` (by re-registering) without anyone touching anything. Health shows on
+`/settings`. Detail in HANDOFF.
+
+**The one thing no code can fix:** if his Bungie login has lapsed, the Settings card says
+**"Needs you"** and names the step. Nothing else needs him.
+
+**Still to confirm on his PC:** which mode he was actually in. The sandbox cannot reach
+`api.destinyitemmanager.com` (blocked at the proxy) and has none of his token files, so this was
+diagnosed from DIM's own server source rather than from his live account. Once the branch is on
+`main` and he reboots, the Settings card answers it without him doing anything — and in most of
+the five cases the server will already have repaired it before he looks.
+
+**Prior art:** sync last verified working 2026-07-03 ("992 tags read"). The DIM token is a 30-day
+JWT, so that one expired around 2026-08-02; re-minting needs a live Bungie *refresh* token
+(90 days). If his Bungie login lapsed too, that is the "Needs you" case.
+
+**Still open from before, unchanged:** `auto-manage.json` has `enabled: true` and the weapons
+Auto-Manager ticks every minute, against his standing rule that it stays off (DIEGO_RULES §3) —
+**BLOCKED: awaiting Diego**. Worth resolving alongside this, since an Auto-Manager acting on
+stale tags is exactly the combination behind the unexplained 2026-08-23 mass junk-tag.
+
+---
+## BLOCKER FOR EVERYTHING ON THIS BRANCH — get it onto `main` (2026-08-29)
+
+Diego runs `main`. As of this writing **five commits of finished, tested work sit in an unmerged
+draft PR** (#1) and none of it is on his machine: the page shell, the skin cleanup, the asset
+caching, the TRMNL settings page, the DIM fix, the DIM automation, `dim-diagnose.js`,
+`dim-doctor.js`, `DIM-DOCTOR.cmd`. He hit this directly — *"I can't find DIM-DOCTOR.cmd"* — and
+he was right to.
+
+**Next agent: check `git log origin/main..HEAD` before telling Diego to do anything with a file.**
+His CLAUDE.md says to push to `origin main` when work is done; this session was constrained to a
+branch, so the work needs merging. Until then every "double-click X" instruction is wrong.
+
+---
+**Next — nothing here is started, and none of it is requested work:**
+
+1. **Diego to eyeball it on his PC.** The 8787 pages need only a hard refresh (Ctrl+F5).
+   **The two server changes do need a restart: double-click `REBOOT.cmd`** — `vault-verdict.js`
+   (asset caching) and `server.js` (shared skin + caching) both changed. Not restarted from the
+   agent shell, per DIEGO_RULES §1.
+2. If a page feels too wide or too narrow, the only knob is `--page-max` in `theme.css`
+   (currently 1240px); `--page-pad`, `--rail` and `--page-bottom` sit next to it. One edit
+   re-spaces all 13 pages.
+3. **The tab strip is near capacity** — ten tabs use ~960px of the 1240px width. An eleventh
+   section will start the strip scrolling on desktop, not just on a phone. Shortening one or two
+   labels buys the headroom; not worth doing until it's needed.
+4. Leftover polish, small: the fixed "Updated Xs ago" chip can sit over the bottom-right of Vault
+   Verdict's export bar on a phone (a `padding-right` on `.export` clears it); `builds.html`'s
+   modal `.mbox h2` is 16px against everything else's 14px.
+
 
 ---
 ## Where we are (2026-08-27 — reuse bias + non-★ floor SHIPPED, spec §9 step 5 done)

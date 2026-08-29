@@ -340,6 +340,60 @@ Two more the same day, while the preview was being built:
 - Cards must not move mid-tap (2026-07-05: hover-delay fix after "the card moved").
 - Tag colors: Diego's manual favorites pink, app favorites green.
 - Build Crafter: "take your time making this look good" (2026-07-13).
+- **One page shell for the whole suite** (2026-08-28, verbatim): *"I need you to
+  access the webpages and make them all consistent, banner size, positioning,
+  right now every page behaves like an independent style and this is ugly."*
+  Locked consequences: no page may set its own `body{max-width}` / `body{padding}`
+  again — page width and gutters live ONLY in `theme.css` (`--page-max`,
+  `--page-pad`), every page's content sits in `<main class="page">`, the banner is
+  a full-bleed bar with the tabs on their own single-row strip, and `h1` / `.sub` /
+  `.disp` are sized in `theme.css` only. A new page starts by copying that shell.
+- **One source of truth for the skin** (2026-08-28, Diego: *"approved, proceed"* on the
+  follow-up cleanup). A page may NOT declare its own `:root` palette, and may not restate
+  anything `theme.css` already sets for a shared component (`.btn`, `.tab`, `.card`,
+  `.panel`, `.chip`, `.pk`, `select`, `h1`, `h2`, `.sub`, `.disp`). Nine pages used to
+  carry a dead copy of the palette; because `theme.css` loads last its values always won,
+  so editing a page's `:root` did nothing — and `artifacts.html` referenced `--void`, which
+  no file defined, so its Void filter chip rendered with no fill. One `:root`, in
+  `theme.css`. `tests/guardrails.js` fails the build on a page-level `:root`, and on any
+  `var(--x)` that nothing defines.
+- **The TRMNL display is OFF LIMITS except its settings page** (2026-08-28, verbatim):
+  *"I didn't ask to change the screen on the trmnl display, you can change the settings page,
+  but not the terminal, it works well and I didn't ask you to change that."* An agent had
+  restyled BOTH of the display server's web pages; the status page at `/` was reverted to its
+  original markup the moment he said so. What is allowed: `/settings` (the content picker) on
+  the shared `theme.css` shell. What is NOT: the status page at `/`, the phone `/display` page,
+  and above all the e-ink render itself (`render.js` → SVG → 1-bit BMP → the panel). Do not
+  touch the terminal's screen or its pages again without him asking, in those words, first.
+
+- **DIM sync must never fail silently** (2026-08-29, from: *"check the sync with DIM, open DIM,
+  check the API, figure out why it's not working."*). DIM answers **401 for five different
+  reasons** (OriginMismatch, ApiKeyMismatch, UnknownProfileId, an expired/invalid JWT,
+  WebAuthRequired) and every one of them leaves our cached token looking valid, because it has
+  not reached its expiry. The server used to re-send that dead token every 30s forever while
+  quietly serving stale tags; only a `/setup` re-login cleared it. Rules now: (a) a 401 drops
+  the token and re-authenticates **once**, then backs off 10 minutes rather than hammering;
+  (b) the `platformMembershipId` is reconciled against the token's own `profileIds`, because
+  with cross-save our guess can be a profile DIM refuses; (c) a DIM failure says **"DIM sync
+  error"** in the banner chip, not just a red dot; (d) `dim-doctor.js` ships and any error
+  message that tells the user to run something must name a file that actually exists.
+
+- **Troubleshooting is the app's job, not Diego's** (2026-08-29, verbatim: *"I want you to
+  fully automate this troubleshooting so you can do without my intervention."*). Never ship a
+  fix whose last step is "Diego runs a command". The server diagnoses itself (`dim-diagnose.js`,
+  shared by the server and the CLI so they cannot drift), repairs what it safely can unattended
+  (clear a rejected token, re-register a dead DIM app — old file kept as `.bak`), re-verifies by
+  doing the real work, and shows the verdict on the Settings page. The ONLY acceptable "needs
+  you" outcome is one no code can fix — his Bungie login lapsing — and it must say so in plain
+  words, not as an error code. This generalises beyond DIM: any new failure mode gets a
+  self-check and an automatic repair before it gets a troubleshooting instruction.
+- **Work Diego cannot see is not done** (2026-08-29, from: *"I can't find DIM-DOCTOR.cmd why are
+  you making so many mistakes?"*). He runs `main`. Four commits sat in an unmerged draft PR while
+  the agent gave him instructions — "double-click REBOOT.cmd", "run DIM-DOCTOR.cmd" — that could
+  not possibly work, because none of those files existed on his machine. Before telling him to do
+  ANYTHING with a file, confirm the file is on `main`. His CLAUDE.md says to push to `origin main`
+  when a piece of work is done; if a session is constrained to a branch instead, say so plainly
+  and get the PR merged rather than describing the work as if it had shipped.
 
 ## 7. Sharing the app (2026-07-17)
 
