@@ -3,6 +3,23 @@
 > Maintained per CLAUDE.md. When a feature ships, move it to HANDOFF.md
 > "What works now" and delete it here.
 
+## Junk staging fixed — but THIS SESSION CANNOT DEPLOY IT (2026-08-29d)
+
+Diego: *"Auto manager keeps pushing junk to my character every other minute - it should push junk
+pieces once and wait until I deleted and then push new ones."* Fixed — one batch per slot, then
+hands off until he has dismantled them; postmaster junk now counts. Detail in HANDOFF.
+
+**Rule 22 could not be followed here.** It says to edit `C:\Users\diego\Desktop\cola_ai_v3\trmnl_display`
+directly and run `REBOOT.cmd` without him. **This session runs in a cloud container** — a fresh
+GitHub clone on Linux, with no access to his PC and no PowerShell tool. It can only push to
+GitHub. Rule 22 is followable by a session running ON his machine; it is not followable by a
+web/cloud session, and the next agent should check which kind it is before promising a reboot.
+Practical consequence: this change reaches him when it is merged to `main` and his copy is
+updated — either by him, or by a session that does have his machine.
+
+**This is server-JS, so it needs a restart to take effect.** HTML/CSS do not.
+
+
 ## Where we are (2026-08-29c — two sessions fixed the same two things; reconciled here)
 
 **Read this first if the history below looks contradictory.** Two Claude sessions worked in

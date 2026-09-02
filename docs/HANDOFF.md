@@ -514,6 +514,24 @@ Core priorities, in his words:
     fix, `dimLoadoutCounts`, the sole-exotic and in-a-loadout junk rescues — is untouched and
     re-verified here (Apply button confirmed visible and disabled on a **cold** load in a real
     browser, per their rule 17).
+  - **Junk staging pushes ONE batch and then waits (2026-08-29):** Diego — *"Auto manager keeps
+    pushing junk to my character every other minute - it should push junk pieces once and wait
+    until I deleted and then push new ones."* Two compounding faults.
+    **(1) It topped up rather than batching.** `need = cfg.junkStage - junkStaged[slot]` meant
+    dismantling one piece caused the next pass, 60s later, to push one more — a permanent trickle
+    instead of a batch. **(2) Postmaster junk was invisible.** A transfer into a full slot lands in
+    the postmaster; those items are in the list with `loc:'postmaster'`, but "already staged" only
+    counted `loc:'char'`, so they never counted and every pass piled more on top — unbounded.
+    Reproduced against the old rules: pass 1 stages 15, Diego dismantles one, pass 2 stages 1
+    again; and with 5 pieces already in the postmaster the old rule pushes 5 more *every pass*.
+    **Now:** the decision is the pure, unit-tested `planStaging()`. A slot holding any pushed junk
+    (character **or** postmaster) is left completely alone; a slot holding none gets one fresh
+    batch of `junkStage`. Measured after the fix: 15, 0, 0, 0, 0 across five passes; dismantling
+    4 of 5 still pushes nothing; clearing all 5 delivers a fresh batch to that slot only.
+    A latent bug fell out of it too — the spill lookup could pick the **same** piece to vault twice
+    in one run, because nothing excluded pieces already queued; it now can't.
+    The run log gains a `wait` action ("waiting on you"), shown on the Auto-Manager page, and the
+    one-line summary says how many slots are waiting. 13/13 assertions.
   - **DIM troubleshooting is fully automatic (2026-08-29):** Diego — *"I want you to fully
     automate this troubleshooting so you can do without my intervention."* Nothing about DIM now
     requires him to run anything. `dim-diagnose.js` holds the whole diagnosis as one pure

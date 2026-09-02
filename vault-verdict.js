@@ -2374,6 +2374,66 @@ const AUTO_FILE = path.join(__dirname, 'auto-manage.json');
 const AUTO_DRYRUN = process.env.AUTO_DRYRUN === '1';   // force decide-only (no writes) for testing
 const FAVW = { 1: 1, 2: 1.5, 3: 2 };                   // ★ grade -> weight (mirrors weapon-vault.html)
 const STAGE_SLOT_CAP = 9;                              // unequipped weapons per slot on a character
+
+// Decide what to stage. PURE — no network, no mutation — so it can be unit-tested, which is how
+// the two bugs below were pinned down.
+//
+// Diego 2026-08-29: "Auto manager keeps pushing junk to my character every other minute - it
+// should push junk pieces once and wait until I deleted and then push new ones." Two faults:
+//
+//   1. It TOPPED UP instead of pushing a batch. `need = junkStage - alreadyStaged` meant that
+//      dismantling one piece caused the very next pass (60s later) to push one more. A permanent
+//      trickle rather than "here is a batch, tell me when it's gone".
+//   2. Junk that landed in the POSTMASTER was invisible. A transfer into a full slot goes to the
+//      postmaster; those items are in the item list with loc:'postmaster', but "already staged"
+//      only counted loc:'char'. So they never counted, and every pass pushed more on top of
+//      them, forever.
+//
+// Now: a slot that already holds pushed junk (character OR postmaster) is left alone entirely.
+// A slot holding none gets one fresh batch of `perSlot`. That is the whole rule.
+function planStaging({ items, info, SLOTS, stageCid, perSlot, slotCap = STAGE_SLOT_CAP, maxMoves = Infinity, movesUsed = 0 }) {
+  const steps = [], waiting = [];
+  const slotCount = {};   // real inventory occupancy — decides whether a slot is FULL
+  const pushed = {};      // junk already handed to Diego and not yet dismantled
+  for (const x of items) {
+    if (x.ownCid !== stageCid) continue;
+    const s = info(x).slot; if (!s) continue;
+    if (x.loc === 'char' || x.loc === 'equipped') slotCount[s] = (slotCount[s] || 0) + 1;
+    if (x.tag === 'junk' && !x.locked && info(x).tt === 5 && (x.loc === 'char' || x.loc === 'postmaster'))
+      pushed[s] = (pushed[s] || 0) + 1;
+  }
+  const poolBySlot = {};
+  for (const x of items) {
+    if (x.tag !== 'junk' || x.locked || x.loc !== 'vault' || info(x).tt !== 5) continue;
+    const s = info(x).slot; if (!s) continue;
+    (poolBySlot[s] = poolBySlot[s] || []).push(x);
+  }
+  for (const s of SLOTS) (poolBySlot[s] || []).sort((a, b) => (a.pwr || 0) - (b.pwr || 0));
+
+  let moves = movesUsed;
+  const spilled = new Set();
+  for (const slot of SLOTS) {
+    const held = pushed[slot] || 0;
+    if (held > 0) { waiting.push({ slot, held }); continue; }   // batch still out there — hands off
+    let need = perSlot;
+    for (const x of (poolBySlot[slot] || [])) {
+      if (need <= 0 || moves >= maxMoves) break;
+      if ((slotCount[slot] || 0) >= slotCap + 1) {              // slot full (1 equipped + 9) → make room
+        // `.find` used to be able to pick the same piece twice in one run, because nothing
+        // excluded pieces already queued to spill. It does now.
+        const spill = items.find((y) => y.ownCid === stageCid && y.loc === 'char' && info(y).slot === slot
+          && !y.locked && y.tag !== 'junk' && y.tag !== 'keep' && y.tag !== 'favorite' && !spilled.has(y.id));
+        if (!spill) { steps.push({ kind: 'skip', item: x, slot, reason: `${slot} full, nothing safe to vault` }); break; }
+        spilled.add(spill.id);
+        steps.push({ kind: 'spill', item: spill, slot });
+        moves++; slotCount[slot]--;
+      }
+      steps.push({ kind: 'add', item: x, slot });
+      moves++; slotCount[slot] = (slotCount[slot] || 0) + 1; need--;
+    }
+  }
+  return { steps, waiting };
+}
 const AUTO_DEFAULTS = {
   enabled: true,           // Diego chose "go fully live"
   junkStage: 5,            // junk-tagged weapons to stage IN EACH SLOT (Kinetic/Energy/Power) → 15 total (Diego 2026-07-12: 5, not 3)
@@ -3088,7 +3148,7 @@ async function main() {
     const cfg = loadAuto();
     if (!force && (!gameUp || !cfg.enabled)) return AUTO_LOG;
     managing = true;
-    const log = { at: new Date().toISOString(), safe: null, activity: null, dryRun, actions: [], counts: { favorite: 0, keep: 0, junk: 0, staged: 0, spilled: 0 }, note: '' };
+    const log = { at: new Date().toISOString(), safe: null, activity: null, dryRun, actions: [], counts: { favorite: 0, keep: 0, junk: 0, staged: 0, spilled: 0, waiting: 0 }, note: '' };
     try {
       const act = await fetchActivity(e).catch((err) => ({ safe: false, hash: -1, mode: -1, err: err.message }));
       log.safe = act.safe; log.activity = { hash: act.hash, mode: act.mode, name: act.name || '' };
@@ -3204,38 +3264,34 @@ async function main() {
       // loop only counted successes, so when Bungie refused transfers (e.g. back in an
       // activity mid-pass) nothing ever tripped the cap.
       const stageCid = cfg.stageCid || LOCK_CTX?.characterId;
-      const stageJunkSet = async (kind, items, SLOTS, info) => {   // info(x) -> {slot,tt,n}
-        // current per-slot occupancy on the stage character, and junk already staged per slot
-        const slotCount = {}, junkStaged = {};
-        for (const x of items) if (x.ownCid === stageCid && (x.loc === 'char' || x.loc === 'equipped')) {
-          const s = info(x).slot; if (!s) continue;
-          slotCount[s] = (slotCount[s] || 0) + 1;
-          if (x.tag === 'junk' && !x.locked && x.loc === 'char' && info(x).tt === 5) junkStaged[s] = (junkStaged[s] || 0) + 1;
+      const stageJunkSet = async (kind, items, SLOTS, info) => {
+        const plan = planStaging({ items, info, SLOTS, stageCid, perSlot: cfg.junkStage,
+          slotCap: STAGE_SLOT_CAP, maxMoves: cfg.maxMovesPerRun, movesUsed: moves });
+        // Say WHY a slot got nothing, so "it stopped staging" is never a mystery.
+        for (const w of plan.waiting) {
+          log.actions.push({ stage: 'wait', kind, slot: w.slot, held: w.held,
+            reason: `${w.held} junk still on your character — waiting until you dismantle them` });
+          log.counts.waiting++;
         }
-        // vault junk waiting to be staged, bucketed by slot, lowest-power first
-        const poolBySlot = {};
-        for (const x of items) {
-          if (x.tag !== 'junk' || x.locked || x.loc !== 'vault' || info(x).tt !== 5) continue;
-          const s = info(x).slot; if (!s) continue;
-          (poolBySlot[s] = poolBySlot[s] || []).push(x);
-        }
-        for (const s of SLOTS) (poolBySlot[s] || []).sort((a, b) => (a.pwr || 0) - (b.pwr || 0));
-        for (const slot of SLOTS) {
-          let need = cfg.junkStage - (junkStaged[slot] || 0);
-          for (const x of (poolBySlot[slot] || [])) {
-            if (need <= 0 || moves >= cfg.maxMovesPerRun) break;
-            if ((slotCount[slot] || 0) >= STAGE_SLOT_CAP + 1) {   // slot full (1 equipped + 9) → make space
-              const spill = items.find((y) => y.ownCid === stageCid && y.loc === 'char' && info(y).slot === slot && !y.locked && y.tag !== 'junk' && y.tag !== 'keep' && y.tag !== 'favorite');
-              if (!spill) { log.actions.push({ stage: 'skip', kind, name: info(x).n, reason: `${slot} full, nothing safe to vault` }); break; }
-              log.actions.push({ stage: 'spill', kind, name: info(spill).n, slot }); log.counts.spilled++;
-              moves++;   // an attempt counts toward the cap
-              if (!dryRun) { try { await transferItem(e, spill.id, spill.rhash, stageCid, true); spill.loc = 'vault'; spill.own = 'Vault'; spill.ownCid = null; } catch (err) { log.actions.push({ stage: 'error', kind, name: info(spill).n, error: err.message }); log.counts.spilled--; break; } }
-              slotCount[slot]--;
-            }
-            log.actions.push({ stage: 'add', kind, name: info(x).n, slot }); log.counts.staged++;
-            moves++;   // an attempt counts toward the cap
-            if (!dryRun) { try { await transferItem(e, x.id, x.rhash, stageCid, false); x.loc = 'char'; x.ownCid = stageCid; x.own = LOCK_CTX?.clsById?.[stageCid] || x.own; } catch (err) { log.actions.push({ stage: 'error', kind, name: info(x).n, error: err.message }); log.counts.staged--; break; } }
-            slotCount[slot] = (slotCount[slot] || 0) + 1; need--;
+        const brokenSlots = new Set();
+        for (const st of plan.steps) {
+          if (moves >= cfg.maxMovesPerRun) break;
+          if (brokenSlots.has(st.slot)) continue;      // a failed transfer stops THAT slot only
+          const nm = info(st.item).n;
+          if (st.kind === 'skip') { log.actions.push({ stage: 'skip', kind, name: nm, reason: st.reason }); continue; }
+          const toVault = st.kind === 'spill';
+          log.actions.push({ stage: st.kind, kind, name: nm, slot: st.slot });
+          if (toVault) log.counts.spilled++; else log.counts.staged++;
+          moves++;   // an attempt counts toward the cap (dry-run too, so the preview is honest)
+          if (dryRun) continue;
+          try {
+            await transferItem(e, st.item.id, st.item.rhash, stageCid, toVault);
+            if (toVault) { st.item.loc = 'vault'; st.item.own = 'Vault'; st.item.ownCid = null; }
+            else { st.item.loc = 'char'; st.item.ownCid = stageCid; st.item.own = LOCK_CTX?.clsById?.[stageCid] || st.item.own; }
+          } catch (err) {
+            log.actions.push({ stage: 'error', kind, name: nm, error: err.message });
+            if (toVault) log.counts.spilled--; else log.counts.staged--;
+            brokenSlots.add(st.slot);
           }
         }
       };
@@ -3248,7 +3304,8 @@ async function main() {
       }
 
       const c = log.counts;
-      log.note = `fav ${c.favorite} · keep ${c.keep} · junk ${c.junk} · staged ${c.staged}`;
+      log.note = `fav ${c.favorite} · keep ${c.keep} · junk ${c.junk} · staged ${c.staged}`
+        + (c.waiting ? ` · ${c.waiting} slot${c.waiting > 1 ? 's' : ''} waiting on you to dismantle` : '');
       if (!dryRun) recordAutoRun(log);   // persist live tag changes so any run can be reverted
       console.log(`[auto] ${dryRun ? 'DRY ' : ''}safe=${act.safe} ${log.note}`);
     } catch (err) { log.note = 'error: ' + err.message; console.warn('auto-manage error:', err.message); }

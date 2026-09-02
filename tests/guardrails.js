@@ -173,6 +173,22 @@ async function fetchOk(url, ms) {
   has('vault-verdict.js', 'w.autoFav', 'app favorites (green) tracked separately from Diego\'s manual (pink)');
 
   // ------------------------------------------------------------------- armor (RULES sect 4)
+  // ---- junk staging is a BATCH, not a trickle (Diego 2026-08-29) --------------------------
+  // "Auto manager keeps pushing junk to my character every other minute - it should push junk
+  // pieces once and wait until I deleted and then push new ones." Two faults: it topped up to
+  // junkStage on EVERY pass (dismantle one, get one back 60s later), and junk that landed in the
+  // POSTMASTER was not counted as staged, so passes piled more on top of it forever.
+  has('vault-verdict.js', 'function planStaging', 'the staging decision is a pure, testable function');
+  has('vault-verdict.js', /if \(held > 0\) \{ waiting\.push/,
+    'a slot holding un-dismantled junk is left ALONE (batch, not top-up)');
+  has('vault-verdict.js', /x\.loc === 'char' \|\| x\.loc === 'postmaster'/,
+    'junk in the postmaster counts as already staged (no pile-on)');
+  hasNot('vault-verdict.js', /need = cfg\.junkStage - \(junkStaged\[slot\] \|\| 0\)/,
+    'the old top-up rule is gone');
+  has('vault-verdict.js', '!spilled.has(y.id)', 'the same piece can never be spilled twice in one run');
+  has('vault-verdict.js', "stage: 'wait'", 'the run log says WHY a slot got nothing');
+  has('auto-manager.html', "'waiting on you'", 'and the Auto-Manager page shows it');
+
   sect('Armor');
   has('vault-verdict.js', /staging only, NEVER tag armor|NEVER auto-tagged/, 'armor is staged but NEVER auto-tagged');
   has('vault-verdict.html', 'exofavs', 'exotic favorite-stat tuning persists (vv-exofavs)');

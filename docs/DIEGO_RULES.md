@@ -419,6 +419,17 @@ Two more the same day, while the preview was being built:
   when a piece of work is done; if a session is constrained to a branch instead, say so plainly
   and get the PR merged rather than describing the work as if it had shipped.
 
+- **Junk staging is a BATCH, and it waits for him** (2026-08-29, verbatim): *"Auto manager keeps
+  pushing junk to my character every other minute - it should push junk pieces once and wait until
+  I deleted and then push new ones."* Two faults, both fixed: (a) it computed
+  `need = junkStage - alreadyStaged` and so **topped the batch back up on every pass** — dismantle
+  one piece, get a replacement 60 seconds later; (b) junk that landed in the **postmaster** (which
+  is where a transfer into a full slot goes) was not counted as staged, so every pass pushed more
+  on top of it, without limit. The rule now: a slot holding ANY pushed junk — on the character or
+  in the postmaster — is left completely alone; a slot holding none gets one fresh batch of
+  `junkStage`. The run log says `waiting on you` for a held slot, so "it stopped staging" is never
+  a mystery. The decision lives in the pure `planStaging()` so it can be unit-tested.
+
 ## 7. Sharing the app (2026-07-17)
 
 - Diego's friend gets his OWN copy on his OWN PC — no hosted multi-user version.
