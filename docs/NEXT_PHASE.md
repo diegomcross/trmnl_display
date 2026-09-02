@@ -3,6 +3,21 @@
 > Maintained per CLAUDE.md. When a feature ships, move it to HANDOFF.md
 > "What works now" and delete it here.
 
+## Where we are (2026-08-29d — junk staging fixed; and the local/cloud rule written down)
+
+**Junk staging** now pushes ONE batch per slot and waits until Diego has dismantled it —
+postmaster junk counts too, so it can no longer pile on. Detail in HANDOFF.
+
+**The working model is now written down where it cannot be missed** (Diego: *"the local version
+should always be the one updated and then pushed to github as backup. The app runs locally not on
+the cloud."*). CLAUDE.md opens with it, DIEGO_RULES §6 records it, HANDOFF has the LOCAL-vs-CLOUD
+table, and `node tests/guardrails.js --where` prints which kind of session you are in — every run
+of the checker leads with that banner.
+
+**For the next agent, in one line:** if `--where` says CLOUD, say so immediately, do not promise a
+reboot, and expect that nothing you do reaches Diego until it is merged AND his copy is updated.
+If it says LOCAL, edit his files directly, test, reboot, and push afterwards as a backup.
+
 ## Where we are (2026-08-29c — two sessions fixed the same two things; reconciled here)
 
 **Read this first if the history below looks contradictory.** Two Claude sessions worked in

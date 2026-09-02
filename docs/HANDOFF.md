@@ -514,6 +514,24 @@ Core priorities, in his words:
     fix, `dimLoadoutCounts`, the sole-exotic and in-a-loadout junk rescues — is untouched and
     re-verified here (Apply button confirmed visible and disabled on a **cold** load in a real
     browser, per their rule 17).
+  - **Junk staging pushes ONE batch and then waits (2026-08-29):** Diego — *"Auto manager keeps
+    pushing junk to my character every other minute - it should push junk pieces once and wait
+    until I deleted and then push new ones."* Two compounding faults.
+    **(1) It topped up rather than batching.** `need = cfg.junkStage - junkStaged[slot]` meant
+    dismantling one piece caused the next pass, 60s later, to push one more — a permanent trickle
+    instead of a batch. **(2) Postmaster junk was invisible.** A transfer into a full slot lands in
+    the postmaster; those items are in the list with `loc:'postmaster'`, but "already staged" only
+    counted `loc:'char'`, so they never counted and every pass piled more on top — unbounded.
+    Reproduced against the old rules: pass 1 stages 15, Diego dismantles one, pass 2 stages 1
+    again; and with 5 pieces already in the postmaster the old rule pushes 5 more *every pass*.
+    **Now:** the decision is the pure, unit-tested `planStaging()`. A slot holding any pushed junk
+    (character **or** postmaster) is left completely alone; a slot holding none gets one fresh
+    batch of `junkStage`. Measured after the fix: 15, 0, 0, 0, 0 across five passes; dismantling
+    4 of 5 still pushes nothing; clearing all 5 delivers a fresh batch to that slot only.
+    A latent bug fell out of it too — the spill lookup could pick the **same** piece to vault twice
+    in one run, because nothing excluded pieces already queued; it now can't.
+    The run log gains a `wait` action ("waiting on you"), shown on the Auto-Manager page, and the
+    one-line summary says how many slots are waiting. 13/13 assertions.
   - **DIM troubleshooting is fully automatic (2026-08-29):** Diego — *"I want you to fully
     automate this troubleshooting so you can do without my intervention."* Nothing about DIM now
     requires him to run anything. `dim-diagnose.js` holds the whole diagnosis as one pure
@@ -1185,6 +1203,33 @@ Core priorities, in his words:
 ---
 
 ## How Diego runs it (the plain-English setup)
+
+### Which kind of Claude session is this? (2026-08-29 — read before anything else)
+
+**The app runs on Diego's Windows PC.** `C:\Users\diego\Desktop\cola_ai_v3\trmnl_display` is the
+app: his `.env`, Bungie tokens, DIM login, `config.json`, `weapon-tags.json` and `vault.log` exist
+only there, and that folder is what serves 8787 and 3000. **GitHub is a backup of it.**
+
+Run `node tests/guardrails.js --where` — it prints one of two things:
+
+| | LOCAL | CLOUD |
+|---|---|---|
+| What it is | Claude Code on his PC | Claude Code on the web (claude.ai/code) |
+| Platform | Windows | Linux, throwaway container |
+| His `.env` / tokens | present | **absent** — a GitHub clone can never have them |
+| Can edit the live app | **yes** | no |
+| Can reboot his servers | **yes** (rule 22) | no |
+| Can read his logs / DIM token | **yes** | no |
+| How work reaches him | it is already there; push is the backup | only after merge **and** he updates his copy |
+
+**Diego avoids cloud sessions by opening Claude Code from his PC** — the desktop app, or a
+terminal in that folder — instead of the web. Opening the web app "from the folder" does not
+help: it still clones from GitHub into a Linux container.
+
+**A cloud session must say so in its first reply.** It happened on 2026-08-29 that one did not,
+and Diego spent the session hunting for `DIM-DOCTOR.cmd` and being told to double-click
+`REBOOT.cmd` — files that existed only in an unmerged branch in the cloud.
+
 
 1. **One-time always-on setup** (run once in PowerShell):
    `powershell -ExecutionPolicy Bypass -File "C:\Users\diego\Desktop\cola_ai_v3\trmnl_display\start-display.ps1" -Install`

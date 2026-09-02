@@ -419,6 +419,32 @@ Two more the same day, while the preview was being built:
   when a piece of work is done; if a session is constrained to a branch instead, say so plainly
   and get the PR merged rather than describing the work as if it had shipped.
 
+- **Junk staging is a BATCH, and it waits for him** (2026-08-29, verbatim): *"Auto manager keeps
+  pushing junk to my character every other minute - it should push junk pieces once and wait until
+  I deleted and then push new ones."* Two faults, both fixed: (a) it computed
+  `need = junkStage - alreadyStaged` and so **topped the batch back up on every pass** — dismantle
+  one piece, get a replacement 60 seconds later; (b) junk that landed in the **postmaster** (which
+  is where a transfer into a full slot goes) was not counted as staged, so every pass pushed more
+  on top of it, without limit. The rule now: a slot holding ANY pushed junk — on the character or
+  in the postmaster — is left completely alone; a slot holding none gets one fresh batch of
+  `junkStage`. The run log says `waiting on you` for a held slot, so "it stopped staging" is never
+  a mystery. The decision lives in the pure `planStaging()` so it can be unit-tested.
+
+- **The app runs LOCALLY. GitHub is a backup, not the app** (2026-08-29, verbatim): *"make it
+  clear what can be done so you don't run cloud sessions moving forward. The local version should
+  always be the one updated and then pushed to github as backup. The app runs locally not on the
+  cloud."* The copy at `C:\Users\diego\Desktop\cola_ai_v3\trmnl_display` **is** the app — his
+  `.env`, Bungie tokens, DIM login, config and logs live there and nowhere else, and it is what
+  serves ports 8787 and 3000. Order is always **edit local → test local → reboot local → push to
+  GitHub as backup**, never the reverse. Pushing is not shipping.
+  Every session must first run `node tests/guardrails.js --where`, which prints LOCAL or CLOUD.
+  **A CLOUD session must say so in its first reply** and must never promise a reboot or point him
+  at a file he does not have. Why the rule exists: on 2026-08-29 a cloud session spent hours
+  telling him to double-click `REBOOT.cmd` and `DIM-DOCTOR.cmd`, neither of which was on his PC —
+  the work sat in an unmerged branch in a throwaway Linux container. He went looking for a file
+  that did not exist. Diego avoids this by opening Claude Code from his PC (desktop app or a
+  terminal in that folder) rather than from claude.ai/code, which always runs in the cloud.
+
 ## 7. Sharing the app (2026-07-17)
 
 - Diego's friend gets his OWN copy on his OWN PC — no hosted multi-user version.
