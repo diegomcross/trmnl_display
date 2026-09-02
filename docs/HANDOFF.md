@@ -1204,6 +1204,33 @@ Core priorities, in his words:
 
 ## How Diego runs it (the plain-English setup)
 
+### Which kind of Claude session is this? (2026-08-29 — read before anything else)
+
+**The app runs on Diego's Windows PC.** `C:\Users\diego\Desktop\cola_ai_v3\trmnl_display` is the
+app: his `.env`, Bungie tokens, DIM login, `config.json`, `weapon-tags.json` and `vault.log` exist
+only there, and that folder is what serves 8787 and 3000. **GitHub is a backup of it.**
+
+Run `node tests/guardrails.js --where` — it prints one of two things:
+
+| | LOCAL | CLOUD |
+|---|---|---|
+| What it is | Claude Code on his PC | Claude Code on the web (claude.ai/code) |
+| Platform | Windows | Linux, throwaway container |
+| His `.env` / tokens | present | **absent** — a GitHub clone can never have them |
+| Can edit the live app | **yes** | no |
+| Can reboot his servers | **yes** (rule 22) | no |
+| Can read his logs / DIM token | **yes** | no |
+| How work reaches him | it is already there; push is the backup | only after merge **and** he updates his copy |
+
+**Diego avoids cloud sessions by opening Claude Code from his PC** — the desktop app, or a
+terminal in that folder — instead of the web. Opening the web app "from the folder" does not
+help: it still clones from GitHub into a Linux container.
+
+**A cloud session must say so in its first reply.** It happened on 2026-08-29 that one did not,
+and Diego spent the session hunting for `DIM-DOCTOR.cmd` and being told to double-click
+`REBOOT.cmd` — files that existed only in an unmerged branch in the cloud.
+
+
 1. **One-time always-on setup** (run once in PowerShell):
    `powershell -ExecutionPolicy Bypass -File "C:\Users\diego\Desktop\cola_ai_v3\trmnl_display\start-display.ps1" -Install`
    This starts the server now **and** adds a hidden login item so it comes back at every

@@ -21,6 +21,46 @@ import { fileURLToPath } from 'url';
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const STATIC_ONLY = process.argv.includes('--static');
 
+// ---- WHERE AM I? (Diego 2026-08-29) -------------------------------------------------------
+// "make it clear what can be done so you don't run cloud sessions moving forward. The local
+// version should always be the one updated and then pushed to github as backup. The app runs
+// locally not on the cloud."
+// The app lives on his Windows PC; GitHub is a backup of it. A cloud session is a fresh Linux
+// clone with none of his data and no route to his machine, and on 2026-08-29 an agent spent a
+// whole session telling him to double-click files that only existed in the cloud. So every run
+// of this checker says, in one line, which kind of session it is.
+function whereAmI() {
+  const win = process.platform === 'win32';
+  const hasEnv = fs.existsSync(path.join(ROOT, '.env'));
+  const hasTokens = fs.existsSync(path.join(ROOT, 'tokens.json'));
+  const local = win && hasEnv;                       // his PC: Windows AND his real credentials
+  return {
+    local, platform: process.platform, root: ROOT, hasEnv, hasTokens,
+    label: local ? 'LOCAL — this is Diego\'s PC, the machine that actually runs the app'
+                 : 'CLOUD — a throwaway clone. It CANNOT reach his PC.',
+  };
+}
+function printWhere() {
+  const w = whereAmI();
+  const bar = '='.repeat(78);
+  console.log(bar);
+  console.log('  ' + w.label);
+  console.log(`  platform=${w.platform}  folder=${w.root}`);
+  console.log(`  his .env ${w.hasEnv ? 'present' : 'NOT here'} · his tokens.json ${w.hasTokens ? 'present' : 'NOT here'}`);
+  if (w.local) {
+    console.log('  -> Edit these files directly, test, REBOOT.cmd yourself, THEN push to GitHub as backup.');
+  } else {
+    console.log('  -> You cannot reboot his servers, read his tokens, or see his logs. Nothing you');
+    console.log('     change reaches him until it is merged AND his local copy is updated.');
+    console.log('     Say this in your first reply. Never tell him to double-click a file he lacks.');
+    console.log('     Best move: ask him to reopen the work in a session on his own PC.');
+  }
+  console.log(bar);
+  return w;
+}
+if (process.argv.includes('--where')) { printWhere(); process.exit(0); }
+printWhere();
+
 let pass = 0, fail = 0, skip = 0;
 const failures = [];
 let section = '';
@@ -173,6 +213,18 @@ async function fetchOk(url, ms) {
   has('vault-verdict.js', 'w.autoFav', 'app favorites (green) tracked separately from Diego\'s manual (pink)');
 
   // ------------------------------------------------------------------- armor (RULES sect 4)
+  // ---- local is the source of truth; GitHub is the backup (Diego 2026-08-29) ---------------
+  // "make it clear what can be done so you don't run cloud sessions moving forward. The local
+  // version should always be the one updated and then pushed to github as backup. The app runs
+  // locally not on the cloud."
+  has('CLAUDE.md', 'READ THIS FIRST — where are you running?',
+    'CLAUDE.md opens by telling the agent to work out local vs cloud');
+  has('CLAUDE.md', 'GitHub is a backup of that copy, not the other way round',
+    'local is the source of truth, GitHub is the backup');
+  has('CLAUDE.md', 'guardrails.js --where', 'and points at the machine check');
+  has('tests/guardrails.js', 'function whereAmI', 'the local/cloud check is machine-run, not a judgement call');
+  has('tests/guardrails.js', "process.argv.includes('--where')", '--where answers it on its own');
+
   // ---- junk staging is a BATCH, not a trickle (Diego 2026-08-29) --------------------------
   // "Auto manager keeps pushing junk to my character every other minute - it should push junk
   // pieces once and wait until I deleted and then push new ones." Two faults: it topped up to

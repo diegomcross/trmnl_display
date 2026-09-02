@@ -3,22 +3,20 @@
 > Maintained per CLAUDE.md. When a feature ships, move it to HANDOFF.md
 > "What works now" and delete it here.
 
-## Junk staging fixed — but THIS SESSION CANNOT DEPLOY IT (2026-08-29d)
+## Where we are (2026-08-29d — junk staging fixed; and the local/cloud rule written down)
 
-Diego: *"Auto manager keeps pushing junk to my character every other minute - it should push junk
-pieces once and wait until I deleted and then push new ones."* Fixed — one batch per slot, then
-hands off until he has dismantled them; postmaster junk now counts. Detail in HANDOFF.
+**Junk staging** now pushes ONE batch per slot and waits until Diego has dismantled it —
+postmaster junk counts too, so it can no longer pile on. Detail in HANDOFF.
 
-**Rule 22 could not be followed here.** It says to edit `C:\Users\diego\Desktop\cola_ai_v3\trmnl_display`
-directly and run `REBOOT.cmd` without him. **This session runs in a cloud container** — a fresh
-GitHub clone on Linux, with no access to his PC and no PowerShell tool. It can only push to
-GitHub. Rule 22 is followable by a session running ON his machine; it is not followable by a
-web/cloud session, and the next agent should check which kind it is before promising a reboot.
-Practical consequence: this change reaches him when it is merged to `main` and his copy is
-updated — either by him, or by a session that does have his machine.
+**The working model is now written down where it cannot be missed** (Diego: *"the local version
+should always be the one updated and then pushed to github as backup. The app runs locally not on
+the cloud."*). CLAUDE.md opens with it, DIEGO_RULES §6 records it, HANDOFF has the LOCAL-vs-CLOUD
+table, and `node tests/guardrails.js --where` prints which kind of session you are in — every run
+of the checker leads with that banner.
 
-**This is server-JS, so it needs a restart to take effect.** HTML/CSS do not.
-
+**For the next agent, in one line:** if `--where` says CLOUD, say so immediately, do not promise a
+reboot, and expect that nothing you do reaches Diego until it is merged AND his copy is updated.
+If it says LOCAL, edit his files directly, test, reboot, and push afterwards as a backup.
 
 ## Where we are (2026-08-29c — two sessions fixed the same two things; reconciled here)
 
