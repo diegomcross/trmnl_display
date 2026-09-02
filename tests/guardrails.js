@@ -213,6 +213,22 @@ async function fetchOk(url, ms) {
   has('vault-verdict.js', 'w.autoFav', 'app favorites (green) tracked separately from Diego\'s manual (pink)');
 
   // ------------------------------------------------------------------- armor (RULES sect 4)
+  // ---- the handoff docs must stay a handoff, not a changelog ------------------------------
+  // CLAUDE.md: "When a feature ships: move its content from NEXT_PHASE.md into HANDOFF.md's
+  // 'What works now' and delete it from NEXT_PHASE.md." On 2026-08-29 NEXT_PHASE had drifted to
+  // 1138 lines of shipped history, and one section still told the next agent that finished work
+  // was sitting unmerged on a branch — which by then was false and actively misleading.
+  has('docs/NEXT_PHASE.md', '## What is actually open',
+    'NEXT_PHASE names what is OPEN, so it stays a pickup point and not a changelog');
+  hasNot('docs/NEXT_PHASE.md', /BLOCKER FOR EVERYTHING ON THIS BRANCH/,
+    'no stale "this is unmerged" claim left in the pickup point');
+  for (const [what, needle] of [
+    ['the live-DIM armor fix', 'Armor reads LIVE DIM tags'],
+    ['the page shell', 'ONE page shell for every page'],
+    ['the DIM self-repair', 'DIM troubleshooting is fully automatic'],
+    ['junk staging batching', 'Junk staging pushes ONE batch'],
+  ]) has('docs/HANDOFF.md', needle, `HANDOFF has a "what works now" entry for ${what}`);
+
   // ---- local is the source of truth; GitHub is the backup (Diego 2026-08-29) ---------------
   // "make it clear what can be done so you don't run cloud sessions moving forward. The local
   // version should always be the one updated and then pushed to github as backup. The app runs
