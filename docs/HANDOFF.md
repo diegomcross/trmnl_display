@@ -514,6 +514,30 @@ Core priorities, in his words:
     fix, `dimLoadoutCounts`, the sole-exotic and in-a-loadout junk rescues — is untouched and
     re-verified here (Apply button confirmed visible and disabled on a **cold** load in a real
     browser, per their rule 17).
+  - **Armor reads LIVE DIM tags, and three safety nets came back to life (2026-08-29, from a
+    parallel session — recorded here because it only had a NEXT_PHASE entry):** Diego — *"sync with
+    dim not working appearantly, double check and fix"*. `fetchArmor()` read tags from
+    `dimOverlay()`, a parse of the static `dim-data.json` export that **does not exist on his PC**,
+    while `fetchWeapons()` had always used the live DIM API. **555 armor pieces carried DIM tags the
+    app never displayed**, and 148 pieces sitting in DIM loadouts scored as 0. Armor now uses
+    `dimTagsFresh(e)` plus a new cached `dimLoadoutCounts(e)` (2 min TTL, keeps the last good map on
+    failure so a DIM blip cannot silently zero the in-a-loadout rescue). Verified: all 555 agree,
+    0 mismatches.
+    **Three declutter safety nets had never once fired** because all three key off `it.tag` / `it.lo`
+    (DIEGO_RULES §4f rule 19): "you tagged it junk", "kept from junk: you tagged it favorite", and
+    the DIM-loadout rescue. Any earlier claim that his review count was legitimately 0 was this bug.
+    **Rules 20-21:** a DIM junk tag now drops to `review` (never written by Apply) when the piece is
+    in a loadout or is the only copy of that exotic he owns, plus a final sweep so no exotic can ever
+    have all its copies junked. The first live run caught 12 sole exotics and 19 in-loadout pieces
+    carrying junk tags whose names match the unexplained 2026-08-23 bulk tagging, and the sweep
+    caught 4 more where both copies were junk-tagged.
+    Audit after the fix, all zero: exotics he would stop owning, equipped in junk, DIM-loadout in
+    junk, favourite-tagged in junk, set slots broken, slots emptied. Apply dry-run 164 locked ·
+    31 unlocked · **261** tagged (was 564 — 303 pieces already carried the right tag, which is what
+    working sync looks like).
+    **Worth Diego knowing:** the Armor Vault page now reflects his DIM tags, so its counters moved
+    too; and the 2026-08-23 junk tags are still sitting in DIM — the app simply could not see them
+    before. Clearing them in DIM is his call.
   - **Junk staging pushes ONE batch and then waits (2026-08-29):** Diego — *"Auto manager keeps
     pushing junk to my character every other minute - it should push junk pieces once and wait
     until I deleted and then push new ones."* Two compounding faults.
